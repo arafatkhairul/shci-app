@@ -665,17 +665,8 @@ print_status "Installing numba with compatible numpy..."
 pip uninstall -y numba 2>/dev/null || true
 pip install "numba>=0.57.0,<0.62.0" --force-reinstall
 
-# Install bnunicodenormalizer with multiple fallback methods
-print_status "Installing bnunicodenormalizer..."
-pip install bnunicodenormalizer || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@main || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@master || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@v1.0.0 || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@latest || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@develop || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@dev || \
-echo "Warning: bnunicodenormalizer not available - TTS will work without it"
+# Skip bnunicodenormalizer - Bengali text processing not needed
+print_status "Skipping bnunicodenormalizer - Bengali text processing not required"
 
 # Install packages that might conflict with numpy using --no-deps
 print_status "Installing TTS packages with numpy protection..."
@@ -720,30 +711,16 @@ else:
     print_status "Numpy version fixed, continuing..."
 }
 
-# Install bnunicodenormalizer before TTS installation
-print_status "Installing bnunicodenormalizer before TTS..."
-pip install bnunicodenormalizer || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@main || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@master || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@v1.0.0 || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@latest || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@develop || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@dev || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@release || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@stable || \
-echo "Warning: bnunicodenormalizer not available - continuing without it"
+# Skip bnunicodenormalizer before TTS installation
+print_status "Skipping bnunicodenormalizer before TTS - Bengali processing not needed"
 
 # Install TTS package with dependency resolution
 print_status "Installing TTS package..."
 pip install TTS==0.21.3 --no-deps || pip install TTS==0.21.3 --force-reinstall --no-deps
 
-# If bnunicodenormalizer is not available, install TTS without it
-if ! python3.11 -c "import bnunicodenormalizer" 2>/dev/null; then
-    print_status "bnunicodenormalizer not available, installing TTS without it..."
-    pip install TTS==0.21.3 --no-deps --force-reinstall
-    print_warning "TTS installed without bnunicodenormalizer - Bengali text normalization may not work"
-fi
+# Install TTS without bnunicodenormalizer (Bengali processing not needed)
+print_status "Installing TTS without bnunicodenormalizer - Bengali processing not required"
+pip install TTS==0.21.3 --no-deps --force-reinstall
 
 # Final dependency check and fix
 print_status "Final dependency check and fix..."
@@ -815,26 +792,12 @@ else
     pip install torchvision==0.22.1+cpu --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
 fi
 
-# Try to install bnunicodenormalizer again after all installations
-print_status "Final attempt to install bnunicodenormalizer..."
-pip install bnunicodenormalizer || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@main || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@master || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@v1.0.0 || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@latest || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@develop || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@dev || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@release || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@stable || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@hotfix || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@patch || \
-echo "bnunicodenormalizer not available - TTS will work without it"
+# Skip final bnunicodenormalizer installation attempt
+print_status "Skipping final bnunicodenormalizer installation - Bengali processing not needed"
 
-# Force install TTS dependencies including bnunicodenormalizer
-print_status "Force installing TTS with all dependencies..."
+# Force install TTS dependencies (without bnunicodenormalizer)
+print_status "Force installing TTS with all dependencies (excluding bnunicodenormalizer)..."
 pip install TTS==0.21.3 --force-reinstall --no-deps
-pip install bnunicodenormalizer || echo "bnunicodenormalizer still not available"
 
 # Comprehensive final fix for all conflicts
 print_status "Comprehensive final fix for all conflicts..."
@@ -854,24 +817,8 @@ else
     pip install torchvision==0.22.1+cpu --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
 fi
 
-# Final bnunicodenormalizer attempt with alternative repositories
-print_status "Final bnunicodenormalizer attempt with alternative repositories..."
-pip install bnunicodenormalizer || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@main || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@master || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@v1.0.0 || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@latest || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@develop || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@dev || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@release || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@stable || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@hotfix || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@patch || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@feature || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@bugfix || \
-pip install git+https://github.com/banglakit/bnunicodenormalizer.git@fix || \
-echo "bnunicodenormalizer not available - TTS will work without it"
+# Skip final bnunicodenormalizer attempt - Bengali processing not needed
+print_status "Skipping final bnunicodenormalizer attempt - Bengali text processing not required"
 
 # Verify critical packages
 print_status "Verifying critical package versions..."
@@ -899,10 +846,8 @@ try:
     import TTS; print(f'TTS: {TTS.__version__}')
 except ImportError:
     print('TTS: not installed')
-try:
-    import bnunicodenormalizer; print('bnunicodenormalizer: installed')
-except ImportError:
-    print('bnunicodenormalizer: not installed')
+# bnunicodenormalizer skipped - Bengali processing not needed
+print('bnunicodenormalizer: skipped (Bengali processing not required)')
 "
 
 # Final numpy compatibility check
