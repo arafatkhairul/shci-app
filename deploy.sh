@@ -554,20 +554,54 @@ pip install --no-deps -r requirements.txt || true
 if lspci | grep -i nvidia &> /dev/null; then
     print_status "Installing PyTorch with CUDA support..."
     pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
-    # Reinstall compatible dependencies
-    pip install "numpy>=1.21.0,<2.0.0" --force-reinstall
-    pip install "networkx>=2.5.0,<3.0.0" --force-reinstall
 else
     print_status "Installing PyTorch CPU version..."
     pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
-    # Reinstall compatible dependencies
-    pip install "numpy>=1.21.0,<2.0.0" --force-reinstall
-    pip install "networkx>=2.5.0,<3.0.0" --force-reinstall
 fi
+
+# Fix all dependency conflicts after PyTorch installation
+print_status "Fixing all dependency conflicts after PyTorch installation..."
+pip install "numpy>=1.21.0,<2.0.0" --force-reinstall
+pip install "networkx>=2.5.0,<3.0.0" --force-reinstall
+pip install "typing_extensions>=4.14.0" --force-reinstall
+pip install "thinc>=8.3.0,<8.4.0" --force-reinstall
+
+# Reinstall all TTS dependencies to ensure compatibility
+print_status "Reinstalling TTS dependencies for compatibility..."
+pip install --force-reinstall aiohttp anyascii bangla bnnumerizer coqpit cython einops encodec flask g2pkk
+pip install --force-reinstall "gruut[de,es,fr]==2.2.3" hangul-romanize inflect jamo jieba
+pip install --force-reinstall matplotlib nltk num2words numba packaging
+pip install --force-reinstall "pandas<2.0,>=1.4" pypinyin pysbd pyyaml
+pip install --force-reinstall scikit-learn "spacy[ja]>=3" tqdm trainer transformers
+pip install --force-reinstall umap-learn unidecode
 
 # Install remaining dependencies
 print_status "Installing remaining dependencies..."
 pip install webrtcvad_wheels websocket_client pyttsx3
+
+# Final dependency verification and conflict resolution
+print_status "Final dependency verification and conflict resolution..."
+pip install --upgrade pip
+pip install --force-reinstall "numpy>=1.21.0,<2.0.0"
+pip install --force-reinstall "networkx>=2.5.0,<3.0.0"
+pip install --force-reinstall "typing_extensions>=4.14.0"
+pip install --force-reinstall "thinc>=8.3.0,<8.4.0"
+
+# Verify critical packages
+print_status "Verifying critical package versions..."
+python3.11 -c "
+import numpy; print(f'numpy: {numpy.__version__}')
+import networkx; print(f'networkx: {networkx.__version__}')
+import typing_extensions; print(f'typing_extensions: {typing_extensions.__version__}')
+try:
+    import thinc; print(f'thinc: {thinc.__version__}')
+except ImportError:
+    print('thinc: not installed')
+try:
+    import TTS; print(f'TTS: {TTS.__version__}')
+except ImportError:
+    print('TTS: not installed')
+"
 
 # Setup frontend environment
 print_status "Setting up frontend environment..."
