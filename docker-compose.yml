@@ -36,9 +36,9 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_BASE_URL=http://backend:8000
-      - NEXT_PUBLIC_WS_BASE_URL=ws://backend:8000
-      - NEXT_PUBLIC_WS_PRODUCTION_URL=wss://your-domain.com
+      - NEXT_PUBLIC_API_BASE_URL=https://nodecel.cloud
+      - NEXT_PUBLIC_WS_BASE_URL=wss://nodecel.cloud
+      - NEXT_PUBLIC_WS_PRODUCTION_URL=wss://nodecel.cloud
     depends_on:
       - backend
     restart: unless-stopped
