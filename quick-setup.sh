@@ -17,8 +17,14 @@ echo "======================================"
 
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then
-    echo -e "${RED}❌ Don't run as root. Use a regular user with sudo privileges.${NC}"
-    exit 1
+    echo -e "${YELLOW}⚠️  Running as root user. This is supported but not recommended for security.${NC}"
+    echo -e "${YELLOW}⚠️  Consider using a regular user with sudo privileges for better security.${NC}"
+    read -p "Continue as root? (y/n): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${RED}❌ Setup cancelled. Please run as a regular user with sudo privileges.${NC}"
+        exit 1
+    fi
 fi
 
 # Check if repository exists
@@ -73,9 +79,14 @@ if command -v docker &> /dev/null; then
 else
     echo -e "${YELLOW}⚠️  Docker not found. Installing...${NC}"
     curl -fsSL https://get.docker.com -o get-docker.sh
-    sudo sh get-docker.sh
-    sudo usermod -aG docker $USER
-    echo -e "${YELLOW}⚠️  Please log out and log back in for Docker group changes.${NC}"
+    if [ "$EUID" -eq 0 ]; then
+        sh get-docker.sh
+        # For root user, no need to add to docker group
+    else
+        sudo sh get-docker.sh
+        sudo usermod -aG docker $USER
+        echo -e "${YELLOW}⚠️  Please log out and log back in for Docker group changes.${NC}"
+    fi
 fi
 
 # Check Docker Compose
@@ -83,8 +94,13 @@ if command -v docker-compose &> /dev/null; then
     echo -e "${GREEN}✅ Docker Compose is installed${NC}"
 else
     echo -e "${YELLOW}⚠️  Docker Compose not found. Installing...${NC}"
-    sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    sudo chmod +x /usr/local/bin/docker-compose
+    if [ "$EUID" -eq 0 ]; then
+        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+    else
+        sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+    fi
 fi
 
 # Make deployment script executable

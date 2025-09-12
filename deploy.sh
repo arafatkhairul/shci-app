@@ -35,32 +35,59 @@ print_error() {
 
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then
-    print_error "Please don't run this script as root. Use a regular user with sudo privileges."
-    exit 1
+    print_warning "Running as root user. This is supported but not recommended for security."
+    print_warning "Consider using a regular user with sudo privileges for better security."
+    read -p "Continue as root? (y/n): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_error "Deployment cancelled. Please run as a regular user with sudo privileges."
+        exit 1
+    fi
+    USER_HOME="/root"
+else
+    USER_HOME="$HOME"
 fi
 
 # Update system packages
 print_status "Updating system packages..."
-sudo apt update && sudo apt upgrade -y
+if [ "$EUID" -eq 0 ]; then
+    apt update && apt upgrade -y
+else
+    sudo apt update && sudo apt upgrade -y
+fi
 
 # Install required packages
 print_status "Installing required packages..."
-sudo apt install -y curl wget git nginx certbot python3-certbot-nginx ufw
+if [ "$EUID" -eq 0 ]; then
+    apt install -y curl wget git nginx certbot python3-certbot-nginx ufw
+else
+    sudo apt install -y curl wget git nginx certbot python3-certbot-nginx ufw
+fi
 
 # Install Docker
 print_status "Installing Docker..."
 if ! command -v docker &> /dev/null; then
     curl -fsSL https://get.docker.com -o get-docker.sh
-    sudo sh get-docker.sh
-    sudo usermod -aG docker $USER
-    print_warning "Docker installed. Please log out and log back in for group changes to take effect."
+    if [ "$EUID" -eq 0 ]; then
+        sh get-docker.sh
+        # For root user, no need to add to docker group
+    else
+        sudo sh get-docker.sh
+        sudo usermod -aG docker $USER
+        print_warning "Docker installed. Please log out and log back in for group changes to take effect."
+    fi
 fi
 
 # Install Docker Compose
 print_status "Installing Docker Compose..."
 if ! command -v docker-compose &> /dev/null; then
-    sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    sudo chmod +x /usr/local/bin/docker-compose
+    if [ "$EUID" -eq 0 ]; then
+        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+    else
+        sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+    fi
 fi
 
 # Check for Ollama service
@@ -79,17 +106,31 @@ if lspci | grep -i nvidia &> /dev/null; then
     print_status "NVIDIA GPU detected! Installing NVIDIA Docker support..."
     
     # Install NVIDIA drivers
-    sudo apt update
-    sudo apt install -y nvidia-driver-535 nvidia-dkms-535
-    
-    # Install NVIDIA Container Toolkit
-    distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-    curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
-    curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
-    
-    sudo apt update
-    sudo apt install -y nvidia-container-toolkit
-    sudo systemctl restart docker
+    if [ "$EUID" -eq 0 ]; then
+        apt update
+        apt install -y nvidia-driver-535 nvidia-dkms-535
+        
+        # Install NVIDIA Container Toolkit
+        distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+        curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
+        curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
+        
+        apt update
+        apt install -y nvidia-container-toolkit
+        systemctl restart docker
+    else
+        sudo apt update
+        sudo apt install -y nvidia-driver-535 nvidia-dkms-535
+        
+        # Install NVIDIA Container Toolkit
+        distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+        curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+        curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+        
+        sudo apt update
+        sudo apt install -y nvidia-container-toolkit
+        sudo systemctl restart docker
+    fi
     
     print_status "NVIDIA Docker support installed successfully!"
     print_warning "GPU will be used for TTS/STT processing in production"
@@ -99,15 +140,27 @@ fi
 
 # Configure firewall
 print_status "Configuring firewall..."
-sudo ufw allow ssh
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw --force enable
+if [ "$EUID" -eq 0 ]; then
+    ufw allow ssh
+    ufw allow 80/tcp
+    ufw allow 443/tcp
+    ufw --force enable
+else
+    sudo ufw allow ssh
+    sudo ufw allow 80/tcp
+    sudo ufw allow 443/tcp
+    sudo ufw --force enable
+fi
 
 # Create project directory
 print_status "Setting up project directory..."
-sudo mkdir -p /opt/$PROJECT_NAME
-sudo chown $USER:$USER /opt/$PROJECT_NAME
+if [ "$EUID" -eq 0 ]; then
+    mkdir -p /opt/$PROJECT_NAME
+    chown root:root /opt/$PROJECT_NAME
+else
+    sudo mkdir -p /opt/$PROJECT_NAME
+    sudo chown $USER:$USER /opt/$PROJECT_NAME
+fi
 
 # Clone or update repository
 if [ -d "/opt/$PROJECT_NAME/.git" ]; then
@@ -263,7 +316,11 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     docker-compose stop nginx
     
     # Install certificate
-    sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME --email $EMAIL --agree-tos --non-interactive
+    if [ "$EUID" -eq 0 ]; then
+        certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME --email $EMAIL --agree-tos --non-interactive
+    else
+        sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME --email $EMAIL --agree-tos --non-interactive
+    fi
     
     # Update docker-compose to use SSL
     sed -i 's/# Same location blocks as above/    location \/ {\n        proxy_pass http:\/\/frontend;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection '\''upgrade'\'';\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_cache_bypass $http_upgrade;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/api\/ {\n        limit_req zone=api burst=20 nodelay;\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/ws {\n        limit_req zone=ws burst=10 nodelay;\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 86400s;\n        proxy_send_timeout 86400s;\n    }\n\n    location \/roleplay\/ {\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/health {\n        proxy_pass http:\/\/backend;\n        access_log off;\n    }/' nginx/conf.d/shci.conf
@@ -277,12 +334,20 @@ if [ -f "/etc/cron.d/certbot" ]; then
     print_status "SSL auto-renewal already configured"
 else
     print_status "Setting up SSL auto-renewal..."
-    echo "0 12 * * * /usr/bin/certbot renew --quiet" | sudo tee /etc/cron.d/certbot
+    if [ "$EUID" -eq 0 ]; then
+        echo "0 12 * * * /usr/bin/certbot renew --quiet" | tee /etc/cron.d/certbot
+    else
+        echo "0 12 * * * /usr/bin/certbot renew --quiet" | sudo tee /etc/cron.d/certbot
+    fi
 fi
 
 # Create systemd service for auto-start
 print_status "Creating systemd service..."
-sudo tee /etc/systemd/system/shci-app.service > /dev/null << EOF
+if [ "$EUID" -eq 0 ]; then
+    tee /etc/systemd/system/shci-app.service > /dev/null << EOF
+else
+    sudo tee /etc/systemd/system/shci-app.service > /dev/null << EOF
+fi
 [Unit]
 Description=SHCI Voice Assistant
 Requires=docker.service
@@ -300,7 +365,11 @@ TimeoutStartSec=0
 WantedBy=multi-user.target
 EOF
 
-sudo systemctl enable shci-app.service
+if [ "$EUID" -eq 0 ]; then
+    systemctl enable shci-app.service
+else
+    sudo systemctl enable shci-app.service
+fi
 
 # Final status check
 print_status "Deployment completed successfully!"
