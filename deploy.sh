@@ -680,6 +680,18 @@ echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     print_status "Setting up SSL certificate..."
     
+    # Fix cffi backend issue
+    print_status "Fixing cffi backend issue..."
+    if [ "$EUID" -eq 0 ]; then
+        apt update 2>/dev/null || true
+        apt install -y python3-cffi python3-cryptography python3-openssl 2>/dev/null || true
+        pip3 install --upgrade cffi cryptography pyopenssl 2>/dev/null || true
+    else
+        sudo apt update 2>/dev/null || true
+        sudo apt install -y python3-cffi python3-cryptography python3-openssl 2>/dev/null || true
+        sudo pip3 install --upgrade cffi cryptography pyopenssl 2>/dev/null || true
+    fi
+    
     # Stop nginx temporarily
     if [ "$EUID" -eq 0 ]; then
         systemctl stop nginx
@@ -687,34 +699,48 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         sudo systemctl stop nginx
     fi
     
-    # Install certificate
+    # Install certificate with error handling
+    print_status "Installing SSL certificate..."
     if [ "$EUID" -eq 0 ]; then
-        certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME --email $EMAIL --agree-tos --non-interactive
+        certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME --email $EMAIL --agree-tos --non-interactive 2>/dev/null || {
+            print_error "SSL certificate installation failed. Continuing without SSL..."
+            print_status "You can manually setup SSL later using: certbot --nginx -d $DOMAIN_NAME"
+        }
     else
-        sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME --email $EMAIL --agree-tos --non-interactive
+        sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME --email $EMAIL --agree-tos --non-interactive 2>/dev/null || {
+            print_error "SSL certificate installation failed. Continuing without SSL..."
+            print_status "You can manually setup SSL later using: sudo certbot --nginx -d $DOMAIN_NAME"
+        }
     fi
     
     # Update docker-compose to use SSL
     sed -i 's/# Same location blocks as above/    location \/ {\n        proxy_pass http:\/\/frontend;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection '\''upgrade'\'';\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_cache_bypass $http_upgrade;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/api\/ {\n        limit_req zone=api burst=20 nodelay;\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/ws {\n        limit_req zone=ws burst=10 nodelay;\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 86400s;\n        proxy_send_timeout 86400s;\n    }\n\n    location \/roleplay\/ {\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/health {\n        proxy_pass http:\/\/backend;\n        access_log off;\n    }/' nginx/conf.d/shci.conf
     
     # Restart nginx
+    print_status "Restarting nginx..."
     if [ "$EUID" -eq 0 ]; then
-        systemctl start nginx
+        systemctl start nginx 2>/dev/null || true
+        systemctl reload nginx 2>/dev/null || true
     else
-        sudo systemctl start nginx
+        sudo systemctl start nginx 2>/dev/null || true
+        sudo systemctl reload nginx 2>/dev/null || true
     fi
+else
+    print_status "Skipping SSL setup. You can setup SSL later manually."
 fi
 
-# Setup auto-renewal for SSL
+# Setup auto-renewal for SSL (only if SSL was successfully installed)
 if [ -f "/etc/cron.d/certbot" ]; then
     print_status "SSL auto-renewal already configured"
-else
+elif [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
     print_status "Setting up SSL auto-renewal..."
     if [ "$EUID" -eq 0 ]; then
-        echo "0 12 * * * /usr/bin/certbot renew --quiet" | tee /etc/cron.d/certbot
+        echo "0 12 * * * /usr/bin/certbot renew --quiet" | tee /etc/cron.d/certbot 2>/dev/null || true
     else
-        echo "0 12 * * * /usr/bin/certbot renew --quiet" | sudo tee /etc/cron.d/certbot
+        echo "0 12 * * * /usr/bin/certbot renew --quiet" | sudo tee /etc/cron.d/certbot 2>/dev/null || true
     fi
+else
+    print_status "SSL not installed, skipping auto-renewal setup"
 fi
 
 # Services are already created and enabled above
