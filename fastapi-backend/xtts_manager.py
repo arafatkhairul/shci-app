@@ -288,12 +288,35 @@ class XTTSManager:
                         )
                     
                     # Convert audio data to bytes if it's a list or numpy array
+                    import numpy as np
+                    import torch
+                    
                     if isinstance(audio_data, list):
-                        # If it's a list, concatenate all audio segments
-                        import numpy as np
-                        audio_data = np.concatenate(audio_data)
+                        # If it's a list, convert each element to numpy array and concatenate
+                        processed_audio = []
+                        for item in audio_data:
+                            if isinstance(item, torch.Tensor):
+                                # Convert torch tensor to numpy
+                                item = item.detach().cpu().numpy()
+                            if isinstance(item, np.ndarray):
+                                # Ensure it's at least 1D
+                                item = np.atleast_1d(item)
+                            else:
+                                # Convert scalar to numpy array
+                                item = np.array([item])
+                            processed_audio.append(item)
+                        
+                        # Concatenate all audio segments
+                        audio_data = np.concatenate(processed_audio)
+                    
+                    elif isinstance(audio_data, torch.Tensor):
+                        # Convert torch tensor to numpy
+                        audio_data = audio_data.detach().cpu().numpy()
                     
                     if isinstance(audio_data, np.ndarray):
+                        # Ensure it's at least 1D
+                        audio_data = np.atleast_1d(audio_data)
+                        
                         # Convert numpy array to bytes using soundfile
                         import soundfile as sf
                         audio_bytes = io.BytesIO()
