@@ -60,6 +60,8 @@ print_status "Checking environment files..."
 
 if [ -f ".env.production" ]; then
     print_success ".env.production found"
+elif [ -f "env.production" ]; then
+    print_warning "env.production found but .env.production missing - will be copied during deployment"
 else
     print_warning ".env.production not found - will be created during deployment"
 fi
