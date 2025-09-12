@@ -1,4 +1,4 @@
-# Step 1: Python base image (CPU-only)
+# Step 1: Python base image (CPU-only) for Ubuntu 24.04 compatibility
 FROM python:3.11-slim
 
 # Step 2: Install system dependencies
