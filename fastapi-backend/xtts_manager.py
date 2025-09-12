@@ -475,10 +475,12 @@ class XTTSManager:
                 # Synthesize with XTTS using optimized inference
                 try:
                     # Use optimized inference context
-                    with torch.inference_mode() if self.use_inference_mode else torch.no_grad():
+                    inference_context = torch.inference_mode() if self.use_inference_mode else torch.no_grad()
+                    with inference_context:
                         # Enable AMP autocast if available
                         if self.use_amp and self.device == "cuda":
-                            with torch.autocast(device_type='cuda', dtype=torch.float16 if self.use_fp16 else torch.float32):
+                            amp_dtype = torch.float16 if self.use_fp16 else torch.float32
+                            with torch.autocast(device_type='cuda', dtype=amp_dtype):
                                 # Use the appropriate parameter based on whether the reference file was found
                                 if speaker_wav_param:
                                     # Use reference audio for voice cloning
@@ -513,15 +515,20 @@ class XTTSManager:
                     
                     # Convert audio data to bytes if it's a list or numpy array
                     import numpy as np
-                    import torch
                     
                     if isinstance(audio_data, list):
                         # If it's a list, convert each element to numpy array and concatenate
                         processed_audio = []
                         for item in audio_data:
-                            if isinstance(item, torch.Tensor):
-                                # Convert torch tensor to numpy
-                                item = item.detach().cpu().numpy()
+                            # Check if it's a torch tensor (import torch locally to avoid scope issues)
+                            try:
+                                import torch
+                                if isinstance(item, torch.Tensor):
+                                    # Convert torch tensor to numpy
+                                    item = item.detach().cpu().numpy()
+                            except ImportError:
+                                pass
+                            
                             if isinstance(item, np.ndarray):
                                 # Ensure it's at least 1D
                                 item = np.atleast_1d(item)
@@ -533,9 +540,15 @@ class XTTSManager:
                         # Concatenate all audio segments
                         audio_data = np.concatenate(processed_audio)
                     
-                    elif isinstance(audio_data, torch.Tensor):
-                        # Convert torch tensor to numpy
-                        audio_data = audio_data.detach().cpu().numpy()
+                    else:
+                        # Check if it's a torch tensor
+                        try:
+                            import torch
+                            if isinstance(audio_data, torch.Tensor):
+                                # Convert torch tensor to numpy
+                                audio_data = audio_data.detach().cpu().numpy()
+                        except ImportError:
+                            pass
                     
                     if isinstance(audio_data, np.ndarray):
                         # Ensure it's at least 1D
