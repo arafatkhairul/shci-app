@@ -143,7 +143,7 @@ if lspci | grep -i nvidia &> /dev/null; then
     # Install NVIDIA drivers for Ubuntu 24.04
     if [ "$EUID" -eq 0 ]; then
         apt update
-        apt install -y nvidia-driver-550 nvidia-dkms-550
+        apt install -y nvidia-driver-535 nvidia-dkms-535
         
         # Install NVIDIA Container Toolkit
         distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
@@ -155,7 +155,7 @@ if lspci | grep -i nvidia &> /dev/null; then
         systemctl restart docker
     else
         sudo apt update
-        sudo apt install -y nvidia-driver-550 nvidia-dkms-550
+        sudo apt install -y nvidia-driver-535 nvidia-dkms-535
         
         # Install NVIDIA Container Toolkit
         distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
