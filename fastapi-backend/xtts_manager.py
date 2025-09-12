@@ -94,6 +94,9 @@ class XTTSManager:
         self.streaming_enabled = True  # Enable real-time streaming
         self.stream_chunk_size = 20  # Chunk size for streaming
         
+        # Default reference WAV handling
+        self.default_reference_wav = "00005.wav"  # Default reference voice file
+        
         # Speaker-latent cache settings
         self.speaker_cache = {}  # Cache for speaker latents
         self.cache_max_size = 10  # Maximum number of cached speakers
@@ -757,12 +760,12 @@ class XTTSManager:
         """
         Optimized streaming synthesis for real-time, low-latency voice synthesis.
         Hardware Target: NVIDIA RTX A5000 (Ampere Architecture)
-        Key Optimizations: BFloat16, torch.compile, Fixed Latent Caching, Streaming Output
+        Key Fixes: Correct handling of speaker_wav=None, simplified logic.
         
         Args:
             text: Text to synthesize
             language: Language code
-            speaker_wav: Speaker reference file
+            speaker_wav: Speaker reference file (None uses default)
             speed: Synthesis speed
             
         Yields:
@@ -777,61 +780,49 @@ class XTTSManager:
             return
 
         synthesis_language = language or self.language
-        log.info(f"🎤 Starting optimized streaming synthesis for text: '{text[:50]}...'")
+        
+        # Determine which speaker WAV to use
+        final_speaker_wav = speaker_wav or self.default_reference_wav
+        
+        # Check if the file exists
+        if not os.path.exists(final_speaker_wav):
+            log.error(f"❌ Reference speaker WAV file not found: {final_speaker_wav}. Aborting synthesis.")
+            return
+
+        # Get speaker latents (cached or computed)
+        latents = self._get_optimized_speaker_latents(final_speaker_wav)
+        if not latents:
+            log.error(f"Failed to get speaker latents for {final_speaker_wav}. Aborting synthesis.")
+            return
+            
+        gpt_cond_latents, speaker_embedding = latents
+        
+        log.info(f"🎤 Starting streaming synthesis for text: '{text[:50]}...' using speaker '{os.path.basename(final_speaker_wav)}'")
         start_time = time.time()
 
+        # Use the compiled model if available, otherwise the original
+        model_to_use = self.compiled_model or self.tts.model
+
         try:
-            # Get speaker latents (cached or computed)
-            latents = self._get_optimized_speaker_latents(speaker_wav)
-            if not latents:
-                log.error("Failed to get speaker latents. Aborting synthesis.")
-                return
-                
-            gpt_cond_latents, speaker_embedding = latents
-            
-            # Use the compiled model if available, otherwise the original
-            model_to_use = self.compiled_model or self.tts.model
+            # Simplified logic with torch.inference_mode and autocast
+            with torch.inference_mode(), torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                # The internal streaming generator from the TTS library
+                chunks = model_to_use.inference_stream(
+                    text,
+                    synthesis_language,
+                    gpt_cond_latents,
+                    speaker_embedding,
+                    stream_chunk_size=self.stream_chunk_size,
+                    speed=speed,
+                )
 
-            # Use torch.inference_mode for no-gradient calculations
-            with torch.inference_mode():
-                # Use bfloat16 for Ampere GPUs (like RTX A5000) for speed and stability
-                if self.use_bfloat16:
-                    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
-                        # The internal streaming generator from the TTS library
-                        chunks = model_to_use.inference_stream(
-                            text,
-                            synthesis_language,
-                            gpt_cond_latents,
-                            speaker_embedding,
-                            stream_chunk_size=self.stream_chunk_size,
-                            speed=speed,
-                        )
-
-                        for i, chunk in enumerate(chunks):
-                            chunk_time = time.time()
-                            log.info(f"🎧 Yielding audio chunk {i} at {chunk_time - start_time:.2f}s")
-                            
-                            # Convert tensor chunk to WAV bytes
-                            wav_bytes = self._audio_to_wav_bytes_optimized(chunk)
-                            yield wav_bytes
-                else:
-                    # Fallback to FP32
-                    chunks = model_to_use.inference_stream(
-                        text,
-                        synthesis_language,
-                        gpt_cond_latents,
-                        speaker_embedding,
-                        stream_chunk_size=self.stream_chunk_size,
-                        speed=speed,
-                    )
-
-                    for i, chunk in enumerate(chunks):
-                        chunk_time = time.time()
-                        log.info(f"🎧 Yielding audio chunk {i} at {chunk_time - start_time:.2f}s")
-                        
-                        # Convert tensor chunk to WAV bytes
-                        wav_bytes = self._audio_to_wav_bytes_optimized(chunk)
-                        yield wav_bytes
+                for i, chunk in enumerate(chunks):
+                    chunk_time = time.time()
+                    log.info(f"🎧 Yielding audio chunk {i} at {chunk_time - start_time:.2f}s")
+                    
+                    # Convert tensor chunk to WAV bytes
+                    wav_bytes = self._audio_to_wav_bytes_optimized(chunk)
+                    yield wav_bytes
 
         except Exception as e:
             log.error(f"❌ An error occurred during streaming synthesis: {e}")
@@ -842,23 +833,28 @@ class XTTSManager:
     def _get_optimized_speaker_latents(self, speaker_wav: str):
         """
         Optimized speaker latent computation with caching.
+        Handles None speaker_wav by using default reference.
         """
-        if not speaker_wav or not isinstance(speaker_wav, str) or not os.path.exists(speaker_wav):
-            log.warning("⚠️ Invalid speaker_wav, using default speaker")
+        # Determine which speaker WAV to use
+        final_speaker_wav = speaker_wav or self.default_reference_wav
+        
+        # Check if the file exists
+        if not os.path.exists(final_speaker_wav):
+            log.error(f"❌ Reference speaker WAV file not found: {final_speaker_wav}")
             return None
 
-        if speaker_wav in self.speaker_cache:
-            log.info(f"🎯 Speaker cache HIT for: {os.path.basename(speaker_wav)}")
-            return self.speaker_cache[speaker_wav]
+        if final_speaker_wav in self.speaker_cache:
+            log.info(f"🎯 Speaker cache HIT for: {os.path.basename(final_speaker_wav)}")
+            return self.speaker_cache[final_speaker_wav]
 
-        log.info(f"🔄 Speaker cache MISS. Computing latents for: {os.path.basename(speaker_wav)}")
+        log.info(f"🔄 Speaker cache MISS. Computing latents for: {os.path.basename(final_speaker_wav)}")
         try:
             # get_conditioning_latents returns a tuple (gpt_latents, speaker_embedding)
-            latents = self.tts.get_conditioning_latents(audio_path=speaker_wav)
-            self.speaker_cache[speaker_wav] = latents
+            latents = self.tts.get_conditioning_latents(audio_path=final_speaker_wav)
+            self.speaker_cache[final_speaker_wav] = latents
             return latents
         except Exception as e:
-            log.error(f"❌ Error computing speaker latents: {e}")
+            log.error(f"❌ Error computing speaker latents for {final_speaker_wav}: {e}")
             return None
 
     def _audio_to_wav_bytes_optimized(self, audio_chunk: torch.Tensor) -> bytes:
@@ -1688,6 +1684,7 @@ class XTTSManager:
             "current_language": self.language,
             "supported_languages": self.supported_languages,
             "reference_voice_path": self.reference_voice_path,
+            "default_reference_wav": self.default_reference_wav,
             "fallback_speaker": self.fallback_speaker,
             "performance_optimizations": {
                 "fp16_enabled": self.use_fp16,
