@@ -75,6 +75,10 @@ class XTTSManager:
         self.gpu_utilization = {}  # Track GPU utilization
         self.use_multi_gpu = self.gpu_count > 1  # Enable multi-GPU if available
         
+        # Force GPU 1 for XTTS
+        self.force_gpu_1 = True  # Force XTTS to run only on GPU 1
+        self.target_gpu = 1  # Target GPU for XTTS
+        
         # Speaker-latent cache settings
         self.speaker_cache = {}  # Cache for speaker latents
         self.cache_max_size = 10  # Maximum number of cached speakers
@@ -228,6 +232,11 @@ class XTTSManager:
     
     def _select_optimal_gpu(self) -> int:
         """Select the optimal GPU based on memory usage and load."""
+        # Force GPU 1 for XTTS if enabled
+        if self.force_gpu_1 and self.target_gpu < self.gpu_count:
+            log.info(f"🎯 Forced to use GPU {self.target_gpu} for XTTS")
+            return self.target_gpu
+        
         if not self.use_multi_gpu:
             return 0
         
@@ -698,11 +707,11 @@ class XTTSManager:
                             # Clear CUDA cache before synthesis
                             torch.cuda.empty_cache()
                             
-                            wav = self.tts.model.tts(
+                            # Use speaker_wav instead of latents to avoid parameter conflicts
+                            wav = self.tts.tts(
                                 text=text,
+                                speaker_wav=speaker_wav,
                                 language=language,
-                                gpt_cond_latent=gpt_cond_latent,
-                                speaker_cond_latent=speaker_cond_latent,
                                 speed=speed  # faster output
                             )
                             
@@ -720,11 +729,10 @@ class XTTSManager:
                                 try:
                                     import torch
                                     with torch.cuda.device('cpu'):
-                                        wav = self.tts.model.tts(
+                                        wav = self.tts.tts(
                                             text=text,
+                                            speaker_wav=speaker_wav,
                                             language=language,
-                                            gpt_cond_latent=gpt_cond_latent,
-                                            speaker_cond_latent=speaker_cond_latent,
                                             speed=speed
                                         )
                                 except Exception as cpu_error:
@@ -780,6 +788,11 @@ class XTTSManager:
                     # Select optimal GPU for model loading
                     selected_gpu = self._select_optimal_gpu()
                     device_to_use = f"cuda:{selected_gpu}" if self.use_multi_gpu else self.device
+                    
+                    # Force GPU 1 for XTTS
+                    if self.force_gpu_1 and self.target_gpu < self.gpu_count:
+                        device_to_use = f"cuda:{self.target_gpu}"
+                        log.info(f"🎯 Forcing XTTS to GPU {self.target_gpu}")
                     
                     log.info(f"🚀 Loading model on {device_to_use}")
                     
@@ -1101,11 +1114,11 @@ class XTTSManager:
                                             # Clear CUDA cache before synthesis
                                             torch.cuda.empty_cache()
                                             
+                                            # Don't use speaker_embedding parameter to avoid conflict
                                             audio_data = self.tts.tts(
                                                 text=text,
                                                 speaker_wav=speaker_wav_param,
-                                                language=synthesis_language,
-                                                speaker_embedding=cached_latent
+                                                language=synthesis_language
                                             )
                                         except RuntimeError as e:
                                             if "CUDA" in str(e) or "device-side assert" in str(e):
@@ -1168,7 +1181,6 @@ class XTTSManager:
                                         text=text,
                                         speaker_wav=speaker_wav_param,
                                         language=synthesis_language,
-                                        speaker_embedding=cached_latent,
                                         speed=speed
                                     )
                                 elif speaker_wav_param:
@@ -1271,7 +1283,9 @@ class XTTSManager:
                 "cuda_available": torch.cuda.is_available(),
                 "cuda_device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
                 "multi_gpu_enabled": self.use_multi_gpu,
-                "gpu_memory_threshold": self.gpu_memory_threshold
+                "gpu_memory_threshold": self.gpu_memory_threshold,
+                "force_gpu_1": self.force_gpu_1,
+                "target_gpu": self.target_gpu
             },
             "gpu_utilization": self.gpu_utilization,
             "speaker_cache": self.get_cache_stats(),
