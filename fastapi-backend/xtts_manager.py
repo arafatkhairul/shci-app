@@ -86,7 +86,7 @@ class XTTSManager:
         self.preload_speaker = True  # Preload speaker embeddings
         self.ultra_speed = 2.0  # Ultra-fast speed multiplier
         self.instant_mode = True  # Enable instant synthesis for very short texts
-        self.instant_text_limit = 25  # Maximum chars for instant mode
+        self.instant_text_limit = 60  # Maximum chars for instant mode (increased for better coverage)
         
         # Speaker-latent cache settings
         self.speaker_cache = {}  # Cache for speaker latents
@@ -624,7 +624,7 @@ class XTTSManager:
                 with inference_context:
                     # Ultra-fast synthesis with minimal processing
                     try:
-                        if speaker_wav and os.path.exists(speaker_wav):
+                        if speaker_wav and isinstance(speaker_wav, str) and os.path.exists(speaker_wav):
                             audio_data = self.tts.tts(
                                 text=text,
                                 speaker_wav=speaker_wav,
@@ -649,7 +649,7 @@ class XTTSManager:
             else:
                 # Fallback synthesis
                 try:
-                    if speaker_wav and os.path.exists(speaker_wav):
+                    if speaker_wav and isinstance(speaker_wav, str) and os.path.exists(speaker_wav):
                         audio_data = self.tts.tts(
                             text=text,
                             speaker_wav=speaker_wav,
@@ -702,7 +702,7 @@ class XTTSManager:
                 return self.synthesize_text_ultra_fast(text, language, speaker_wav)
             
             synthesis_language = language or self.language
-            log.info(f"⚡ Instant synthesis: '{text[:20]}...' (speed: 3.0)")
+            log.info(f"⚡ Instant synthesis: '{text[:20]}...' (speed: 4.0)")
             start_time = time.time()
             
             # Force GPU 1
@@ -714,12 +714,21 @@ class XTTSManager:
             
             # Instant synthesis with maximum speed
             try:
-                # Use default speaker for instant mode (no speaker_wav to avoid file I/O)
-                audio_data = self.tts.tts(
-                    text=text,
-                    language=synthesis_language,
-                    speed=3.0  # Maximum speed
-                )
+                # Use speaker_wav if available and valid, otherwise use default speaker
+                if speaker_wav and isinstance(speaker_wav, str) and os.path.exists(speaker_wav):
+                    audio_data = self.tts.tts(
+                        text=text,
+                        speaker_wav=speaker_wav,
+                        language=synthesis_language,
+                        speed=4.0  # Ultra-maximum speed
+                    )
+                else:
+                    # Use default speaker for instant mode
+                    audio_data = self.tts.tts(
+                        text=text,
+                        language=synthesis_language,
+                        speed=4.0  # Ultra-maximum speed
+                    )
             except Exception as e:
                 log.error(f"❌ Instant synthesis error: {e}")
                 return b""
@@ -793,21 +802,35 @@ class XTTSManager:
                     
                     if inference_context:
                         with inference_context:
-                            # Direct synthesis
+                            # Direct synthesis with safe speaker_wav handling
+                            if speaker_wav and isinstance(speaker_wav, str) and os.path.exists(speaker_wav):
+                                audio_data = self.tts.tts(
+                                    text=chunk,
+                                    speaker_wav=speaker_wav,
+                                    language=language or self.language,
+                                    speed=speed
+                                )
+                            else:
+                                audio_data = self.tts.tts(
+                                    text=chunk,
+                                    language=language or self.language,
+                                    speed=speed
+                                )
+                    else:
+                        # Fallback synthesis with safe speaker_wav handling
+                        if speaker_wav and isinstance(speaker_wav, str) and os.path.exists(speaker_wav):
                             audio_data = self.tts.tts(
                                 text=chunk,
                                 speaker_wav=speaker_wav,
                                 language=language or self.language,
                                 speed=speed
                             )
-                    else:
-                        # Fallback synthesis
-                        audio_data = self.tts.tts(
-                            text=chunk,
-                            speaker_wav=speaker_wav,
-                            language=language or self.language,
-                            speed=speed
-                        )
+                        else:
+                            audio_data = self.tts.tts(
+                                text=chunk,
+                                language=language or self.language,
+                                speed=speed
+                            )
                     
                     # Convert to WAV bytes
                     chunk_audio = self.audio_to_wav_bytes(audio_data)
