@@ -70,7 +70,7 @@ fi
 
 # Fix 3: Check required directories
 print_status "Checking required directories..."
-required_dirs=("fastapi-backend" "web-app" "nginx" "Models")
+required_dirs=("fastapi-backend" "web-app" "nginx" "models")
 for dir in "${required_dirs[@]}"; do
     if [ -d "$dir" ]; then
         print_success "Directory $dir exists"
