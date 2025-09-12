@@ -486,7 +486,95 @@ fi
 
 # Update Nginx configuration with domain
 print_status "Updating Nginx configuration..."
-sed -i "s/your-domain.com/$DOMAIN_NAME/g" nginx/conf.d/shci.conf
+if [ -f "/opt/$PROJECT_NAME/nginx/conf.d/shci.conf" ]; then
+    sed -i "s/your-domain.com/$DOMAIN_NAME/g" /opt/$PROJECT_NAME/nginx/conf.d/shci.conf
+elif [ -f "/etc/nginx/sites-available/shci" ]; then
+    sed -i "s/your-domain.com/$DOMAIN_NAME/g" /etc/nginx/sites-available/shci
+else
+    print_status "Creating nginx configuration..."
+    # Create nginx configuration directory
+    mkdir -p /opt/$PROJECT_NAME/nginx/conf.d
+    
+    # Create nginx configuration file
+    cat > /opt/$PROJECT_NAME/nginx/conf.d/shci.conf << 'EOF'
+server {
+    listen 80;
+    server_name your-domain.com www.your-domain.com;
+    
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=ws:10m rate=5r/s;
+    
+    # Frontend
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }
+    
+    # Backend API
+    location /api/ {
+        limit_req zone=api burst=20 nodelay;
+        proxy_pass http://localhost:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }
+    
+    # WebSocket
+    location /ws {
+        limit_req zone=ws burst=10 nodelay;
+        proxy_pass http://localhost:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+    
+    # Roleplay endpoints
+    location /roleplay/ {
+        proxy_pass http://localhost:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }
+    
+    # Health check
+    location /health {
+        proxy_pass http://localhost:8000;
+        access_log off;
+    }
+}
+EOF
+    
+    # Update domain in the created file
+    sed -i "s/your-domain.com/$DOMAIN_NAME/g" /opt/$PROJECT_NAME/nginx/conf.d/shci.conf
+    
+    # Copy to nginx sites-available
+    cp /opt/$PROJECT_NAME/nginx/conf.d/shci.conf /etc/nginx/sites-available/shci
+    ln -sf /etc/nginx/sites-available/shci /etc/nginx/sites-enabled/shci
+fi
 
 # Create SSL directory
 sudo mkdir -p /opt/$PROJECT_NAME/ssl
@@ -769,8 +857,101 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
         }
     fi
     
-    # Update docker-compose to use SSL
-    sed -i 's/# Same location blocks as above/    location \/ {\n        proxy_pass http:\/\/frontend;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection '\''upgrade'\'';\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_cache_bypass $http_upgrade;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/api\/ {\n        limit_req zone=api burst=20 nodelay;\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/ws {\n        limit_req zone=ws burst=10 nodelay;\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 86400s;\n        proxy_send_timeout 86400s;\n    }\n\n    location \/roleplay\/ {\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/health {\n        proxy_pass http:\/\/backend;\n        access_log off;\n    }/' nginx/conf.d/shci.conf
+    # Update nginx configuration for SSL (if SSL was successful)
+    if [ -f "/etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem" ]; then
+        print_status "Updating nginx configuration for SSL..."
+        if [ -f "/etc/nginx/sites-available/shci" ]; then
+            # SSL configuration will be automatically added by certbot
+            print_status "SSL configuration updated by certbot"
+        else
+            print_status "Creating SSL-enabled nginx configuration..."
+            cat > /etc/nginx/sites-available/shci << 'EOF'
+server {
+    listen 80;
+    server_name your-domain.com www.your-domain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com www.your-domain.com;
+    
+    # SSL configuration (will be updated by certbot)
+    ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+    
+    # Rate limiting
+    limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=ws:10m rate=5r/s;
+    
+    # Frontend
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }
+    
+    # Backend API
+    location /api/ {
+        limit_req zone=api burst=20 nodelay;
+        proxy_pass http://localhost:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }
+    
+    # WebSocket
+    location /ws {
+        limit_req zone=ws burst=10 nodelay;
+        proxy_pass http://localhost:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+    
+    # Roleplay endpoints
+    location /roleplay/ {
+        proxy_pass http://localhost:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 300s;
+        proxy_connect_timeout 75s;
+    }
+    
+    # Health check
+    location /health {
+        proxy_pass http://localhost:8000;
+        access_log off;
+    }
+}
+EOF
+            sed -i "s/your-domain.com/$DOMAIN_NAME/g" /etc/nginx/sites-available/shci
+            ln -sf /etc/nginx/sites-available/shci /etc/nginx/sites-enabled/shci
+        fi
+    else
+        print_status "SSL certificate not found, keeping HTTP configuration"
+    fi
     
     # Restart nginx
     print_status "Restarting nginx..."
