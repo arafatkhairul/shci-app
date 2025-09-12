@@ -505,7 +505,28 @@ pip install --upgrade pip
 # Install dependencies with conflict resolution
 print_status "Installing Python dependencies with conflict resolution..."
 pip install --upgrade pip setuptools wheel
-pip install --no-deps -r requirements.txt || pip install -r requirements.txt --force-reinstall --no-deps
+
+# Install core dependencies first
+print_status "Installing core dependencies..."
+pip install fastapi uvicorn python-dotenv requests
+
+# Install audio processing dependencies
+print_status "Installing audio processing dependencies..."
+pip install "numpy>=1.21.0,<2.0.0" soundfile librosa pydub scipy
+
+# Install TTS dependencies step by step
+print_status "Installing TTS dependencies..."
+pip install aiohttp anyascii bangla bnnumerizer bnnunicodenormalizer
+pip install coqpit cython einops encodec flask g2pkk
+pip install "gruut[de,es,fr]==2.2.3" hangul-romanize inflect jamo jieba
+pip install matplotlib nltk num2words numba packaging
+pip install "pandas<2.0,>=1.4" pypinyin pysbd pyyaml
+pip install scikit-learn "spacy[ja]>=3" tqdm trainer transformers
+pip install umap-learn unidecode
+
+# Install TTS package
+print_status "Installing TTS package..."
+pip install TTS==0.21.3
 
 # Install PyTorch with CUDA support if GPU available
 if lspci | grep -i nvidia &> /dev/null; then
@@ -518,8 +539,7 @@ fi
 
 # Install remaining dependencies
 print_status "Installing remaining dependencies..."
-pip install "numpy>=1.21.0,<2.0.0" --force-reinstall
-pip install soundfile librosa pydub scipy --force-reinstall
+pip install webrtcvad_wheels websocket_client pyttsx3
 
 # Setup frontend environment
 print_status "Setting up frontend environment..."
