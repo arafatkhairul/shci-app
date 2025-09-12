@@ -516,7 +516,8 @@ pip install "numpy>=1.21.0,<2.0.0" soundfile librosa pydub scipy
 
 # Install TTS dependencies step by step
 print_status "Installing TTS dependencies..."
-pip install aiohttp anyascii bangla bnnumerizer bnnunicodenormalizer
+pip install aiohttp anyascii bangla bnnumerizer
+# Skip bnnunicodenormalizer - not available
 pip install coqpit cython einops encodec flask g2pkk
 pip install "gruut[de,es,fr]==2.2.3" hangul-romanize inflect jamo jieba
 pip install matplotlib nltk num2words numba packaging
@@ -524,9 +525,14 @@ pip install "pandas<2.0,>=1.4" pypinyin pysbd pyyaml
 pip install scikit-learn "spacy[ja]>=3" tqdm trainer transformers
 pip install umap-learn unidecode
 
-# Install TTS package
+# Install TTS package with dependency resolution
 print_status "Installing TTS package..."
-pip install TTS==0.21.3
+pip install TTS==0.21.3 --no-deps || pip install TTS==0.21.3 --force-reinstall --no-deps
+
+# Install remaining TTS dependencies that might be missing
+print_status "Installing any remaining TTS dependencies..."
+pip install --upgrade pip
+pip install --no-deps -r requirements.txt || true
 
 # Install PyTorch with CUDA support if GPU available
 if lspci | grep -i nvidia &> /dev/null; then

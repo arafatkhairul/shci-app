@@ -18,12 +18,12 @@ torchaudio>=0.13.0,<2.9.0
 TTS==0.21.3
 scipy>=1.7.0
 
-# TTS required dependencies
+# TTS required dependencies (available packages only)
 aiohttp>=3.8.1
 anyascii>=0.3.0
 bangla
 bnnumerizer
-bnunicodenormalizer
+# bnnunicodenormalizer - not available, skipping
 coqpit>=0.0.16
 cython>=0.29.30
 einops>=0.6.0
