@@ -1,7 +1,9 @@
 #!/bin/bash
 
-# SHCI Voice Assistant - Direct Deployment Script (No Docker)
-# ==========================================================
+# SHCI Voice Assistant - Complete Deployment Script
+# ================================================
+# This script removes existing Python versions and installs only Python 3.11.9
+# Then deploys the complete SHCI Voice Assistant application
 
 set -e  # Exit on any error
 
@@ -17,8 +19,11 @@ PROJECT_NAME="shci-app"
 DOMAIN_NAME="nodecel.cloud"  # Your main domain
 EMAIL="office.khairul@gmail.com"  # Your email
 
-echo -e "${BLUE}🚀 Starting SHCI Voice Assistant Deployment${NC}"
-echo "================================================"
+echo -e "${BLUE}🚀 Starting SHCI Complete Deployment${NC}"
+echo "============================================="
+echo -e "${YELLOW}⚠️  WARNING: This script will remove existing Python versions${NC}"
+echo -e "${YELLOW}   and install only Python 3.11.9${NC}"
+echo ""
 
 # Function to print status
 print_status() {
@@ -124,13 +129,20 @@ if ! command -v node &> /dev/null; then
     fi
 fi
 
-# Install Python 3.11.9 specifically
-print_status "Installing Python 3.11.9 specifically..."
+# Remove existing Python versions and install only Python 3.11.9
+print_status "Removing existing Python versions and installing only Python 3.11.9..."
 if [ "$EUID" -eq 0 ]; then
+    # Remove existing Python versions
+    print_status "Removing existing Python installations..."
+    apt remove -y python3 python3.12 python3.12-dev python3.12-venv python3.12-distutils python3-pip python3-venv 2>/dev/null || true
+    apt autoremove -y
+    
+    # Add deadsnakes PPA
     add-apt-repository ppa:deadsnakes/ppa -y
     apt update
     
     # Install only Python 3.11.9 specific packages
+    print_status "Installing Python 3.11.9 specifically..."
     apt install -y python3.11=3.11.9-1+build1 python3.11-dev=3.11.9-1+build1 python3.11-venv=3.11.9-1+build1 python3.11-distutils=3.11.9-1+build1
     
     # Verify Python 3.11.9 installation
@@ -147,15 +159,28 @@ if [ "$EUID" -eq 0 ]; then
         ln -sf /usr/bin/python3.11 /usr/bin/python
         ln -sf /usr/bin/python3.11 /usr/bin/python3
         print_success "Python symlinks created: python -> python3.11"
+        
+        # Verify symlinks
+        echo "Python version verification:"
+        echo "python --version: $(python --version)"
+        echo "python3 --version: $(python3 --version)"
+        echo "python3.11 --version: $(python3.11 --version)"
     else
         print_error "Python 3.11 installation failed"
         exit 1
     fi
 else
+    # Remove existing Python versions
+    print_status "Removing existing Python installations..."
+    sudo apt remove -y python3 python3.12 python3.12-dev python3.12-venv python3.12-distutils python3-pip python3-venv 2>/dev/null || true
+    sudo apt autoremove -y
+    
+    # Add deadsnakes PPA
     sudo add-apt-repository ppa:deadsnakes/ppa -y
     sudo apt update
     
     # Install only Python 3.11.9 specific packages
+    print_status "Installing Python 3.11.9 specifically..."
     sudo apt install -y python3.11=3.11.9-1+build1 python3.11-dev=3.11.9-1+build1 python3.11-venv=3.11.9-1+build1 python3.11-distutils=3.11.9-1+build1
     
     # Verify Python 3.11.9 installation
@@ -172,6 +197,12 @@ else
         sudo ln -sf /usr/bin/python3.11 /usr/bin/python
         sudo ln -sf /usr/bin/python3.11 /usr/bin/python3
         print_success "Python symlinks created: python -> python3.11"
+        
+        # Verify symlinks
+        echo "Python version verification:"
+        echo "python --version: $(python --version)"
+        echo "python3 --version: $(python3 --version)"
+        echo "python3.11 --version: $(python3.11 --version)"
     else
         print_error "Python 3.11 installation failed"
         exit 1
