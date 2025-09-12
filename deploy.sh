@@ -22,6 +22,10 @@ echo "================================================"
 
 # Function to print status
 print_status() {
+    echo -e "${BLUE}ℹ️  $1${NC}"
+}
+
+print_success() {
     echo -e "${GREEN}✅ $1${NC}"
 }
 
