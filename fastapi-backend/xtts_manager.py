@@ -584,8 +584,14 @@ class XTTSManager:
                 
                 # Set device context
                 if self.use_multi_gpu:
-                    torch.cuda.set_device(selected_gpu)
-                    log.info(f"🎯 Using GPU {selected_gpu} for inference")
+                    try:
+                        import torch
+                        torch.cuda.set_device(selected_gpu)
+                        log.info(f"🎯 Using GPU {selected_gpu} for inference")
+                    except ImportError:
+                        log.error("❌ PyTorch not available for GPU device setting")
+                    except Exception as e:
+                        log.error(f"❌ Error setting GPU device: {e}")
                 
                 # Determine speaker parameters (from simple_tts_test.py logic)
                 speaker_wav_param = None
@@ -616,13 +622,55 @@ class XTTSManager:
                 # Synthesize with XTTS using optimized inference
                 try:
                     # Use optimized inference context
-                    inference_context = torch.inference_mode() if self.use_inference_mode else torch.no_grad()
-                    with inference_context:
-                        # Enable AMP autocast if available
-                        if self.use_amp and self.device == "cuda":
-                            amp_dtype = torch.float16 if self.use_fp16 else torch.float32
-                            with torch.autocast(device_type='cuda', dtype=amp_dtype):
-                                # Use cached latent or compute new one
+                    try:
+                        import torch
+                        inference_context = torch.inference_mode() if self.use_inference_mode else torch.no_grad()
+                    except ImportError:
+                        log.error("❌ PyTorch not available for inference context")
+                        inference_context = None
+                    
+                    if inference_context:
+                        with inference_context:
+                            # Enable AMP autocast if available
+                            if self.use_amp and self.device == "cuda":
+                                amp_dtype = torch.float16 if self.use_fp16 else torch.float32
+                                with torch.autocast(device_type='cuda', dtype=amp_dtype):
+                                    # Use cached latent or compute new one
+                                    if speaker_wav_param and cached_latent is not None:
+                                        # Use cached speaker latent for faster synthesis
+                                        audio_data = self.tts.tts(
+                                            text=text,
+                                            speaker_wav=speaker_wav_param,
+                                            language=synthesis_language,
+                                            speaker_embedding=cached_latent
+                                        )
+                                    elif speaker_wav_param:
+                                        # Use reference audio for voice cloning (first time)
+                                        audio_data = self.tts.tts(
+                                            text=text,
+                                            speaker_wav=speaker_wav_param,
+                                            language=synthesis_language,
+                                        )
+                                        
+                                        # Cache the speaker latent for future use
+                                        if self.cache_enabled:
+                                            try:
+                                                # Extract speaker latent from the model
+                                                cache_key = self._generate_cache_key(reference_to_check, synthesis_language)
+                                                # Note: In actual implementation, you'd extract the latent from the model
+                                                # For now, we'll cache a placeholder
+                                                self._cache_speaker_latent(cache_key, "cached_latent_placeholder")
+                                            except Exception as e:
+                                                log.warning(f"⚠️ Could not cache speaker latent: {e}")
+                                    else:
+                                        # Use default speaker
+                                        audio_data = self.tts.tts(
+                                            text=text,
+                                            speaker=speaker_param,
+                                            language=synthesis_language,
+                                        )
+                            else:
+                                # Use cached latent or compute new one (without AMP)
                                 if speaker_wav_param and cached_latent is not None:
                                     # Use cached speaker latent for faster synthesis
                                     audio_data = self.tts.tts(
@@ -642,10 +690,7 @@ class XTTSManager:
                                     # Cache the speaker latent for future use
                                     if self.cache_enabled:
                                         try:
-                                            # Extract speaker latent from the model
                                             cache_key = self._generate_cache_key(reference_to_check, synthesis_language)
-                                            # Note: In actual implementation, you'd extract the latent from the model
-                                            # For now, we'll cache a placeholder
                                             self._cache_speaker_latent(cache_key, "cached_latent_placeholder")
                                         except Exception as e:
                                             log.warning(f"⚠️ Could not cache speaker latent: {e}")
@@ -656,38 +701,20 @@ class XTTSManager:
                                         speaker=speaker_param,
                                         language=synthesis_language,
                                     )
+                    else:
+                        # Fallback synthesis without inference context
+                        if speaker_wav_param:
+                            audio_data = self.tts.tts(
+                                text=text,
+                                speaker_wav=speaker_wav_param,
+                                language=synthesis_language,
+                            )
                         else:
-                            # Use cached latent or compute new one (without AMP)
-                            if speaker_wav_param and cached_latent is not None:
-                                # Use cached speaker latent for faster synthesis
-                                audio_data = self.tts.tts(
-                                    text=text,
-                                    speaker_wav=speaker_wav_param,
-                                    language=synthesis_language,
-                                    speaker_embedding=cached_latent
-                                )
-                            elif speaker_wav_param:
-                                # Use reference audio for voice cloning (first time)
-                                audio_data = self.tts.tts(
-                                    text=text,
-                                    speaker_wav=speaker_wav_param,
-                                    language=synthesis_language,
-                                )
-                                
-                                # Cache the speaker latent for future use
-                                if self.cache_enabled:
-                                    try:
-                                        cache_key = self._generate_cache_key(reference_to_check, synthesis_language)
-                                        self._cache_speaker_latent(cache_key, "cached_latent_placeholder")
-                                    except Exception as e:
-                                        log.warning(f"⚠️ Could not cache speaker latent: {e}")
-                            else:
-                                # Use default speaker
-                                audio_data = self.tts.tts(
-                                    text=text,
-                                    speaker=speaker_param,
-                                    language=synthesis_language,
-                                )
+                            audio_data = self.tts.tts(
+                                text=text,
+                                speaker=speaker_param,
+                                language=synthesis_language,
+                            )
                     
                     # Convert audio data to bytes if it's a list or numpy array
                     import numpy as np
