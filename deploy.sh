@@ -626,7 +626,8 @@ pip install fastapi uvicorn python-dotenv requests
 
 # Install compatible numpy version first
 print_status "Installing compatible numpy version..."
-pip install "numpy>=1.24.0,<2.0.0" --force-reinstall
+pip uninstall -y numpy 2>/dev/null || true
+pip install "numpy>=1.24.0,<2.0.0" --force-reinstall --no-deps
 
 # Install compatible networkx version
 print_status "Installing compatible networkx version..."
@@ -639,6 +640,11 @@ pip install soundfile librosa pydub scipy
 # Install TTS dependencies step by step with compatible versions
 print_status "Installing TTS dependencies..."
 pip install aiohttp anyascii bangla bnnumerizer
+
+# Install numba with compatible numpy version
+print_status "Installing numba with compatible numpy..."
+pip uninstall -y numba 2>/dev/null || true
+pip install "numba>=0.57.0,<0.62.0" --force-reinstall
 
 # Install bnunicodenormalizer with multiple fallback methods
 print_status "Installing bnunicodenormalizer..."
@@ -708,7 +714,8 @@ fi
 
 # Fix all dependency conflicts after PyTorch installation
 print_status "Fixing all dependency conflicts after PyTorch installation..."
-pip install "numpy>=1.24.0,<2.0.0" --force-reinstall
+pip uninstall -y numpy 2>/dev/null || true
+pip install "numpy>=1.24.0,<2.0.0" --force-reinstall --no-deps
 pip install "networkx>=2.5.0,<3.0.0" --force-reinstall
 pip install "typing_extensions>=4.14.0" --force-reinstall
 pip install "thinc>=8.3.0,<8.4.0" --force-reinstall
@@ -740,7 +747,8 @@ pip install webrtcvad_wheels websocket_client pyttsx3
 # Final dependency verification and conflict resolution
 print_status "Final dependency verification and conflict resolution..."
 pip install --upgrade pip
-pip install --force-reinstall "numpy>=1.24.0,<2.0.0"
+pip uninstall -y numpy 2>/dev/null || true
+pip install --force-reinstall "numpy>=1.24.0,<2.0.0" --no-deps
 pip install --force-reinstall "networkx>=2.5.0,<3.0.0"
 pip install --force-reinstall "typing_extensions>=4.14.0"
 pip install --force-reinstall "thinc>=8.3.0,<8.4.0"
@@ -782,7 +790,8 @@ print_status "Comprehensive final fix for all conflicts..."
 pip uninstall -y torch torchvision torchaudio numpy networkx 2>/dev/null || true
 
 # Install exact compatible versions
-pip install "numpy>=1.24.0,<2.0.0" --force-reinstall
+pip uninstall -y numpy 2>/dev/null || true
+pip install "numpy>=1.24.0,<2.0.0" --force-reinstall --no-deps
 pip install "networkx>=2.5.0,<3.0.0" --force-reinstall
 
 # Install PyTorch with exact versions
@@ -820,6 +829,10 @@ import numpy; print(f'numpy: {numpy.__version__}')
 import networkx; print(f'networkx: {networkx.__version__}')
 import typing_extensions; print(f'typing_extensions: {typing_extensions.__version__}')
 try:
+    import numba; print(f'numba: {numba.__version__}')
+except ImportError:
+    print('numba: not installed')
+try:
     import torch; print(f'torch: {torch.__version__}')
 except ImportError:
     print('torch: not installed')
@@ -839,6 +852,20 @@ try:
     import bnunicodenormalizer; print('bnunicodenormalizer: installed')
 except ImportError:
     print('bnunicodenormalizer: not installed')
+"
+
+# Final numpy compatibility check
+print_status "Final numpy compatibility check..."
+python3.11 -c "
+import numpy
+version = numpy.__version__
+major, minor = map(int, version.split('.')[:2])
+if major >= 2:
+    print(f'ERROR: numpy {version} is incompatible with numba and gruut')
+    print('Expected: numpy < 2.0.0')
+    exit(1)
+else:
+    print(f'SUCCESS: numpy {version} is compatible')
 "
 
 # Setup frontend environment
