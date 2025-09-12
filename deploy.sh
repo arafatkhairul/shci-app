@@ -612,6 +612,12 @@ echo "• Virtual Environment Location: $(pwd)/shci_env"
 # Install Python dependencies
 pip install --upgrade pip
 
+# Create constraints file to enforce numpy version
+print_status "Creating pip constraints file to enforce numpy version..."
+cat > /tmp/constraints.txt << 'EOF'
+numpy>=1.24.0,<2.0.0
+EOF
+
 # Install dependencies with complete conflict resolution
 print_status "Installing Python dependencies with complete conflict resolution..."
 pip install --upgrade pip setuptools wheel
@@ -622,12 +628,25 @@ pip uninstall -y numpy networkx thinc torch torchvision torchaudio 2>/dev/null |
 
 # Install core dependencies first
 print_status "Installing core dependencies..."
-pip install fastapi uvicorn python-dotenv requests
+pip install fastapi uvicorn python-dotenv requests -c /tmp/constraints.txt
 
 # Install compatible numpy version first
 print_status "Installing compatible numpy version..."
 pip uninstall -y numpy 2>/dev/null || true
 pip install "numpy>=1.24.0,<2.0.0" --force-reinstall --no-deps
+
+# Verify numpy version immediately
+print_status "Verifying numpy version after installation..."
+python3.11 -c "
+import numpy
+version = numpy.__version__
+major, minor = map(int, version.split('.')[:2])
+if major >= 2:
+    print(f'ERROR: numpy {version} is incompatible!')
+    exit(1)
+else:
+    print(f'SUCCESS: numpy {version} is compatible')
+"
 
 # Install compatible networkx version
 print_status "Installing compatible networkx version..."
@@ -635,11 +654,11 @@ pip install "networkx>=2.5.0,<3.0.0" --force-reinstall
 
 # Install audio processing dependencies
 print_status "Installing audio processing dependencies..."
-pip install soundfile librosa pydub scipy
+pip install soundfile librosa pydub scipy -c /tmp/constraints.txt
 
 # Install TTS dependencies step by step with compatible versions
 print_status "Installing TTS dependencies..."
-pip install aiohttp anyascii bangla bnnumerizer
+pip install aiohttp anyascii bangla bnnumerizer -c /tmp/constraints.txt
 
 # Install numba with compatible numpy version
 print_status "Installing numba with compatible numpy..."
@@ -658,16 +677,48 @@ pip install git+https://github.com/banglakit/bnunicodenormalizer.git@develop || 
 pip install git+https://github.com/banglakit/bnunicodenormalizer.git@dev || \
 echo "Warning: bnunicodenormalizer not available - TTS will work without it"
 
-pip install coqpit cython einops encodec flask g2pkk
-pip install "gruut[de,es,fr]==2.2.3" hangul-romanize inflect jamo jieba
-pip install matplotlib nltk num2words numba packaging
-pip install "pandas<2.0,>=1.4" pypinyin pysbd pyyaml
-pip install scikit-learn "spacy[ja]>=3" tqdm trainer transformers
-pip install umap-learn unidecode
+# Install packages that might conflict with numpy using --no-deps
+print_status "Installing TTS packages with numpy protection..."
+pip install coqpit cython einops encodec flask g2pkk --no-deps
+pip install "gruut[de,es,fr]==2.2.3" --no-deps
+pip install hangul-romanize inflect jamo jieba --no-deps
+pip install matplotlib nltk num2words packaging --no-deps
+pip install "pandas<2.0,>=1.4" pypinyin pysbd pyyaml --no-deps
+pip install scikit-learn "spacy[ja]>=3" tqdm trainer transformers --no-deps
+pip install umap-learn unidecode --no-deps
+
+# Install their dependencies separately with constraints
+print_status "Installing TTS package dependencies with numpy constraints..."
+pip install coqpit cython einops encodec flask g2pkk -c /tmp/constraints.txt --force-reinstall
+pip install "gruut[de,es,fr]==2.2.3" -c /tmp/constraints.txt --force-reinstall
+pip install hangul-romanize inflect jamo jieba -c /tmp/constraints.txt --force-reinstall
+pip install matplotlib nltk num2words packaging -c /tmp/constraints.txt --force-reinstall
+pip install "pandas<2.0,>=1.4" pypinyin pysbd pyyaml -c /tmp/constraints.txt --force-reinstall
+pip install scikit-learn "spacy[ja]>=3" tqdm trainer transformers -c /tmp/constraints.txt --force-reinstall
+pip install umap-learn unidecode -c /tmp/constraints.txt --force-reinstall
 
 # Install compatible thinc version
 print_status "Installing compatible thinc version..."
 pip install "thinc>=8.3.0,<8.4.0" --force-reinstall
+
+# Check numpy version after TTS dependencies
+print_status "Checking numpy version after TTS dependencies installation..."
+python3.11 -c "
+import numpy
+version = numpy.__version__
+major, minor = map(int, version.split('.')[:2])
+if major >= 2:
+    print(f'ERROR: numpy {version} is incompatible after TTS dependencies!')
+    print('Reinstalling compatible numpy...')
+    exit(1)
+else:
+    print(f'SUCCESS: numpy {version} is still compatible')
+" || {
+    print_error "Numpy version conflict detected! Fixing..."
+    pip uninstall -y numpy 2>/dev/null || true
+    pip install "numpy>=1.24.0,<2.0.0" --force-reinstall --no-deps
+    print_status "Numpy version fixed, continuing..."
+}
 
 # Install bnunicodenormalizer before TTS installation
 print_status "Installing bnunicodenormalizer before TTS..."
