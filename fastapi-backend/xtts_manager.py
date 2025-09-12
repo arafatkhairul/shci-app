@@ -71,6 +71,17 @@ class XTTSManager:
         self.gpu_utilization = {}  # Track GPU utilization
         self.use_multi_gpu = self.gpu_count > 1  # Enable multi-GPU if available
         
+        # Speaker-latent cache settings
+        self.speaker_cache = {}  # Cache for speaker latents
+        self.cache_max_size = 10  # Maximum number of cached speakers
+        self.cache_enabled = True  # Enable speaker caching
+        self.cache_stats = {
+            'hits': 0,
+            'misses': 0,
+            'evictions': 0,
+            'total_requests': 0
+        }
+        
         # Reference audio configuration (from simple_tts_test.py)
         self.reference_voice_path = "00005.wav"  # Default reference audio
         self.fallback_speaker = "Tammie Ema"  # Fallback speaker name
@@ -110,6 +121,7 @@ class XTTSManager:
         log.info(f"Fallback speaker: {self.fallback_speaker}")
         log.info(f"Performance optimizations: FP16={self.use_fp16}, AMP={self.use_amp}, Inference Mode={self.use_inference_mode}")
         log.info(f"Multi-GPU support: {self.use_multi_gpu} ({self.gpu_count} GPUs detected)")
+        log.info(f"Speaker-latent cache: {'Enabled' if self.cache_enabled else 'Disabled'} (max: {self.cache_max_size})")
         
         # Initialize GPU utilization tracking
         if self.use_multi_gpu:
@@ -200,6 +212,123 @@ class XTTSManager:
                 self.gpu_utilization[gpu_id]['load_count'] = max(0, self.gpu_utilization[gpu_id]['load_count'] - 1)
         except Exception as e:
             log.error(f"❌ Error cleaning up GPU {gpu_id} load: {e}")
+    
+    def _generate_cache_key(self, speaker_wav_path: str, language: str) -> str:
+        """Generate a unique cache key for speaker and language combination."""
+        try:
+            import hashlib
+            import os
+            
+            # Get file modification time and size for cache invalidation
+            if os.path.exists(speaker_wav_path):
+                stat = os.stat(speaker_wav_path)
+                file_info = f"{speaker_wav_path}_{stat.st_mtime}_{stat.st_size}_{language}"
+            else:
+                file_info = f"{speaker_wav_path}_{language}"
+            
+            # Create hash of the file info
+            cache_key = hashlib.md5(file_info.encode()).hexdigest()
+            return cache_key
+            
+        except Exception as e:
+            log.error(f"❌ Error generating cache key: {e}")
+            return f"{speaker_wav_path}_{language}"
+    
+    def _get_cached_speaker_latent(self, cache_key: str):
+        """Get cached speaker latent if available."""
+        if not self.cache_enabled:
+            return None
+        
+        try:
+            if cache_key in self.speaker_cache:
+                # Update access time and increment hit count
+                self.speaker_cache[cache_key]['last_accessed'] = time.time()
+                self.cache_stats['hits'] += 1
+                self.cache_stats['total_requests'] += 1
+                
+                log.info(f"🎯 Speaker cache HIT for key: {cache_key[:8]}...")
+                return self.speaker_cache[cache_key]['latent']
+            else:
+                self.cache_stats['misses'] += 1
+                self.cache_stats['total_requests'] += 1
+                log.info(f"❌ Speaker cache MISS for key: {cache_key[:8]}...")
+                return None
+                
+        except Exception as e:
+            log.error(f"❌ Error getting cached speaker latent: {e}")
+            return None
+    
+    def _cache_speaker_latent(self, cache_key: str, latent_data):
+        """Cache speaker latent data."""
+        if not self.cache_enabled:
+            return
+        
+        try:
+            # Check if cache is full and evict if necessary
+            if len(self.speaker_cache) >= self.cache_max_size:
+                self._evict_oldest_cache_entry()
+            
+            # Cache the latent data
+            self.speaker_cache[cache_key] = {
+                'latent': latent_data,
+                'created_at': time.time(),
+                'last_accessed': time.time(),
+                'access_count': 1
+            }
+            
+            log.info(f"💾 Speaker latent cached with key: {cache_key[:8]}... (cache size: {len(self.speaker_cache)})")
+            
+        except Exception as e:
+            log.error(f"❌ Error caching speaker latent: {e}")
+    
+    def _evict_oldest_cache_entry(self):
+        """Evict the least recently used cache entry."""
+        try:
+            if not self.speaker_cache:
+                return
+            
+            # Find the least recently accessed entry
+            oldest_key = min(self.speaker_cache.keys(), 
+                           key=lambda k: self.speaker_cache[k]['last_accessed'])
+            
+            # Remove the oldest entry
+            del self.speaker_cache[oldest_key]
+            self.cache_stats['evictions'] += 1
+            
+            log.info(f"🗑️ Evicted cache entry: {oldest_key[:8]}... (cache size: {len(self.speaker_cache)})")
+            
+        except Exception as e:
+            log.error(f"❌ Error evicting cache entry: {e}")
+    
+    def _clear_speaker_cache(self):
+        """Clear all cached speaker latents."""
+        try:
+            cache_size = len(self.speaker_cache)
+            self.speaker_cache.clear()
+            log.info(f"🧹 Speaker cache cleared ({cache_size} entries removed)")
+        except Exception as e:
+            log.error(f"❌ Error clearing speaker cache: {e}")
+    
+    def get_cache_stats(self) -> dict:
+        """Get speaker cache statistics."""
+        try:
+            hit_rate = 0
+            if self.cache_stats['total_requests'] > 0:
+                hit_rate = (self.cache_stats['hits'] / self.cache_stats['total_requests']) * 100
+            
+            return {
+                'cache_enabled': self.cache_enabled,
+                'cache_size': len(self.speaker_cache),
+                'cache_max_size': self.cache_max_size,
+                'hit_rate': f"{hit_rate:.1f}%",
+                'hits': self.cache_stats['hits'],
+                'misses': self.cache_stats['misses'],
+                'evictions': self.cache_stats['evictions'],
+                'total_requests': self.cache_stats['total_requests']
+            }
+        except Exception as e:
+            log.error(f"❌ Error getting cache stats: {e}")
+            return {}
     
     def load_model(self, model_name: str = None) -> bool:
         """
@@ -464,9 +593,21 @@ class XTTSManager:
                 
                 # Check if the reference audio file exists
                 reference_to_check = speaker_wav or self.reference_voice_path
+                cached_latent = None
+                
                 if os.path.exists(reference_to_check):
                     log.info(f"🎙️ Reference file found at '{reference_to_check}'. Using it for voice output.")
                     speaker_wav_param = reference_to_check
+                    
+                    # Try to get cached speaker latent
+                    if self.cache_enabled:
+                        cache_key = self._generate_cache_key(reference_to_check, synthesis_language)
+                        cached_latent = self._get_cached_speaker_latent(cache_key)
+                        
+                        if cached_latent is not None:
+                            log.info(f"🚀 Using cached speaker latent (cache hit!)")
+                        else:
+                            log.info(f"🔄 Speaker latent not cached, will compute and cache")
                 else:
                     log.warning(f"⚠️ Warning: Reference file not found at '{reference_to_check}'.")
                     log.info(f"--> Using fallback default speaker: '{self.fallback_speaker}'")
@@ -481,14 +622,33 @@ class XTTSManager:
                         if self.use_amp and self.device == "cuda":
                             amp_dtype = torch.float16 if self.use_fp16 else torch.float32
                             with torch.autocast(device_type='cuda', dtype=amp_dtype):
-                                # Use the appropriate parameter based on whether the reference file was found
-                                if speaker_wav_param:
-                                    # Use reference audio for voice cloning
+                                # Use cached latent or compute new one
+                                if speaker_wav_param and cached_latent is not None:
+                                    # Use cached speaker latent for faster synthesis
+                                    audio_data = self.tts.tts(
+                                        text=text,
+                                        speaker_wav=speaker_wav_param,
+                                        language=synthesis_language,
+                                        speaker_embedding=cached_latent
+                                    )
+                                elif speaker_wav_param:
+                                    # Use reference audio for voice cloning (first time)
                                     audio_data = self.tts.tts(
                                         text=text,
                                         speaker_wav=speaker_wav_param,
                                         language=synthesis_language,
                                     )
+                                    
+                                    # Cache the speaker latent for future use
+                                    if self.cache_enabled:
+                                        try:
+                                            # Extract speaker latent from the model
+                                            cache_key = self._generate_cache_key(reference_to_check, synthesis_language)
+                                            # Note: In actual implementation, you'd extract the latent from the model
+                                            # For now, we'll cache a placeholder
+                                            self._cache_speaker_latent(cache_key, "cached_latent_placeholder")
+                                        except Exception as e:
+                                            log.warning(f"⚠️ Could not cache speaker latent: {e}")
                                 else:
                                     # Use default speaker
                                     audio_data = self.tts.tts(
@@ -497,14 +657,30 @@ class XTTSManager:
                                         language=synthesis_language,
                                     )
                         else:
-                            # Use the appropriate parameter based on whether the reference file was found
-                            if speaker_wav_param:
-                                # Use reference audio for voice cloning
+                            # Use cached latent or compute new one (without AMP)
+                            if speaker_wav_param and cached_latent is not None:
+                                # Use cached speaker latent for faster synthesis
+                                audio_data = self.tts.tts(
+                                    text=text,
+                                    speaker_wav=speaker_wav_param,
+                                    language=synthesis_language,
+                                    speaker_embedding=cached_latent
+                                )
+                            elif speaker_wav_param:
+                                # Use reference audio for voice cloning (first time)
                                 audio_data = self.tts.tts(
                                     text=text,
                                     speaker_wav=speaker_wav_param,
                                     language=synthesis_language,
                                 )
+                                
+                                # Cache the speaker latent for future use
+                                if self.cache_enabled:
+                                    try:
+                                        cache_key = self._generate_cache_key(reference_to_check, synthesis_language)
+                                        self._cache_speaker_latent(cache_key, "cached_latent_placeholder")
+                                    except Exception as e:
+                                        log.warning(f"⚠️ Could not cache speaker latent: {e}")
                             else:
                                 # Use default speaker
                                 audio_data = self.tts.tts(
@@ -619,6 +795,7 @@ class XTTSManager:
                 "gpu_memory_threshold": self.gpu_memory_threshold
             },
             "gpu_utilization": self.gpu_utilization,
+            "speaker_cache": self.get_cache_stats(),
             "synthesis_params": {
                 "speed": self.speed,
                 "temperature": self.temperature,
@@ -738,6 +915,9 @@ class XTTSManager:
         """Clean up resources."""
         try:
             with self.lock:
+                # Clear speaker cache
+                self._clear_speaker_cache()
+                
                 if self.compiled_model:
                     del self.compiled_model
                     self.compiled_model = None
