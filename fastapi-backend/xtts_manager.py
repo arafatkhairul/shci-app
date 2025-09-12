@@ -330,6 +330,170 @@ class XTTSManager:
             log.error(f"❌ Error getting cache stats: {e}")
             return {}
     
+    def load_speaker_latents(self, speaker_wav: str, language: str):
+        """
+        Load speaker latents for faster synthesis.
+        Returns GPT and speaker conditioning latents.
+        """
+        try:
+            if not self.tts or not self.is_loaded:
+                log.error("Model not loaded. Call load_model() first.")
+                return None, None
+            
+            # Generate cache key
+            cache_key = self._generate_cache_key(speaker_wav, language)
+            
+            # Try to get cached latents
+            cached_latents = self._get_cached_speaker_latent(cache_key)
+            if cached_latents is not None:
+                log.info(f"🚀 Using cached speaker latents")
+                return cached_latents.get('gpt'), cached_latents.get('spk')
+            
+            # Compute new latents
+            log.info(f"🔄 Computing speaker latents for: {speaker_wav}")
+            
+            try:
+                import torch
+                
+                # Extract speaker latents from the model
+                if hasattr(self.tts, 'model') and hasattr(self.tts.model, 'get_conditioning_latents'):
+                    # Use the model's method to get latents
+                    latents = self.tts.model.get_conditioning_latents(
+                        audio_path=speaker_wav,
+                        gpt_cond_len=self.tts.model.config.gpt_cond_len,
+                        max_ref_length=self.tts.model.config.max_ref_len,
+                        sound_norm_refs=self.tts.model.config.sound_norm_refs
+                    )
+                    
+                    gpt_cond_latent = latents[0]  # GPT conditioning latent
+                    speaker_cond_latent = latents[1]  # Speaker conditioning latent
+                    
+                    # Cache the latents
+                    latent_data = {
+                        'gpt': gpt_cond_latent,
+                        'spk': speaker_cond_latent
+                    }
+                    self._cache_speaker_latent(cache_key, latent_data)
+                    
+                    log.info(f"✅ Speaker latents computed and cached")
+                    return gpt_cond_latent, speaker_cond_latent
+                else:
+                    log.warning("⚠️ Model does not support latent extraction")
+                    return None, None
+                    
+            except Exception as e:
+                log.error(f"❌ Error computing speaker latents: {e}")
+                return None, None
+                
+        except Exception as e:
+            log.error(f"❌ Error loading speaker latents: {e}")
+            return None, None
+    
+    def audio_to_wav_bytes(self, audio_data, sample_rate: int = 22050) -> bytes:
+        """
+        Convert audio data to WAV bytes format.
+        """
+        try:
+            import numpy as np
+            import soundfile as sf
+            import io
+            
+            # Convert to numpy array if needed
+            if isinstance(audio_data, list):
+                # Handle list of audio segments
+                processed_audio = []
+                for item in audio_data:
+                    try:
+                        import torch
+                        if isinstance(item, torch.Tensor):
+                            item = item.detach().cpu().numpy()
+                    except ImportError:
+                        pass
+                    
+                    if isinstance(item, np.ndarray):
+                        item = np.atleast_1d(item)
+                    else:
+                        item = np.array([item])
+                    processed_audio.append(item)
+                
+                audio_data = np.concatenate(processed_audio)
+            else:
+                try:
+                    import torch
+                    if isinstance(audio_data, torch.Tensor):
+                        audio_data = audio_data.detach().cpu().numpy()
+                except ImportError:
+                    pass
+            
+            # Ensure it's a numpy array
+            if isinstance(audio_data, np.ndarray):
+                audio_data = np.atleast_1d(audio_data)
+                
+                # Convert to WAV bytes
+                audio_bytes = io.BytesIO()
+                sf.write(audio_bytes, audio_data, sample_rate, format='WAV')
+                return audio_bytes.getvalue()
+            else:
+                log.error("❌ Invalid audio data format")
+                return b""
+                
+        except Exception as e:
+            log.error(f"❌ Error converting audio to WAV bytes: {e}")
+            return b""
+    
+    def _synthesize_with_latents(self, text: str, language: str, speaker_wav: str, speed: float = 1.1) -> bytes:
+        """
+        Optimized synthesis using pre-computed speaker latents with AMP.
+        Based on the provided synthesis pattern.
+        """
+        try:
+            import torch
+            
+            # Load speaker latents
+            gpt_cond_latent, speaker_cond_latent = self.load_speaker_latents(speaker_wav, language)
+            
+            if gpt_cond_latent is None or speaker_cond_latent is None:
+                log.warning("⚠️ Could not load speaker latents")
+                return b""
+            
+            # Select optimal GPU
+            selected_gpu = self._select_optimal_gpu()
+            if self.use_multi_gpu:
+                torch.cuda.set_device(selected_gpu)
+                log.info(f"🎯 Using GPU {selected_gpu} for optimized synthesis")
+            
+            # Optimized synthesis with AMP
+            with torch.inference_mode():
+                with torch.cuda.amp.autocast(dtype=torch.float16):
+                    # Use the model directly with latents
+                    if hasattr(self.tts, 'model'):
+                        wav = self.tts.model.tts(
+                            text=text,
+                            language=language,
+                            gpt_cond_latent=gpt_cond_latent,
+                            speaker_cond_latent=speaker_cond_latent,
+                            speed=speed  # faster output
+                        )
+                        
+                        # Convert to WAV bytes
+                        audio_bytes = self.audio_to_wav_bytes(wav, sample_rate=22050)
+                        
+                        if audio_bytes:
+                            log.info(f"🚀 Optimized synthesis successful with speed {speed}")
+                            return audio_bytes
+                        else:
+                            log.error("❌ Optimized synthesis failed - no audio generated")
+                            return b""
+                    else:
+                        log.error("❌ Model not accessible for optimized synthesis")
+                        return b""
+                        
+        except Exception as e:
+            log.error(f"❌ Error in optimized synthesis: {e}")
+            import traceback
+            traceback.print_exc()
+            return b""
+    
     def load_model(self, model_name: str = None) -> bool:
         """
         Load XTTS model with professional error handling.
@@ -549,7 +713,7 @@ class XTTSManager:
             log.error(f"Error setting synthesis parameters: {e}")
             return False
     
-    def synthesize_text(self, text: str, language: str = None, speaker_wav: str = None) -> bytes:
+    def synthesize_text(self, text: str, language: str = None, speaker_wav: str = None, speed: float = 1.1) -> bytes:
         """
         Synthesize text to speech with professional quality.
         Based on simple_tts_test.py implementation with reference audio support.
@@ -558,6 +722,7 @@ class XTTSManager:
             text: Text to synthesize
             language: Language code (optional, uses current setting if not provided)
             speaker_wav: Speaker reference file (optional)
+            speed: Synthesis speed (default: 1.1 for faster output)
             
         Returns:
             bytes: Audio data in WAV format
@@ -574,8 +739,19 @@ class XTTSManager:
             # Use provided language or current setting
             synthesis_language = language or self.language
             
-            log.info(f"Synthesizing audio for: '{text[:50]}...'")
+            log.info(f"Synthesizing audio for: '{text[:50]}...' (speed: {speed})")
             start_time = time.time()
+            
+            # Try optimized synthesis with latents first
+            if speaker_wav and os.path.exists(speaker_wav):
+                optimized_result = self._synthesize_with_latents(text, synthesis_language, speaker_wav, speed)
+                if optimized_result:
+                    synthesis_time = time.time() - start_time
+                    log.info(f"✅ Optimized synthesis completed in {synthesis_time:.2f}s")
+                    log.info(f"Audio size: {len(optimized_result)} bytes")
+                    return optimized_result
+                else:
+                    log.warning("⚠️ Optimized synthesis failed, falling back to standard synthesis")
             
             with self.lock:
                 # Select optimal GPU for inference
@@ -650,6 +826,7 @@ class XTTSManager:
                                             text=text,
                                             speaker_wav=speaker_wav_param,
                                             language=synthesis_language,
+                                            speed=speed
                                         )
                                         
                                         # Cache the speaker latent for future use
@@ -668,6 +845,7 @@ class XTTSManager:
                                             text=text,
                                             speaker=speaker_param,
                                             language=synthesis_language,
+                                            speed=speed
                                         )
                             else:
                                 # Use cached latent or compute new one (without AMP)
@@ -677,7 +855,8 @@ class XTTSManager:
                                         text=text,
                                         speaker_wav=speaker_wav_param,
                                         language=synthesis_language,
-                                        speaker_embedding=cached_latent
+                                        speaker_embedding=cached_latent,
+                                        speed=speed
                                     )
                                 elif speaker_wav_param:
                                     # Use reference audio for voice cloning (first time)
@@ -685,6 +864,7 @@ class XTTSManager:
                                         text=text,
                                         speaker_wav=speaker_wav_param,
                                         language=synthesis_language,
+                                        speed=speed
                                     )
                                     
                                     # Cache the speaker latent for future use
@@ -700,6 +880,7 @@ class XTTSManager:
                                         text=text,
                                         speaker=speaker_param,
                                         language=synthesis_language,
+                                        speed=speed
                                     )
                     else:
                         # Fallback synthesis without inference context
@@ -708,60 +889,18 @@ class XTTSManager:
                                 text=text,
                                 speaker_wav=speaker_wav_param,
                                 language=synthesis_language,
+                                speed=speed
                             )
                         else:
                             audio_data = self.tts.tts(
                                 text=text,
                                 speaker=speaker_param,
                                 language=synthesis_language,
+                                speed=speed
                             )
                     
-                    # Convert audio data to bytes if it's a list or numpy array
-                    import numpy as np
-                    
-                    if isinstance(audio_data, list):
-                        # If it's a list, convert each element to numpy array and concatenate
-                        processed_audio = []
-                        for item in audio_data:
-                            # Check if it's a torch tensor (import torch locally to avoid scope issues)
-                            try:
-                                import torch
-                                if isinstance(item, torch.Tensor):
-                                    # Convert torch tensor to numpy
-                                    item = item.detach().cpu().numpy()
-                            except ImportError:
-                                pass
-                            
-                            if isinstance(item, np.ndarray):
-                                # Ensure it's at least 1D
-                                item = np.atleast_1d(item)
-                            else:
-                                # Convert scalar to numpy array
-                                item = np.array([item])
-                            processed_audio.append(item)
-                        
-                        # Concatenate all audio segments
-                        audio_data = np.concatenate(processed_audio)
-                    
-                    else:
-                        # Check if it's a torch tensor
-                        try:
-                            import torch
-                            if isinstance(audio_data, torch.Tensor):
-                                # Convert torch tensor to numpy
-                                audio_data = audio_data.detach().cpu().numpy()
-                        except ImportError:
-                            pass
-                    
-                    if isinstance(audio_data, np.ndarray):
-                        # Ensure it's at least 1D
-                        audio_data = np.atleast_1d(audio_data)
-                        
-                        # Convert numpy array to bytes using soundfile
-                        import soundfile as sf
-                        audio_bytes = io.BytesIO()
-                        sf.write(audio_bytes, audio_data, self.sample_rate, format='WAV')
-                        audio_data = audio_bytes.getvalue()
+                    # Convert audio data to bytes using optimized method
+                    audio_data = self.audio_to_wav_bytes(audio_data, sample_rate=self.sample_rate)
                     
                     if len(audio_data) > 0:
                         log.info(f"✅ Synthesis completed successfully")
