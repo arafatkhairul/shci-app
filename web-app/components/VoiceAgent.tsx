@@ -5,8 +5,8 @@ import {
 } from "lucide-react";
 
 // Environment Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
-const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_BASE_URL || 'ws://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://173.208.167.147:8000';
+const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_BASE_URL || 'ws://173.208.167.147:8000';
 const WS_PRODUCTION_URL = process.env.NEXT_PUBLIC_WS_PRODUCTION_URL || 'wss://api-llm.nodecel.cloud';
 import { 
     FaGraduationCap, 

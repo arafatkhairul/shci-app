@@ -17,7 +17,7 @@ log = logging.getLogger("tts_factory")
 try:
     from gtts import gTTS
     import pygame
-    pygame.mixer.init()
+    #pygame.mixer.init()
     GTTS_AVAILABLE = True
 except ImportError:
     GTTS_AVAILABLE = False
