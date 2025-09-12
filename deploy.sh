@@ -639,7 +639,8 @@ pip install soundfile librosa pydub scipy
 # Install TTS dependencies step by step with compatible versions
 print_status "Installing TTS dependencies..."
 pip install aiohttp anyascii bangla bnnumerizer
-# Skip bnnunicodenormalizer - not available
+# Install bnnunicodenormalizer from alternative source
+pip install bnnunicodenormalizer || pip install git+https://github.com/banglakit/bnnunicodenormalizer.git || echo "Skipping bnnunicodenormalizer - not available"
 pip install coqpit cython einops encodec flask g2pkk
 pip install "gruut[de,es,fr]==2.2.3" hangul-romanize inflect jamo jieba
 pip install matplotlib nltk num2words numba packaging
@@ -663,10 +664,10 @@ pip install --no-deps -r requirements.txt || true
 # Install PyTorch with CUDA support if GPU available
 if lspci | grep -i nvidia &> /dev/null; then
     print_status "Installing PyTorch with CUDA support..."
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
+    pip install torch==2.7.1 torchvision==0.22.1+cu118 torchaudio --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
 else
     print_status "Installing PyTorch CPU version..."
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
+    pip install torch==2.7.1 torchvision==0.22.1+cpu torchaudio --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
 fi
 
 # Fix all dependency conflicts after PyTorch installation
@@ -675,6 +676,11 @@ pip install "numpy>=1.24.0,<2.0.0" --force-reinstall
 pip install "networkx>=2.5.0,<3.0.0" --force-reinstall
 pip install "typing_extensions>=4.14.0" --force-reinstall
 pip install "thinc>=8.3.0,<8.4.0" --force-reinstall
+
+# Fix PyTorch version conflicts
+print_status "Fixing PyTorch version conflicts..."
+pip install torch==2.7.1 --force-reinstall --no-deps
+pip install torchvision==0.22.1+cu118 --force-reinstall --no-deps || pip install torchvision==0.22.1+cpu --force-reinstall --no-deps
 
 # Reinstall all TTS dependencies to ensure compatibility
 print_status "Reinstalling TTS dependencies for compatibility..."
@@ -696,6 +702,15 @@ pip install --force-reinstall "numpy>=1.24.0,<2.0.0"
 pip install --force-reinstall "networkx>=2.5.0,<3.0.0"
 pip install --force-reinstall "typing_extensions>=4.14.0"
 pip install --force-reinstall "thinc>=8.3.0,<8.4.0"
+
+# Final PyTorch compatibility fix
+print_status "Final PyTorch compatibility fix..."
+pip install torch==2.7.1 --force-reinstall --no-deps
+pip install torchvision==0.22.1+cu118 --force-reinstall --no-deps || pip install torchvision==0.22.1+cpu --force-reinstall --no-deps
+
+# Try to install bnnunicodenormalizer again
+print_status "Attempting to install bnnunicodenormalizer..."
+pip install bnnunicodenormalizer || pip install git+https://github.com/banglakit/bnnunicodenormalizer.git || echo "bnnunicodenormalizer not available - TTS will work without it"
 
 # Verify critical packages
 print_status "Verifying critical package versions..."

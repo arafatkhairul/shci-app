@@ -22,7 +22,8 @@ numba>=0.57.0
 
 # -- PyTorch --
 # Versions compatible with Python 3.11 and the TTS library.
-torch>=1.13.0,<2.9.0
+torch==2.7.1
+torchvision==0.22.1+cu118
 torchaudio>=0.13.0,<2.9.0
 transformers>=4.33.0
 
@@ -66,7 +67,8 @@ inflect>=5.6.0
 num2words
 bangla
 bnnumerizer
-# Note: bnnunicodenormalizer is not available on PyPI and is skipped.
+bnnunicodenormalizer
+# Note: bnnunicodenormalizer may not be available on PyPI, will try alternative sources
 
 # -- Other Utilities --
 umap-learn>=0.5.1
