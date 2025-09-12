@@ -58,6 +58,12 @@ class XTTSManager:
         self.is_loaded = False
         self.lock = threading.Lock()
         
+        # Performance optimization settings
+        self.use_fp16 = True  # Enable FP16 for faster inference
+        self.use_amp = True   # Enable Automatic Mixed Precision
+        self.use_inference_mode = True  # Enable torch inference mode
+        self.compiled_model = None  # Store compiled model for optimization
+        
         # Reference audio configuration (from simple_tts_test.py)
         self.reference_voice_path = "00005.wav"  # Default reference audio
         self.fallback_speaker = "Tammie Ema"  # Fallback speaker name
@@ -95,6 +101,7 @@ class XTTSManager:
         log.info(f"XTTS Manager initialized on device: {self.device}")
         log.info(f"Reference voice path: {self.reference_voice_path}")
         log.info(f"Fallback speaker: {self.fallback_speaker}")
+        log.info(f"Performance optimizations: FP16={self.use_fp16}, AMP={self.use_amp}, Inference Mode={self.use_inference_mode}")
     
     def load_model(self, model_name: str = None) -> bool:
         """
@@ -136,6 +143,9 @@ class XTTSManager:
                         log.error(f"❌ All initialization attempts failed: {e2}")
                         return False
                 
+                # Apply performance optimizations
+                self._apply_optimizations()
+                
                 load_time = time.time() - start_time
                 self.is_loaded = True
                 
@@ -149,6 +159,79 @@ class XTTSManager:
             log.error(f"❌ Failed to load XTTS model: {e}")
             self.is_loaded = False
             return False
+    
+    def _apply_optimizations(self):
+        """
+        Apply performance optimizations to the loaded model.
+        Enables FP16, AMP, inference mode, and model compilation.
+        """
+        try:
+            if not self.tts or not self.is_loaded:
+                log.warning("Cannot apply optimizations: model not loaded")
+                return
+            
+            log.info("🚀 Applying performance optimizations...")
+            
+            # Enable FP16 if supported
+            if self.use_fp16 and self.device == "cuda":
+                try:
+                    # Convert model to half precision
+                    if hasattr(self.tts, 'model') and hasattr(self.tts.model, 'half'):
+                        self.tts.model = self.tts.model.half()
+                        log.info("✅ FP16 optimization enabled")
+                    else:
+                        log.warning("⚠️ FP16 not supported for this model")
+                except Exception as e:
+                    log.warning(f"⚠️ FP16 optimization failed: {e}")
+            
+            # Enable Automatic Mixed Precision (AMP)
+            if self.use_amp and self.device == "cuda":
+                try:
+                    # Enable AMP autocast
+                    torch.backends.cudnn.benchmark = True
+                    torch.backends.cudnn.deterministic = False
+                    log.info("✅ AMP optimization enabled")
+                except Exception as e:
+                    log.warning(f"⚠️ AMP optimization failed: {e}")
+            
+            # Enable inference mode optimization
+            if self.use_inference_mode:
+                try:
+                    # Set model to eval mode for inference
+                    if hasattr(self.tts, 'model'):
+                        self.tts.model.eval()
+                    log.info("✅ Inference mode optimization enabled")
+                except Exception as e:
+                    log.warning(f"⚠️ Inference mode optimization failed: {e}")
+            
+            # Model compilation (PyTorch 2.0+)
+            if hasattr(torch, 'compile') and self.device == "cuda":
+                try:
+                    log.info("🔄 Compiling model for maximum performance...")
+                    if hasattr(self.tts, 'model'):
+                        self.compiled_model = torch.compile(self.tts.model, mode="max-autotune")
+                        log.info("✅ Model compilation completed")
+                    else:
+                        log.warning("⚠️ Model compilation not available")
+                except Exception as e:
+                    log.warning(f"⚠️ Model compilation failed: {e}")
+            
+            log.info("🎯 Performance optimizations applied successfully!")
+            
+        except Exception as e:
+            log.error(f"❌ Error applying optimizations: {e}")
+    
+    def _get_optimized_model(self):
+        """
+        Get the optimized model for inference.
+        Returns compiled model if available, otherwise original model.
+        """
+        if self.compiled_model:
+            return self.compiled_model
+        elif hasattr(self.tts, 'model'):
+            return self.tts.model
+        else:
+            return self.tts
     
     def set_language(self, language: str) -> bool:
         """
@@ -266,26 +349,44 @@ class XTTSManager:
                     log.info(f"--> Using fallback default speaker: '{self.fallback_speaker}'")
                     speaker_param = self.fallback_speaker
                 
-                # Synthesize with XTTS using tts_to_file approach
+                # Synthesize with XTTS using optimized inference
                 try:
-                    # Create temporary file for synthesis
-                    temp_output = io.BytesIO()
-                    
-                    # Use the appropriate parameter based on whether the reference file was found
-                    if speaker_wav_param:
-                        # Use reference audio for voice cloning
-                        audio_data = self.tts.tts(
-                            text=text,
-                            speaker_wav=speaker_wav_param,
-                            language=synthesis_language,
-                        )
-                    else:
-                        # Use default speaker
-                        audio_data = self.tts.tts(
-                            text=text,
-                            speaker=speaker_param,
-                            language=synthesis_language,
-                        )
+                    # Use optimized inference context
+                    with torch.inference_mode() if self.use_inference_mode else torch.no_grad():
+                        # Enable AMP autocast if available
+                        if self.use_amp and self.device == "cuda":
+                            with torch.autocast(device_type='cuda', dtype=torch.float16 if self.use_fp16 else torch.float32):
+                                # Use the appropriate parameter based on whether the reference file was found
+                                if speaker_wav_param:
+                                    # Use reference audio for voice cloning
+                                    audio_data = self.tts.tts(
+                                        text=text,
+                                        speaker_wav=speaker_wav_param,
+                                        language=synthesis_language,
+                                    )
+                                else:
+                                    # Use default speaker
+                                    audio_data = self.tts.tts(
+                                        text=text,
+                                        speaker=speaker_param,
+                                        language=synthesis_language,
+                                    )
+                        else:
+                            # Use the appropriate parameter based on whether the reference file was found
+                            if speaker_wav_param:
+                                # Use reference audio for voice cloning
+                                audio_data = self.tts.tts(
+                                    text=text,
+                                    speaker_wav=speaker_wav_param,
+                                    language=synthesis_language,
+                                )
+                            else:
+                                # Use default speaker
+                                audio_data = self.tts.tts(
+                                    text=text,
+                                    speaker=speaker_param,
+                                    language=synthesis_language,
+                                )
                     
                     # Convert audio data to bytes if it's a list or numpy array
                     import numpy as np
@@ -363,6 +464,14 @@ class XTTSManager:
             "supported_languages": self.supported_languages,
             "reference_voice_path": self.reference_voice_path,
             "fallback_speaker": self.fallback_speaker,
+            "performance_optimizations": {
+                "fp16_enabled": self.use_fp16,
+                "amp_enabled": self.use_amp,
+                "inference_mode_enabled": self.use_inference_mode,
+                "model_compiled": self.compiled_model is not None,
+                "cuda_available": torch.cuda.is_available(),
+                "cuda_device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0
+            },
             "synthesis_params": {
                 "speed": self.speed,
                 "temperature": self.temperature,
@@ -428,6 +537,9 @@ class XTTSManager:
         """Clean up resources."""
         try:
             with self.lock:
+                if self.compiled_model:
+                    del self.compiled_model
+                    self.compiled_model = None
                 if self.tts:
                     del self.tts
                     self.tts = None
