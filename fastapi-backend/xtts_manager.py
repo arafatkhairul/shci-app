@@ -272,16 +272,22 @@ class XTTSManager:
                     temp_output = io.BytesIO()
                     
                     # Use the appropriate parameter based on whether the reference file was found
-                    self.tts.tts_to_file(
-                        text=text,
-                        file_path=temp_output,
-                        speaker_wav=speaker_wav_param,
-                        speaker=speaker_param,
-                        language=synthesis_language,
-                    )
+                    if speaker_wav_param:
+                        # Use reference audio for voice cloning
+                        audio_data = self.tts.tts(
+                            text=text,
+                            speaker_wav=speaker_wav_param,
+                            language=synthesis_language,
+                        )
+                    else:
+                        # Use default speaker
+                        audio_data = self.tts.tts(
+                            text=text,
+                            speaker=speaker_param,
+                            language=synthesis_language,
+                        )
                     
-                    # Get the audio data
-                    audio_data = temp_output.getvalue()
+                    # audio_data is already set from tts() method
                     
                     if len(audio_data) > 0:
                         log.info(f"✅ Synthesis completed successfully")

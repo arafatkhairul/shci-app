@@ -761,7 +761,8 @@ print_status "Skipping bnunicodenormalizer before TTS - Bengali processing not n
 
 # Install TTS package with dependency resolution
 print_status "Installing TTS package..."
-pip install TTS==0.21.3 --no-deps || pip install TTS==0.21.3 --force-reinstall --no-deps
+pip uninstall -y TTS 2>/dev/null || true
+pip install TTS==0.21.3 --force-reinstall --no-deps
 
 # Install TTS without bnunicodenormalizer (Bengali processing not needed)
 print_status "Installing TTS without bnunicodenormalizer - Bengali processing not required"
