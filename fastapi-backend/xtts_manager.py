@@ -79,6 +79,12 @@ class XTTSManager:
         self.force_gpu_1 = True  # Force XTTS to run only on GPU 1
         self.target_gpu = 1  # Target GPU for XTTS
         
+        # Performance optimization settings
+        self.fast_mode = True  # Enable fast synthesis mode
+        self.max_text_length = 100  # Maximum text length for fast synthesis
+        self.streaming_enabled = True  # Enable streaming audio output
+        self.preload_speaker = True  # Preload speaker embeddings
+        
         # Speaker-latent cache settings
         self.speaker_cache = {}  # Cache for speaker latents
         self.cache_max_size = 10  # Maximum number of cached speakers
@@ -559,8 +565,83 @@ class XTTSManager:
             log.error(f"❌ Error splitting text for TTS: {e}")
             return [text]  # Return original text as single chunk if splitting fails
     
+    def synthesize_text_ultra_fast(self, text: str, language: str = None, speaker_wav: str = None, 
+                                  speed: float = 1.5) -> bytes:
+        """
+        Ultra-fast synthesis for short texts (1-2 seconds target).
+        Optimized for real-time conversation.
+        
+        Args:
+            text: Text to synthesize (max 100 chars for speed)
+            language: Language code
+            speaker_wav: Speaker reference file
+            speed: Synthesis speed (default: 1.5 for faster output)
+            
+        Returns:
+            bytes: Audio data in WAV format
+        """
+        try:
+            if not self.is_loaded:
+                log.error("Model not loaded. Call load_model() first.")
+                return b""
+            
+            if len(text) > self.max_text_length:
+                log.warning(f"⚠️ Text too long for ultra-fast mode ({len(text)} > {self.max_text_length}), using chunking")
+                return self.synthesize_text_chunked(text, language, speaker_wav, speed, 50)
+            
+            synthesis_language = language or self.language
+            log.info(f"🚀 Ultra-fast synthesis: '{text[:30]}...' (speed: {speed})")
+            start_time = time.time()
+            
+            # Select optimal GPU
+            selected_gpu = self._select_optimal_gpu()
+            try:
+                import torch
+                torch.cuda.set_device(selected_gpu)
+            except ImportError:
+                pass
+            
+            # Use inference context for speed
+            inference_context = None
+            try:
+                import torch
+                inference_context = torch.inference_mode()
+            except ImportError:
+                pass
+            
+            if inference_context:
+                with inference_context:
+                    # Ultra-fast synthesis with minimal processing
+                    audio_data = self.tts.tts(
+                        text=text,
+                        speaker_wav=speaker_wav,
+                        language=synthesis_language,
+                        speed=speed
+                    )
+            else:
+                # Fallback synthesis
+                audio_data = self.tts.tts(
+                    text=text,
+                    speaker_wav=speaker_wav,
+                    language=synthesis_language,
+                    speed=speed
+                )
+            
+            # Convert to WAV bytes
+            wav_bytes = self.audio_to_wav_bytes(audio_data)
+            
+            synthesis_time = time.time() - start_time
+            log.info(f"⚡ Ultra-fast synthesis completed in {synthesis_time:.2f}s")
+            log.info(f"Audio size: {len(wav_bytes)} bytes")
+            
+            return wav_bytes
+            
+        except Exception as e:
+            log.error(f"❌ Ultra-fast synthesis failed: {e}")
+            return b""
+
     def synthesize_text_chunked(self, text: str, language: str = None, speaker_wav: str = None, 
-                               speed: float = 1.1, max_chunk_len: int = 180) -> list:
+                                speed: float = 1.5, max_chunk_len: int = 50) -> list:
         """
         Synthesize text in chunks for faster response.
         Returns list of audio chunks for streaming.
@@ -593,20 +674,53 @@ class XTTSManager:
             
             for i, chunk in enumerate(chunks):
                 log.info(f"🔄 Processing chunk {i+1}/{total_chunks}: '{chunk[:30]}...'")
+                chunk_start_time = time.time()
                 
-                # Synthesize each chunk
-                chunk_audio = self.synthesize_text(
-                    text=chunk,
-                    language=language,
-                    speaker_wav=speaker_wav,
-                    speed=speed
-                )
-                
-                if chunk_audio:
+                # Direct synthesis without recursive call to avoid infinite loop
+                try:
+                    # Select optimal GPU
+                    selected_gpu = self._select_optimal_gpu()
+                    try:
+                        import torch
+                        torch.cuda.set_device(selected_gpu)
+                    except ImportError:
+                        pass
+                    
+                    # Use inference context for speed
+                    inference_context = None
+                    try:
+                        import torch
+                        inference_context = torch.inference_mode()
+                    except ImportError:
+                        pass
+                    
+                    if inference_context:
+                        with inference_context:
+                            # Direct synthesis
+                            audio_data = self.tts.tts(
+                                text=chunk,
+                                speaker_wav=speaker_wav,
+                                language=language or self.language,
+                                speed=speed
+                            )
+                    else:
+                        # Fallback synthesis
+                        audio_data = self.tts.tts(
+                            text=chunk,
+                            speaker_wav=speaker_wav,
+                            language=language or self.language,
+                            speed=speed
+                        )
+                    
+                    # Convert to WAV bytes
+                    chunk_audio = self.audio_to_wav_bytes(audio_data)
+                    
+                    chunk_time = time.time() - chunk_start_time
+                    log.info(f"✅ Chunk {i+1}/{total_chunks} completed in {chunk_time:.2f}s ({len(chunk_audio)} bytes)")
                     audio_chunks.append(chunk_audio)
-                    log.info(f"✅ Chunk {i+1}/{total_chunks} completed ({len(chunk_audio)} bytes)")
-                else:
-                    log.error(f"❌ Chunk {i+1}/{total_chunks} failed")
+                    
+                except Exception as e:
+                    log.error(f"❌ Chunk {i+1}/{total_chunks} failed: {e}")
                     # Continue with other chunks even if one fails
             
             log.info(f"🎯 Chunked synthesis completed: {len(audio_chunks)}/{total_chunks} chunks successful")
@@ -1016,6 +1130,23 @@ class XTTSManager:
             log.info(f"Synthesizing audio for: '{text[:50]}...' (speed: {speed}, chunking: {use_chunking})")
             start_time = time.time()
             
+            # Use ultra-fast mode for short texts
+            if self.fast_mode and len(text) <= self.max_text_length:
+                log.info(f"⚡ Using ultra-fast mode (text length: {len(text)} chars)")
+                ultra_fast_result = self.synthesize_text_ultra_fast(
+                    text=text,
+                    language=synthesis_language,
+                    speaker_wav=speaker_wav,
+                    speed=speed
+                )
+                if ultra_fast_result:
+                    synthesis_time = time.time() - start_time
+                    log.info(f"⚡ Ultra-fast synthesis completed in {synthesis_time:.2f}s")
+                    log.info(f"Audio size: {len(ultra_fast_result)} bytes")
+                    return ultra_fast_result
+                else:
+                    log.warning("⚠️ Ultra-fast synthesis failed, falling back to chunked synthesis")
+            
             # Use chunking for long text or when explicitly requested
             if use_chunking or len(text) > max_chunk_len:
                 log.info(f"🎵 Using chunked synthesis (text length: {len(text)} chars)")
@@ -1285,7 +1416,11 @@ class XTTSManager:
                 "multi_gpu_enabled": self.use_multi_gpu,
                 "gpu_memory_threshold": self.gpu_memory_threshold,
                 "force_gpu_1": self.force_gpu_1,
-                "target_gpu": self.target_gpu
+                "target_gpu": self.target_gpu,
+                "fast_mode": self.fast_mode,
+                "max_text_length": self.max_text_length,
+                "streaming_enabled": self.streaming_enabled,
+                "preload_speaker": self.preload_speaker
             },
             "gpu_utilization": self.gpu_utilization,
             "speaker_cache": self.get_cache_stats(),

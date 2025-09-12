@@ -833,8 +833,8 @@ async def tts_bytes_async(text: str, language: str = "en", speaker_wav: str = No
         tts_info = get_tts_info()
         log.info(f"Using TTS system: {tts_info['preferred_system']}")
         
-        # Synthesize using TTS factory
-        audio_bytes = await synthesize_text_async(text, language, speaker_wav=speaker_wav)
+        # Synthesize using TTS factory with fast mode
+        audio_bytes = await synthesize_text_async(text, language, speaker_wav=speaker_wav, speed=1.5)
         
         if audio_bytes:
             log.info(f"✅ TTS synthesis successful: {len(audio_bytes)} bytes")
@@ -856,8 +856,8 @@ def tts_bytes(text: str, language: str = "en", speaker_wav: str = None) -> bytes
         tts_info = get_tts_info()
         log.info(f"Using TTS system: {tts_info['preferred_system']}")
         
-        # Synthesize using TTS factory
-        audio_bytes = synthesize_text(text, language, speaker_wav=speaker_wav)
+        # Synthesize using TTS factory with fast mode
+        audio_bytes = synthesize_text(text, language, speaker_wav=speaker_wav, speed=1.5)
         
         if audio_bytes:
             log.info(f"✅ TTS synthesis successful: {len(audio_bytes)} bytes")
@@ -1032,8 +1032,8 @@ async def test_tts_endpoint(
                     "message": f"Invalid TTS system: {tts_system}. Available: gtts, coqui, fallback"
                 }, status_code=400)
         
-        # Test synthesis
-        audio_data = await synthesize_text_async(text, language, system, speaker_wav=speaker_wav)
+        # Test synthesis with fast mode
+        audio_data = await synthesize_text_async(text, language, system, speaker_wav=speaker_wav, speed=1.5)
         
         if audio_data:
             audio_b64 = base64.b64encode(audio_data).decode("utf-8")
@@ -1071,13 +1071,14 @@ async def test_tts_streaming(
     try:
         log.info(f"Testing TTS streaming: '{text[:50]}...'")
         
-        # Test synthesis
+        # Test synthesis with fast mode
         audio_data = await asyncio.get_event_loop().run_in_executor(
             None, 
             xtts_manager.synthesize_text, 
             text, 
             language, 
-            speaker_wav
+            speaker_wav,
+            1.5  # speed parameter
         )
         
         if audio_data:
