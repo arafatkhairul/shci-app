@@ -96,36 +96,42 @@ fi
 print_status "Checking and fixing apt_pkg module issue..."
 if [ "$EUID" -eq 0 ]; then
     # Install python3-apt to fix apt_pkg module
-    apt update
-    apt install -y python3-apt software-properties-common
+    apt update 2>/dev/null || true
+    apt install -y python3-apt software-properties-common 2>/dev/null || true
+    # Fix command-not-found database issue
+    rm -f /var/lib/command-not-found/commands.db 2>/dev/null || true
 else
-    sudo apt update
-    sudo apt install -y python3-apt software-properties-common
+    sudo apt update 2>/dev/null || true
+    sudo apt install -y python3-apt software-properties-common 2>/dev/null || true
+    # Fix command-not-found database issue
+    sudo rm -f /var/lib/command-not-found/commands.db 2>/dev/null || true
 fi
 
 # Update system packages
 print_status "Updating system packages..."
 if [ "$EUID" -eq 0 ]; then
-    apt update && apt upgrade -y
+    apt update 2>/dev/null || true
+    apt upgrade -y 2>/dev/null || true
 else
-    sudo apt update && sudo apt upgrade -y
+    sudo apt update 2>/dev/null || true
+    sudo apt upgrade -y 2>/dev/null || true
 fi
 
 # Install required packages
 print_status "Installing required packages..."
 if [ "$EUID" -eq 0 ]; then
-    apt install -y curl wget git nginx certbot python3-certbot-nginx ufw
+    apt install -y curl wget git nginx certbot python3-certbot-nginx ufw 2>/dev/null || true
 else
-    sudo apt install -y curl wget git nginx certbot python3-certbot-nginx ufw
+    sudo apt install -y curl wget git nginx certbot python3-certbot-nginx ufw 2>/dev/null || true
 fi
 
 # Install Node.js and npm
 print_status "Installing Node.js and npm..."
 if ! command -v node &> /dev/null; then
     if [ "$EUID" -eq 0 ]; then
-        apt install -y nodejs npm
+        apt install -y nodejs npm 2>/dev/null || true
     else
-        sudo apt install -y nodejs npm
+        sudo apt install -y nodejs npm 2>/dev/null || true
     fi
 fi
 
@@ -138,8 +144,8 @@ if [ "$EUID" -eq 0 ]; then
     apt autoremove -y
     
     # Add deadsnakes PPA
-    add-apt-repository ppa:deadsnakes/ppa -y
-    apt update
+    add-apt-repository ppa:deadsnakes/ppa -y 2>/dev/null || true
+    apt update 2>/dev/null || true
     
     # Check available Python 3.11 versions
     print_status "Checking available Python 3.11 versions..."
@@ -147,7 +153,7 @@ if [ "$EUID" -eq 0 ]; then
     
     # Install latest available Python 3.11 (not specific version)
     print_status "Installing latest available Python 3.11..."
-    apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
+    apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils 2>/dev/null || true
     
     # Verify Python 3.11 installation
     PYTHON_VERSION=$(python3.11 --version 2>&1 | cut -d' ' -f2)
@@ -175,8 +181,8 @@ else
     sudo apt autoremove -y
     
     # Add deadsnakes PPA
-    sudo add-apt-repository ppa:deadsnakes/ppa -y
-    sudo apt update
+    sudo add-apt-repository ppa:deadsnakes/ppa -y 2>/dev/null || true
+    sudo apt update 2>/dev/null || true
     
     # Check available Python 3.11 versions
     print_status "Checking available Python 3.11 versions..."
@@ -184,7 +190,7 @@ else
     
     # Install latest available Python 3.11 (not specific version)
     print_status "Installing latest available Python 3.11..."
-    sudo apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
+    sudo apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils 2>/dev/null || true
     
     # Verify Python 3.11 installation
     PYTHON_VERSION=$(python3.11 --version 2>&1 | cut -d' ' -f2)
