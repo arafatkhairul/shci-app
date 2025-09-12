@@ -59,10 +59,14 @@ class XTTSManager:
         self.lock = threading.Lock()
         
         # Performance optimization settings
-        self.use_fp16 = True  # Enable FP16 for faster inference
+        self.use_fp16 = False  # Disable FP16 to avoid numerical instability
         self.use_amp = True   # Enable Automatic Mixed Precision
         self.use_inference_mode = True  # Enable torch inference mode
         self.compiled_model = None  # Store compiled model for optimization
+        
+        # CUDA stability settings
+        self.cuda_launch_blocking = True  # Enable CUDA blocking for debugging
+        self.numerical_stability = True  # Enable numerical stability checks
         
         # Multi-GPU settings
         self.gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
@@ -122,10 +126,70 @@ class XTTSManager:
         log.info(f"Performance optimizations: FP16={self.use_fp16}, AMP={self.use_amp}, Inference Mode={self.use_inference_mode}")
         log.info(f"Multi-GPU support: {self.use_multi_gpu} ({self.gpu_count} GPUs detected)")
         log.info(f"Speaker-latent cache: {'Enabled' if self.cache_enabled else 'Disabled'} (max: {self.cache_max_size})")
+        log.info(f"CUDA stability: Launch Blocking={self.cuda_launch_blocking}, Numerical Checks={self.numerical_stability}")
+        
+        # Setup CUDA environment for stability
+        self._setup_cuda_environment()
         
         # Initialize GPU utilization tracking
         if self.use_multi_gpu:
             self._initialize_gpu_monitoring()
+    
+    def _setup_cuda_environment(self):
+        """Setup CUDA environment for numerical stability."""
+        try:
+            if torch.cuda.is_available():
+                # Set CUDA environment variables for stability
+                os.environ['CUDA_LAUNCH_BLOCKING'] = '1' if self.cuda_launch_blocking else '0'
+                os.environ['TORCH_USE_CUDA_DSA'] = '1'  # Enable device-side assertions
+                
+                # Set CUDA memory management
+                torch.cuda.empty_cache()
+                
+                # Enable deterministic behavior for reproducibility
+                torch.backends.cudnn.deterministic = True
+                torch.backends.cudnn.benchmark = False
+                
+                log.info("✅ CUDA environment configured for stability")
+            else:
+                log.info("ℹ️ CUDA not available, skipping CUDA environment setup")
+                
+        except Exception as e:
+            log.error(f"❌ Error setting up CUDA environment: {e}")
+    
+    def _validate_tensor(self, tensor, name="tensor"):
+        """Validate tensor for numerical stability."""
+        try:
+            if tensor is None:
+                return True
+            
+            import torch
+            
+            if isinstance(tensor, torch.Tensor):
+                # Check for NaN values
+                if torch.isnan(tensor).any():
+                    log.error(f"❌ {name} contains NaN values")
+                    return False
+                
+                # Check for infinite values
+                if torch.isinf(tensor).any():
+                    log.error(f"❌ {name} contains infinite values")
+                    return False
+                
+                # Check for negative values in probability tensors
+                if 'prob' in name.lower() or 'logit' in name.lower():
+                    if (tensor < 0).any():
+                        log.error(f"❌ {name} contains negative values")
+                        return False
+                
+                log.debug(f"✅ {name} validation passed")
+                return True
+            
+            return True
+            
+        except Exception as e:
+            log.error(f"❌ Error validating {name}: {e}")
+            return False
     
     def _initialize_gpu_monitoring(self):
         """Initialize GPU monitoring for multi-GPU setup."""
@@ -626,16 +690,48 @@ class XTTSManager:
             
             # Optimized synthesis with AMP
             with torch.inference_mode():
-                with torch.cuda.amp.autocast(dtype=torch.float16):
+                # Use FP32 for numerical stability
+                with torch.cuda.amp.autocast(dtype=torch.float32):
                     # Use the model directly with latents
                     if hasattr(self.tts, 'model'):
-                        wav = self.tts.model.tts(
-                            text=text,
-                            language=language,
-                            gpt_cond_latent=gpt_cond_latent,
-                            speaker_cond_latent=speaker_cond_latent,
-                            speed=speed  # faster output
-                        )
+                        try:
+                            # Clear CUDA cache before synthesis
+                            torch.cuda.empty_cache()
+                            
+                            wav = self.tts.model.tts(
+                                text=text,
+                                language=language,
+                                gpt_cond_latent=gpt_cond_latent,
+                                speaker_cond_latent=speaker_cond_latent,
+                                speed=speed  # faster output
+                            )
+                            
+                            # Validate output tensor
+                            if self.numerical_stability:
+                                if not self._validate_tensor(wav, "output_audio"):
+                                    log.error("❌ Output audio tensor validation failed")
+                                    return b""
+                                    
+                        except RuntimeError as e:
+                            if "CUDA" in str(e) or "device-side assert" in str(e):
+                                log.error(f"❌ CUDA error in optimized synthesis: {e}")
+                                log.info("🔄 Falling back to CPU synthesis")
+                                # Fallback to CPU
+                                try:
+                                    import torch
+                                    with torch.cuda.device('cpu'):
+                                        wav = self.tts.model.tts(
+                                            text=text,
+                                            language=language,
+                                            gpt_cond_latent=gpt_cond_latent,
+                                            speaker_cond_latent=speaker_cond_latent,
+                                            speed=speed
+                                        )
+                                except Exception as cpu_error:
+                                    log.error(f"❌ CPU fallback also failed: {cpu_error}")
+                                    return b""
+                            else:
+                                raise e
                         
                         # Convert to WAV bytes
                         audio_bytes = self.audio_to_wav_bytes(wav, sample_rate=22050)
@@ -993,27 +1089,58 @@ class XTTSManager:
                     
                     if inference_context:
                         with inference_context:
-                            # Enable AMP autocast if available
-                            if self.use_amp and self.device == "cuda":
-                                amp_dtype = torch.float16 if self.use_fp16 else torch.float32
-                                with torch.autocast(device_type='cuda', dtype=amp_dtype):
+                        # Enable AMP autocast if available
+                        if self.use_amp and self.device == "cuda":
+                            # Use FP32 for numerical stability
+                            amp_dtype = torch.float32
+                            with torch.autocast(device_type='cuda', dtype=amp_dtype):
                                     # Use cached latent or compute new one
                                     if speaker_wav_param and cached_latent is not None:
                                         # Use cached speaker latent for faster synthesis
-                                        audio_data = self.tts.tts(
-                                            text=text,
-                                            speaker_wav=speaker_wav_param,
-                                            language=synthesis_language,
-                                            speaker_embedding=cached_latent
-                                        )
+                                        try:
+                                            # Clear CUDA cache before synthesis
+                                            torch.cuda.empty_cache()
+                                            
+                                            audio_data = self.tts.tts(
+                                                text=text,
+                                                speaker_wav=speaker_wav_param,
+                                                language=synthesis_language,
+                                                speaker_embedding=cached_latent
+                                            )
+                                        except RuntimeError as e:
+                                            if "CUDA" in str(e) or "device-side assert" in str(e):
+                                                log.error(f"❌ CUDA error in synthesis: {e}")
+                                                log.info("🔄 Falling back to standard synthesis")
+                                                audio_data = self.tts.tts(
+                                                    text=text,
+                                                    speaker_wav=speaker_wav_param,
+                                                    language=synthesis_language
+                                                )
+                                            else:
+                                                raise e
                                     elif speaker_wav_param:
                                         # Use reference audio for voice cloning (first time)
-                                        audio_data = self.tts.tts(
-                                            text=text,
-                                            speaker_wav=speaker_wav_param,
-                                            language=synthesis_language,
-                                            speed=speed
-                                        )
+                                        try:
+                                            # Clear CUDA cache before synthesis
+                                            torch.cuda.empty_cache()
+                                            
+                                            audio_data = self.tts.tts(
+                                                text=text,
+                                                speaker_wav=speaker_wav_param,
+                                                language=synthesis_language,
+                                                speed=speed
+                                            )
+                                        except RuntimeError as e:
+                                            if "CUDA" in str(e) or "device-side assert" in str(e):
+                                                log.error(f"❌ CUDA error in synthesis: {e}")
+                                                log.info("🔄 Falling back to standard synthesis")
+                                                audio_data = self.tts.tts(
+                                                    text=text,
+                                                    speaker_wav=speaker_wav_param,
+                                                    language=synthesis_language
+                                                )
+                                            else:
+                                                raise e
                                         
                                         # Cache the speaker latent for future use
                                         if self.cache_enabled:
