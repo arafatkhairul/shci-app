@@ -1,5 +1,9 @@
 version: '3.8'
 
+# Load environment variables from .env.production file
+env_file:
+  - .env.production
+
 services:
   # FastAPI Backend Service
   backend:
@@ -11,15 +15,15 @@ services:
       - "8000:8000"
     environment:
       - PYTHONPATH=/app
-      - ENVIRONMENT=production
-      - CUDA_VISIBLE_DEVICES=0,1
-      - TORCH_DEVICE=cuda
-      - TTS_DEVICE=cuda
-      - WHISPER_DEVICE=cuda
-      - LLM_API_URL=http://host.docker.internal:11434/v1/chat/completions
-      - LLM_MODEL=qwen2.5-14b-gpu
-      - LLM_TIMEOUT=10.0
-      - LLM_RETRIES=1
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,1}
+      - TORCH_DEVICE=${TORCH_DEVICE:-cuda}
+      - TTS_DEVICE=${TTS_DEVICE:-cuda}
+      - WHISPER_DEVICE=${WHISPER_DEVICE:-cuda}
+      - LLM_API_URL=${LLM_API_URL:-http://host.docker.internal:11434/v1/chat/completions}
+      - LLM_MODEL=${LLM_MODEL:-qwen2.5-14b-gpu}
+      - LLM_TIMEOUT=${LLM_TIMEOUT:-10.0}
+      - LLM_RETRIES=${LLM_RETRIES:-1}
     volumes:
       - ./fastapi-backend:/app
       - ./Models:/app/Models
@@ -50,10 +54,10 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_BASE_URL=https://nodecel.cloud
-      - NEXT_PUBLIC_WS_BASE_URL=wss://nodecel.cloud
-      - NEXT_PUBLIC_WS_PRODUCTION_URL=wss://nodecel.cloud
+      - NODE_ENV=${NODE_ENV:-production}
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-https://nodecel.cloud}
+      - NEXT_PUBLIC_WS_BASE_URL=${NEXT_PUBLIC_WS_BASE_URL:-wss://nodecel.cloud}
+      - NEXT_PUBLIC_WS_PRODUCTION_URL=${NEXT_PUBLIC_WS_PRODUCTION_URL:-wss://nodecel.cloud}
     depends_on:
       - backend
     restart: unless-stopped

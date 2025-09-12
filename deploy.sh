@@ -122,7 +122,12 @@ fi
 
 # Create production environment file
 print_status "Creating production environment configuration..."
-cat > .env.production << EOF
+if [ -f "env.production" ]; then
+    print_status "Using existing env.production file..."
+    cp env.production .env.production
+else
+    print_status "Creating new .env.production file..."
+    cat > .env.production << EOF
 # Production Environment Configuration
 NEXT_PUBLIC_API_BASE_URL=https://$DOMAIN_NAME
 NEXT_PUBLIC_WS_BASE_URL=wss://$DOMAIN_NAME
@@ -133,7 +138,55 @@ NEXT_PUBLIC_APP_VERSION=1.0.0
 NEXT_PUBLIC_ENABLE_ROLEPLAY=true
 NEXT_PUBLIC_ENABLE_TTS=true
 NEXT_PUBLIC_ENABLE_STT=true
+
+# Backend Environment Variables
+ENVIRONMENT=production
+PYTHONPATH=/app
+
+# LLM Configuration (External Ollama)
+LLM_API_URL=http://host.docker.internal:11434/v1/chat/completions
+LLM_MODEL=qwen2.5-14b-gpu
+LLM_API_KEY=
+LLM_TIMEOUT=10.0
+LLM_RETRIES=1
+
+# GPU Configuration for Production
+CUDA_VISIBLE_DEVICES=0,1
+TORCH_DEVICE=cuda
+TTS_DEVICE=cuda
+WHISPER_DEVICE=cuda
+
+# Model Configuration
+TTS_MODEL_PATH=/app/Models
+TTS_OUTPUT_PATH=/app/outputs
+TTS_CACHE_PATH=/app/memdb
+TTS_BATCH_SIZE=4
+TTS_MAX_LENGTH=500
+
+# Database Configuration
+DATABASE_URL=sqlite:///./roleplay.db
+
+# Security Configuration
+CORS_ORIGINS=["https://$DOMAIN_NAME", "https://www.$DOMAIN_NAME"]
+
+# Rate Limiting
+RATE_LIMIT_PER_MINUTE=60
+RATE_LIMIT_BURST=100
+
+# Logging Configuration
+LOG_LEVEL=INFO
+LOG_FILE=/app/logs/app.log
+
+# Performance Configuration
+WORKERS=4
+MAX_CONNECTIONS=1000
+
+# SSL Configuration
+SSL_VERIFY=true
+SSL_CERT_PATH=/etc/nginx/ssl/cert.pem
+SSL_KEY_PATH=/etc/nginx/ssl/key.pem
 EOF
+fi
 
 # Update Nginx configuration with domain
 print_status "Updating Nginx configuration..."
