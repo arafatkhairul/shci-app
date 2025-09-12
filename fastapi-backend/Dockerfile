@@ -24,5 +24,5 @@ COPY . /app
 # Step 7: Application kon port e cholbe sheta bole deya
 EXPOSE 8000
 
-# Step 8: Application chalate Uvicorn ke command deya
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Step 8: Application chalate Uvicorn ke command deya with production settings
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--access-log"]

@@ -1505,6 +1505,20 @@ async def synthesize_text_xtts(request: dict):
         log_exception("synthesize_text_xtts", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
+@app.get("/health")
+async def health_check():
+    """Main application health check"""
+    try:
+        return {
+            "status": "healthy",
+            "service": "SHCI Voice Assistant",
+            "version": "1.0.0",
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        log_exception("health_check", e)
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 @app.get("/tts/health")
 async def xtts_health_check():
     """XTTS system health check"""
