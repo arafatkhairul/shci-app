@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Configuration
 PROJECT_NAME="shci-app"
 DOMAIN_NAME="nodecel.cloud"  # Your main domain
-EMAIL="your-email@example.com"  # Change this to your email
+EMAIL="office.khairul@gmail.com"  # Your email
 
 echo -e "${BLUE}🚀 Starting SHCI Voice Assistant Deployment${NC}"
 echo "================================================"

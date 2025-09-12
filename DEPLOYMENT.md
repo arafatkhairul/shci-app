@@ -32,8 +32,8 @@ This guide will help you deploy the complete SHCI Voice Assistant application to
    ```
    Update these variables:
    ```bash
-   DOMAIN_NAME="your-domain.com"  # Your actual domain
-   EMAIL="your-email@example.com"  # Your email for SSL
+   DOMAIN_NAME="nodecel.cloud"  # Your actual domain
+   EMAIL="office.khairul@gmail.com"  # Your email for SSL
    ```
 
 3. **Run the deployment script:**
@@ -100,7 +100,7 @@ docker-compose up -d --build
 docker-compose stop nginx
 
 # Install SSL certificate
-sudo certbot --nginx -d your-domain.com -d www.your-domain.com --email your-email@example.com --agree-tos --non-interactive
+sudo certbot --nginx -d nodecel.cloud -d www.nodecel.cloud --email office.khairul@gmail.com --agree-tos --non-interactive
 
 # Restart nginx
 docker-compose up -d nginx

@@ -30,7 +30,7 @@ cd shci-app
 ### 2. Email ঠিক করুন
 ```bash
 nano deploy.sh
-# EMAIL="your-actual-email@example.com" লিখুন
+# EMAIL="office.khairul@gmail.com" লিখুন
 ```
 
 ### 3. Deployment চালান
