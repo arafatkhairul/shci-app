@@ -81,9 +81,12 @@ class XTTSManager:
         
         # Performance optimization settings
         self.fast_mode = True  # Enable fast synthesis mode
-        self.max_text_length = 100  # Maximum text length for fast synthesis
+        self.max_text_length = 50  # Maximum text length for fast synthesis (reduced for speed)
         self.streaming_enabled = True  # Enable streaming audio output
         self.preload_speaker = True  # Preload speaker embeddings
+        self.ultra_speed = 2.0  # Ultra-fast speed multiplier
+        self.instant_mode = True  # Enable instant synthesis for very short texts
+        self.instant_text_limit = 25  # Maximum chars for instant mode
         
         # Speaker-latent cache settings
         self.speaker_cache = {}  # Cache for speaker latents
@@ -566,7 +569,7 @@ class XTTSManager:
             return [text]  # Return original text as single chunk if splitting fails
     
     def synthesize_text_ultra_fast(self, text: str, language: str = None, speaker_wav: str = None, 
-                                  speed: float = 1.5) -> bytes:
+                                  speed: float = None) -> bytes:
         """
         Ultra-fast synthesis for short texts (1-2 seconds target).
         Optimized for real-time conversation.
@@ -589,7 +592,15 @@ class XTTSManager:
                 log.warning(f"⚠️ Text too long for ultra-fast mode ({len(text)} > {self.max_text_length}), using chunking")
                 return self.synthesize_text_chunked(text, language, speaker_wav, speed, 50)
             
+            # Validate speaker_wav parameter
+            if speaker_wav is None:
+                log.warning("⚠️ speaker_wav is None, using default speaker")
+                speaker_wav = None  # Use default speaker
+            
             synthesis_language = language or self.language
+            # Use ultra speed if not specified
+            if speed is None:
+                speed = self.ultra_speed
             log.info(f"🚀 Ultra-fast synthesis: '{text[:30]}...' (speed: {speed})")
             start_time = time.time()
             
@@ -612,20 +623,48 @@ class XTTSManager:
             if inference_context:
                 with inference_context:
                     # Ultra-fast synthesis with minimal processing
-                    audio_data = self.tts.tts(
-                        text=text,
-                        speaker_wav=speaker_wav,
-                        language=synthesis_language,
-                        speed=speed
-                    )
+                    try:
+                        if speaker_wav and os.path.exists(speaker_wav):
+                            audio_data = self.tts.tts(
+                                text=text,
+                                speaker_wav=speaker_wav,
+                                language=synthesis_language,
+                                speed=speed
+                            )
+                        else:
+                            # Use default speaker for ultra-fast mode
+                            audio_data = self.tts.tts(
+                                text=text,
+                                language=synthesis_language,
+                                speed=speed
+                            )
+                    except Exception as e:
+                        log.error(f"❌ Ultra-fast synthesis error: {e}")
+                        # Fallback to default speaker
+                        audio_data = self.tts.tts(
+                            text=text,
+                            language=synthesis_language,
+                            speed=speed
+                        )
             else:
                 # Fallback synthesis
-                audio_data = self.tts.tts(
-                    text=text,
-                    speaker_wav=speaker_wav,
-                    language=synthesis_language,
-                    speed=speed
-                )
+                try:
+                    if speaker_wav and os.path.exists(speaker_wav):
+                        audio_data = self.tts.tts(
+                            text=text,
+                            speaker_wav=speaker_wav,
+                            language=synthesis_language,
+                            speed=speed
+                        )
+                    else:
+                        audio_data = self.tts.tts(
+                            text=text,
+                            language=synthesis_language,
+                            speed=speed
+                        )
+                except Exception as e:
+                    log.error(f"❌ Fallback synthesis error: {e}")
+                    return b""
             
             # Convert to WAV bytes
             wav_bytes = self.audio_to_wav_bytes(audio_data)
@@ -638,6 +677,64 @@ class XTTSManager:
             
         except Exception as e:
             log.error(f"❌ Ultra-fast synthesis failed: {e}")
+            return b""
+
+    def synthesize_text_instant(self, text: str, language: str = None, speaker_wav: str = None) -> bytes:
+        """
+        Instant synthesis for very short texts (target: < 1 second).
+        Maximum optimization for real-time conversation.
+        
+        Args:
+            text: Text to synthesize (max 25 chars for instant speed)
+            language: Language code
+            speaker_wav: Speaker reference file
+            
+        Returns:
+            bytes: Audio data in WAV format
+        """
+        try:
+            if not self.is_loaded:
+                log.error("Model not loaded. Call load_model() first.")
+                return b""
+            
+            if len(text) > self.instant_text_limit:
+                log.warning(f"⚠️ Text too long for instant mode ({len(text)} > {self.instant_text_limit}), using ultra-fast")
+                return self.synthesize_text_ultra_fast(text, language, speaker_wav)
+            
+            synthesis_language = language or self.language
+            log.info(f"⚡ Instant synthesis: '{text[:20]}...' (speed: 3.0)")
+            start_time = time.time()
+            
+            # Force GPU 1
+            try:
+                import torch
+                torch.cuda.set_device(self.target_gpu)
+            except ImportError:
+                pass
+            
+            # Instant synthesis with maximum speed
+            try:
+                # Use default speaker for instant mode (no speaker_wav to avoid file I/O)
+                audio_data = self.tts.tts(
+                    text=text,
+                    language=synthesis_language,
+                    speed=3.0  # Maximum speed
+                )
+            except Exception as e:
+                log.error(f"❌ Instant synthesis error: {e}")
+                return b""
+            
+            # Convert to WAV bytes
+            wav_bytes = self.audio_to_wav_bytes(audio_data)
+            
+            synthesis_time = time.time() - start_time
+            log.info(f"⚡ Instant synthesis completed in {synthesis_time:.2f}s")
+            log.info(f"Audio size: {len(wav_bytes)} bytes")
+            
+            return wav_bytes
+            
+        except Exception as e:
+            log.error(f"❌ Instant synthesis failed: {e}")
             return b""
 
     def synthesize_text_chunked(self, text: str, language: str = None, speaker_wav: str = None, 
@@ -1130,6 +1227,22 @@ class XTTSManager:
             log.info(f"Synthesizing audio for: '{text[:50]}...' (speed: {speed}, chunking: {use_chunking})")
             start_time = time.time()
             
+            # Use instant mode for very short texts
+            if self.instant_mode and len(text) <= self.instant_text_limit:
+                log.info(f"⚡ Using instant mode (text length: {len(text)} chars)")
+                instant_result = self.synthesize_text_instant(
+                    text=text,
+                    language=synthesis_language,
+                    speaker_wav=speaker_wav
+                )
+                if instant_result:
+                    synthesis_time = time.time() - start_time
+                    log.info(f"⚡ Instant synthesis completed in {synthesis_time:.2f}s")
+                    log.info(f"Audio size: {len(instant_result)} bytes")
+                    return instant_result
+                else:
+                    log.warning("⚠️ Instant synthesis failed, falling back to ultra-fast")
+            
             # Use ultra-fast mode for short texts
             if self.fast_mode and len(text) <= self.max_text_length:
                 log.info(f"⚡ Using ultra-fast mode (text length: {len(text)} chars)")
@@ -1137,7 +1250,7 @@ class XTTSManager:
                     text=text,
                     language=synthesis_language,
                     speaker_wav=speaker_wav,
-                    speed=speed
+                    speed=self.ultra_speed  # Use ultra speed
                 )
                 if ultra_fast_result:
                     synthesis_time = time.time() - start_time
@@ -1420,7 +1533,10 @@ class XTTSManager:
                 "fast_mode": self.fast_mode,
                 "max_text_length": self.max_text_length,
                 "streaming_enabled": self.streaming_enabled,
-                "preload_speaker": self.preload_speaker
+                "preload_speaker": self.preload_speaker,
+                "ultra_speed": self.ultra_speed,
+                "instant_mode": self.instant_mode,
+                "instant_text_limit": self.instant_text_limit
             },
             "gpu_utilization": self.gpu_utilization,
             "speaker_cache": self.get_cache_stats(),
