@@ -569,9 +569,45 @@ sudo mkdir -p /opt/$PROJECT_NAME/ssl
 print_status "Setting up backend environment..."
 cd /opt/$PROJECT_NAME/fastapi-backend
 
-# Create virtual environment
-python3.11 -m venv venv
-source venv/bin/activate
+# ========================================
+# VIRTUAL ENVIRONMENT SETUP
+# ========================================
+print_status "Setting up organized virtual environment..."
+
+# Remove existing virtual environment if exists
+if [ -d "venv" ]; then
+    print_status "Removing existing 'venv' directory..."
+    rm -rf venv
+fi
+
+if [ -d "shci_env" ]; then
+    print_status "Removing existing 'shci_env' directory..."
+    rm -rf shci_env
+fi
+
+# Create virtual environment with organized naming
+print_status "Creating virtual environment 'shci_env'..."
+python3.11 -m venv shci_env
+
+# Activate virtual environment
+print_status "Activating virtual environment..."
+source shci_env/bin/activate
+
+# Verify virtual environment activation
+print_status "Verifying virtual environment activation..."
+which python
+which pip
+python --version
+pip --version
+
+# Show virtual environment info
+print_status "Virtual environment details:"
+echo "• Virtual Environment: shci_env"
+echo "• Python Path: $(which python)"
+echo "• Pip Path: $(which pip)"
+echo "• Python Version: $(python --version)"
+echo "• Pip Version: $(pip --version)"
+echo "• Virtual Environment Location: $(pwd)/shci_env"
 
 # Install Python dependencies
 pip install --upgrade pip
@@ -702,9 +738,9 @@ Type=exec
 User=root
 Group=root
 WorkingDirectory=/opt/$PROJECT_NAME/fastapi-backend
-Environment=PATH=/opt/$PROJECT_NAME/fastapi-backend/venv/bin
+Environment=PATH=/opt/$PROJECT_NAME/fastapi-backend/shci_env/bin
 EnvironmentFile=/opt/$PROJECT_NAME/.env.production
-ExecStart=/opt/$PROJECT_NAME/fastapi-backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+ExecStart=/opt/$PROJECT_NAME/fastapi-backend/shci_env/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 Restart=always
 RestartSec=10
 
@@ -722,9 +758,9 @@ Type=exec
 User=$USER
 Group=$USER
 WorkingDirectory=/opt/$PROJECT_NAME/fastapi-backend
-Environment=PATH=/opt/$PROJECT_NAME/fastapi-backend/venv/bin
+Environment=PATH=/opt/$PROJECT_NAME/fastapi-backend/shci_env/bin
 EnvironmentFile=/opt/$PROJECT_NAME/.env.production
-ExecStart=/opt/$PROJECT_NAME/fastapi-backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+ExecStart=/opt/$PROJECT_NAME/fastapi-backend/shci_env/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 Restart=always
 RestartSec=10
 
@@ -989,6 +1025,14 @@ echo "• Restart frontend: systemctl restart shci-frontend.service"
 echo "• Stop services: systemctl stop shci-backend.service shci-frontend.service"
 echo "• Start services: systemctl start shci-backend.service shci-frontend.service"
 echo "• Update: git pull && systemctl restart shci-backend.service shci-frontend.service"
+echo ""
+echo -e "${BLUE}🐍 Virtual Environment Commands:${NC}"
+echo "• Activate venv: cd /opt/$PROJECT_NAME/fastapi-backend && source shci_env/bin/activate"
+echo "• Deactivate venv: deactivate"
+echo "• Install packages: pip install package_name"
+echo "• Update packages: pip install --upgrade package_name"
+echo "• List packages: pip list"
+echo "• Check venv: which python && which pip"
 echo ""
 echo -e "${BLUE}📁 Project Location:${NC}"
 echo "/opt/$PROJECT_NAME"
