@@ -441,6 +441,168 @@ class XTTSManager:
             log.error(f"❌ Error converting audio to WAV bytes: {e}")
             return b""
     
+    def split_for_tts(self, text: str, max_len: int = 180) -> list:
+        """
+        Split text into chunks for faster TTS processing.
+        Returns earlier audio sooner by processing smaller chunks.
+        
+        Args:
+            text: Text to split into chunks
+            max_len: Maximum length per chunk (default: 180 characters)
+            
+        Returns:
+            list: List of text chunks
+        """
+        try:
+            if not text or not text.strip():
+                return []
+            
+            out, cur = [], []
+            words = text.split()
+            
+            for word in words:
+                # Calculate current chunk length + new word length
+                current_length = sum(len(x) + 1 for x in cur) + len(word)
+                
+                if current_length > max_len and cur:
+                    # Current chunk is full, add it to output and start new chunk
+                    out.append(" ".join(cur))
+                    cur = [word]
+                else:
+                    # Add word to current chunk
+                    cur.append(word)
+            
+            # Add remaining words as final chunk
+            if cur:
+                out.append(" ".join(cur))
+            
+            log.info(f"📝 Text split into {len(out)} chunks (max_len: {max_len})")
+            for i, chunk in enumerate(out):
+                log.info(f"  Chunk {i+1}: '{chunk[:50]}...' ({len(chunk)} chars)")
+            
+            return out
+            
+        except Exception as e:
+            log.error(f"❌ Error splitting text for TTS: {e}")
+            return [text]  # Return original text as single chunk if splitting fails
+    
+    def synthesize_text_chunked(self, text: str, language: str = None, speaker_wav: str = None, 
+                               speed: float = 1.1, max_chunk_len: int = 180) -> list:
+        """
+        Synthesize text in chunks for faster response.
+        Returns list of audio chunks for streaming.
+        
+        Args:
+            text: Text to synthesize
+            language: Language code
+            speaker_wav: Speaker reference file
+            speed: Synthesis speed
+            max_chunk_len: Maximum characters per chunk
+            
+        Returns:
+            list: List of audio data chunks (bytes)
+        """
+        try:
+            if not text or not text.strip():
+                return []
+            
+            # Split text into chunks
+            chunks = self.split_for_tts(text, max_chunk_len)
+            
+            if not chunks:
+                log.error("❌ No chunks generated from text")
+                return []
+            
+            audio_chunks = []
+            total_chunks = len(chunks)
+            
+            log.info(f"🎵 Starting chunked synthesis: {total_chunks} chunks")
+            
+            for i, chunk in enumerate(chunks):
+                log.info(f"🔄 Processing chunk {i+1}/{total_chunks}: '{chunk[:30]}...'")
+                
+                # Synthesize each chunk
+                chunk_audio = self.synthesize_text(
+                    text=chunk,
+                    language=language,
+                    speaker_wav=speaker_wav,
+                    speed=speed
+                )
+                
+                if chunk_audio:
+                    audio_chunks.append(chunk_audio)
+                    log.info(f"✅ Chunk {i+1}/{total_chunks} completed ({len(chunk_audio)} bytes)")
+                else:
+                    log.error(f"❌ Chunk {i+1}/{total_chunks} failed")
+                    # Continue with other chunks even if one fails
+            
+            log.info(f"🎯 Chunked synthesis completed: {len(audio_chunks)}/{total_chunks} chunks successful")
+            return audio_chunks
+            
+        except Exception as e:
+            log.error(f"❌ Error in chunked synthesis: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def combine_audio_chunks(self, audio_chunks: list) -> bytes:
+        """
+        Combine multiple audio chunks into single audio file.
+        
+        Args:
+            audio_chunks: List of audio data chunks (bytes)
+            
+        Returns:
+            bytes: Combined audio data
+        """
+        try:
+            if not audio_chunks:
+                return b""
+            
+            if len(audio_chunks) == 1:
+                return audio_chunks[0]
+            
+            import numpy as np
+            import soundfile as sf
+            import io
+            
+            combined_audio = []
+            
+            for i, chunk_bytes in enumerate(audio_chunks):
+                try:
+                    # Convert bytes to numpy array
+                    audio_io = io.BytesIO(chunk_bytes)
+                    audio_data, sample_rate = sf.read(audio_io)
+                    
+                    if isinstance(audio_data, np.ndarray):
+                        combined_audio.append(audio_data)
+                        log.info(f"📎 Combined chunk {i+1} ({len(audio_data)} samples)")
+                    else:
+                        log.warning(f"⚠️ Chunk {i+1} has invalid audio format")
+                        
+                except Exception as e:
+                    log.error(f"❌ Error processing chunk {i+1}: {e}")
+                    continue
+            
+            if combined_audio:
+                # Concatenate all audio chunks
+                final_audio = np.concatenate(combined_audio)
+                
+                # Convert back to WAV bytes
+                output_io = io.BytesIO()
+                sf.write(output_io, final_audio, sample_rate, format='WAV')
+                combined_bytes = output_io.getvalue()
+                
+                log.info(f"🎵 Audio combination completed: {len(combined_bytes)} bytes")
+                return combined_bytes
+            else:
+                log.error("❌ No valid audio chunks to combine")
+                return b""
+                
+        except Exception as e:
+            log.error(f"❌ Error combining audio chunks: {e}")
+            return b""
+    
     def _synthesize_with_latents(self, text: str, language: str, speaker_wav: str, speed: float = 1.1) -> bytes:
         """
         Optimized synthesis using pre-computed speaker latents with AMP.
@@ -713,7 +875,8 @@ class XTTSManager:
             log.error(f"Error setting synthesis parameters: {e}")
             return False
     
-    def synthesize_text(self, text: str, language: str = None, speaker_wav: str = None, speed: float = 1.1) -> bytes:
+    def synthesize_text(self, text: str, language: str = None, speaker_wav: str = None, 
+                       speed: float = 1.1, use_chunking: bool = False, max_chunk_len: int = 180) -> bytes:
         """
         Synthesize text to speech with professional quality.
         Based on simple_tts_test.py implementation with reference audio support.
@@ -723,6 +886,8 @@ class XTTSManager:
             language: Language code (optional, uses current setting if not provided)
             speaker_wav: Speaker reference file (optional)
             speed: Synthesis speed (default: 1.1 for faster output)
+            use_chunking: Enable text chunking for faster response (default: False)
+            max_chunk_len: Maximum characters per chunk when chunking is enabled
             
         Returns:
             bytes: Audio data in WAV format
@@ -739,8 +904,29 @@ class XTTSManager:
             # Use provided language or current setting
             synthesis_language = language or self.language
             
-            log.info(f"Synthesizing audio for: '{text[:50]}...' (speed: {speed})")
+            log.info(f"Synthesizing audio for: '{text[:50]}...' (speed: {speed}, chunking: {use_chunking})")
             start_time = time.time()
+            
+            # Use chunking for long text or when explicitly requested
+            if use_chunking or len(text) > max_chunk_len:
+                log.info(f"🎵 Using chunked synthesis (text length: {len(text)} chars)")
+                audio_chunks = self.synthesize_text_chunked(
+                    text=text,
+                    language=synthesis_language,
+                    speaker_wav=speaker_wav,
+                    speed=speed,
+                    max_chunk_len=max_chunk_len
+                )
+                
+                if audio_chunks:
+                    # Combine chunks into single audio
+                    combined_audio = self.combine_audio_chunks(audio_chunks)
+                    synthesis_time = time.time() - start_time
+                    log.info(f"✅ Chunked synthesis completed in {synthesis_time:.2f}s")
+                    log.info(f"Audio size: {len(combined_audio)} bytes")
+                    return combined_audio
+                else:
+                    log.warning("⚠️ Chunked synthesis failed, falling back to standard synthesis")
             
             # Try optimized synthesis with latents first
             if speaker_wav and os.path.exists(speaker_wav):
@@ -962,6 +1148,11 @@ class XTTSManager:
             },
             "gpu_utilization": self.gpu_utilization,
             "speaker_cache": self.get_cache_stats(),
+            "chunking": {
+                "enabled": True,
+                "max_chunk_length": 180,
+                "description": "Text chunking for faster response"
+            },
             "synthesis_params": {
                 "speed": self.speed,
                 "temperature": self.temperature,
