@@ -501,16 +501,25 @@ source venv/bin/activate
 
 # Install Python dependencies
 pip install --upgrade pip
-pip install -r requirements.txt
+
+# Install dependencies with conflict resolution
+print_status "Installing Python dependencies with conflict resolution..."
+pip install --upgrade pip setuptools wheel
+pip install --no-deps -r requirements.txt || pip install -r requirements.txt --force-reinstall --no-deps
 
 # Install PyTorch with CUDA support if GPU available
 if lspci | grep -i nvidia &> /dev/null; then
     print_status "Installing PyTorch with CUDA support..."
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 --force-reinstall
 else
     print_status "Installing PyTorch CPU version..."
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --force-reinstall
 fi
+
+# Install remaining dependencies
+print_status "Installing remaining dependencies..."
+pip install numpy>=1.21.0,<2.0.0 --force-reinstall
+pip install soundfile librosa pydub scipy --force-reinstall
 
 # Setup frontend environment
 print_status "Setting up frontend environment..."
