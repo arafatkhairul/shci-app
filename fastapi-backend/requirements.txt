@@ -67,8 +67,8 @@ inflect>=5.6.0
 num2words
 bangla
 bnnumerizer
-bnnunicodenormalizer
-# Note: bnnunicodenormalizer may not be available on PyPI, will try alternative sources
+# bnnunicodenormalizer - install from GitHub if PyPI fails
+# pip install git+https://github.com/banglakit/bnnunicodenormalizer.git
 
 # -- Other Utilities --
 umap-learn>=0.5.1
