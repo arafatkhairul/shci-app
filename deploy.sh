@@ -640,17 +640,17 @@ pip install soundfile librosa pydub scipy
 print_status "Installing TTS dependencies..."
 pip install aiohttp anyascii bangla bnnumerizer
 
-# Install bnnunicodenormalizer with multiple fallback methods
-print_status "Installing bnnunicodenormalizer..."
-pip install bnnunicodenormalizer || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@main || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@master || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@v1.0.0 || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@latest || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@develop || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@dev || \
-echo "Warning: bnnunicodenormalizer not available - TTS will work without it"
+# Install bnunicodenormalizer with multiple fallback methods
+print_status "Installing bnunicodenormalizer..."
+pip install bnunicodenormalizer || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@main || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@master || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@v1.0.0 || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@latest || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@develop || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@dev || \
+echo "Warning: bnunicodenormalizer not available - TTS will work without it"
 
 pip install coqpit cython einops encodec flask g2pkk
 pip install "gruut[de,es,fr]==2.2.3" hangul-romanize inflect jamo jieba
@@ -663,29 +663,29 @@ pip install umap-learn unidecode
 print_status "Installing compatible thinc version..."
 pip install "thinc>=8.3.0,<8.4.0" --force-reinstall
 
-# Install bnnunicodenormalizer before TTS installation
-print_status "Installing bnnunicodenormalizer before TTS..."
-pip install bnnunicodenormalizer || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@main || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@master || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@v1.0.0 || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@latest || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@develop || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@dev || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@release || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@stable || \
-echo "Warning: bnnunicodenormalizer not available - continuing without it"
+# Install bnunicodenormalizer before TTS installation
+print_status "Installing bnunicodenormalizer before TTS..."
+pip install bnunicodenormalizer || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@main || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@master || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@v1.0.0 || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@latest || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@develop || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@dev || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@release || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@stable || \
+echo "Warning: bnunicodenormalizer not available - continuing without it"
 
 # Install TTS package with dependency resolution
 print_status "Installing TTS package..."
 pip install TTS==0.21.3 --no-deps || pip install TTS==0.21.3 --force-reinstall --no-deps
 
-# If bnnunicodenormalizer is not available, install TTS without it
-if ! python3.11 -c "import bnnunicodenormalizer" 2>/dev/null; then
-    print_status "bnnunicodenormalizer not available, installing TTS without it..."
+# If bnunicodenormalizer is not available, install TTS without it
+if ! python3.11 -c "import bnunicodenormalizer" 2>/dev/null; then
+    print_status "bnunicodenormalizer not available, installing TTS without it..."
     pip install TTS==0.21.3 --no-deps --force-reinstall
-    print_warning "TTS installed without bnnunicodenormalizer - Bengali text normalization may not work"
+    print_warning "TTS installed without bnunicodenormalizer - Bengali text normalization may not work"
 fi
 
 # Final dependency check and fix
@@ -756,26 +756,26 @@ else
     pip install torchvision==0.22.1+cpu --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
 fi
 
-# Try to install bnnunicodenormalizer again after all installations
-print_status "Final attempt to install bnnunicodenormalizer..."
-pip install bnnunicodenormalizer || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@main || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@master || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@v1.0.0 || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@latest || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@develop || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@dev || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@release || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@stable || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@hotfix || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@patch || \
-echo "bnnunicodenormalizer not available - TTS will work without it"
+# Try to install bnunicodenormalizer again after all installations
+print_status "Final attempt to install bnunicodenormalizer..."
+pip install bnunicodenormalizer || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@main || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@master || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@v1.0.0 || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@latest || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@develop || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@dev || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@release || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@stable || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@hotfix || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@patch || \
+echo "bnunicodenormalizer not available - TTS will work without it"
 
-# Force install TTS dependencies including bnnunicodenormalizer
+# Force install TTS dependencies including bnunicodenormalizer
 print_status "Force installing TTS with all dependencies..."
 pip install TTS==0.21.3 --force-reinstall --no-deps
-pip install bnnunicodenormalizer || echo "bnnunicodenormalizer still not available"
+pip install bnunicodenormalizer || echo "bnunicodenormalizer still not available"
 
 # Comprehensive final fix for all conflicts
 print_status "Comprehensive final fix for all conflicts..."
@@ -794,24 +794,24 @@ else
     pip install torchvision==0.22.1+cpu --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
 fi
 
-# Final bnnunicodenormalizer attempt with alternative repositories
-print_status "Final bnnunicodenormalizer attempt with alternative repositories..."
-pip install bnnunicodenormalizer || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@main || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@master || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@v1.0.0 || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@latest || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@develop || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@dev || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@release || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@stable || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@hotfix || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@patch || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@feature || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@bugfix || \
-pip install git+https://github.com/banglakit/bnnunicodenormalizer.git@fix || \
-echo "bnnunicodenormalizer not available - TTS will work without it"
+# Final bnunicodenormalizer attempt with alternative repositories
+print_status "Final bnunicodenormalizer attempt with alternative repositories..."
+pip install bnunicodenormalizer || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@main || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@master || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@v1.0.0 || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@latest || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@develop || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@dev || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@release || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@stable || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@hotfix || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@patch || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@feature || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@bugfix || \
+pip install git+https://github.com/banglakit/bnunicodenormalizer.git@fix || \
+echo "bnunicodenormalizer not available - TTS will work without it"
 
 # Verify critical packages
 print_status "Verifying critical package versions..."
@@ -836,9 +836,9 @@ try:
 except ImportError:
     print('TTS: not installed')
 try:
-    import bnnunicodenormalizer; print('bnnunicodenormalizer: installed')
+    import bnunicodenormalizer; print('bnunicodenormalizer: installed')
 except ImportError:
-    print('bnnunicodenormalizer: not installed')
+    print('bnunicodenormalizer: not installed')
 "
 
 # Setup frontend environment
