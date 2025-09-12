@@ -88,6 +88,12 @@ class XTTSManager:
         self.instant_mode = True  # Enable instant synthesis for very short texts
         self.instant_text_limit = 60  # Maximum chars for instant mode (increased for better coverage)
         
+        # Advanced optimizations for Ampere GPUs (RTX A5000)
+        self.use_bfloat16 = True  # Use BFloat16 for Ampere GPUs
+        self.use_torch_compile = True  # Enable torch.compile optimization
+        self.streaming_enabled = True  # Enable real-time streaming
+        self.stream_chunk_size = 20  # Chunk size for streaming
+        
         # Speaker-latent cache settings
         self.speaker_cache = {}  # Cache for speaker latents
         self.cache_max_size = 10  # Maximum number of cached speakers
@@ -746,6 +752,130 @@ class XTTSManager:
             log.error(f"❌ Instant synthesis failed: {e}")
             return b""
 
+    def synthesize_streaming(self, text: str, language: str = None, speaker_wav: str = None, 
+                           speed: float = 1.0):
+        """
+        Optimized streaming synthesis for real-time, low-latency voice synthesis.
+        Hardware Target: NVIDIA RTX A5000 (Ampere Architecture)
+        Key Optimizations: BFloat16, torch.compile, Fixed Latent Caching, Streaming Output
+        
+        Args:
+            text: Text to synthesize
+            language: Language code
+            speaker_wav: Speaker reference file
+            speed: Synthesis speed
+            
+        Yields:
+            bytes: Audio chunks in WAV format as they are generated
+        """
+        if not self.is_loaded:
+            log.error("Cannot synthesize, model not loaded.")
+            return
+        
+        if not text.strip():
+            log.error("Cannot synthesize empty text.")
+            return
+
+        synthesis_language = language or self.language
+        log.info(f"🎤 Starting optimized streaming synthesis for text: '{text[:50]}...'")
+        start_time = time.time()
+
+        try:
+            # Get speaker latents (cached or computed)
+            latents = self._get_optimized_speaker_latents(speaker_wav)
+            if not latents:
+                log.error("Failed to get speaker latents. Aborting synthesis.")
+                return
+                
+            gpt_cond_latents, speaker_embedding = latents
+            
+            # Use the compiled model if available, otherwise the original
+            model_to_use = self.compiled_model or self.tts.model
+
+            # Use torch.inference_mode for no-gradient calculations
+            with torch.inference_mode():
+                # Use bfloat16 for Ampere GPUs (like RTX A5000) for speed and stability
+                if self.use_bfloat16:
+                    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                        # The internal streaming generator from the TTS library
+                        chunks = model_to_use.inference_stream(
+                            text,
+                            synthesis_language,
+                            gpt_cond_latents,
+                            speaker_embedding,
+                            stream_chunk_size=self.stream_chunk_size,
+                            speed=speed,
+                        )
+
+                        for i, chunk in enumerate(chunks):
+                            chunk_time = time.time()
+                            log.info(f"🎧 Yielding audio chunk {i} at {chunk_time - start_time:.2f}s")
+                            
+                            # Convert tensor chunk to WAV bytes
+                            wav_bytes = self._audio_to_wav_bytes_optimized(chunk)
+                            yield wav_bytes
+                else:
+                    # Fallback to FP32
+                    chunks = model_to_use.inference_stream(
+                        text,
+                        synthesis_language,
+                        gpt_cond_latents,
+                        speaker_embedding,
+                        stream_chunk_size=self.stream_chunk_size,
+                        speed=speed,
+                    )
+
+                    for i, chunk in enumerate(chunks):
+                        chunk_time = time.time()
+                        log.info(f"🎧 Yielding audio chunk {i} at {chunk_time - start_time:.2f}s")
+                        
+                        # Convert tensor chunk to WAV bytes
+                        wav_bytes = self._audio_to_wav_bytes_optimized(chunk)
+                        yield wav_bytes
+
+        except Exception as e:
+            log.error(f"❌ An error occurred during streaming synthesis: {e}")
+        finally:
+            total_time = time.time() - start_time
+            log.info(f"✅ Streaming synthesis finished in {total_time:.2f}s")
+
+    def _get_optimized_speaker_latents(self, speaker_wav: str):
+        """
+        Optimized speaker latent computation with caching.
+        """
+        if not speaker_wav or not isinstance(speaker_wav, str) or not os.path.exists(speaker_wav):
+            log.warning("⚠️ Invalid speaker_wav, using default speaker")
+            return None
+
+        if speaker_wav in self.speaker_cache:
+            log.info(f"🎯 Speaker cache HIT for: {os.path.basename(speaker_wav)}")
+            return self.speaker_cache[speaker_wav]
+
+        log.info(f"🔄 Speaker cache MISS. Computing latents for: {os.path.basename(speaker_wav)}")
+        try:
+            # get_conditioning_latents returns a tuple (gpt_latents, speaker_embedding)
+            latents = self.tts.get_conditioning_latents(audio_path=speaker_wav)
+            self.speaker_cache[speaker_wav] = latents
+            return latents
+        except Exception as e:
+            log.error(f"❌ Error computing speaker latents: {e}")
+            return None
+
+    def _audio_to_wav_bytes_optimized(self, audio_chunk: torch.Tensor) -> bytes:
+        """
+        Optimized audio tensor to WAV bytes conversion.
+        XTTS output is float32, sampling rate is 24000
+        """
+        try:
+            audio_np = audio_chunk.squeeze().cpu().numpy()
+            buffer = io.BytesIO()
+            sf.write(buffer, audio_np, 24000, format='WAV')
+            buffer.seek(0)
+            return buffer.read()
+        except Exception as e:
+            log.error(f"❌ Error converting audio to WAV bytes: {e}")
+            return b""
+
     def synthesize_text_chunked(self, text: str, language: str = None, speaker_wav: str = None, 
                                 speed: float = 1.5, max_chunk_len: int = 50) -> list:
         """
@@ -1034,6 +1164,23 @@ class XTTSManager:
                     with torch.serialization.safe_globals([XttsConfig, XttsAudioConfig, BaseDatasetConfig, XttsArgs]):
                         self.tts = TTS(self.model_name).to(device_to_use)
                     log.info(f"✅ TTS model initialized successfully on {device_to_use}.")
+                    
+                    # Apply advanced optimizations for Ampere GPUs
+                    if self.use_torch_compile and hasattr(self.tts, 'model'):
+                        log.info("🚀 Applying torch.compile optimization...")
+                        try:
+                            if hasattr(torch, 'compile'):
+                                self.compiled_model = torch.compile(self.tts.model, mode="reduce-overhead")
+                                log.info("✅ Model compilation successful.")
+                            else:
+                                log.warning("⚠️ torch.compile not available. Skipping compilation.")
+                        except Exception as compile_error:
+                            log.warning(f"⚠️ Model compilation failed: {compile_error}")
+                    
+                    # Set model to evaluation mode for inference
+                    if hasattr(self.tts, 'model'):
+                        self.tts.model.eval()
+                        log.info("✅ Model set to evaluation mode.")
                     
                     # Update GPU utilization
                     if self.use_multi_gpu:
@@ -1559,7 +1706,11 @@ class XTTSManager:
                 "preload_speaker": self.preload_speaker,
                 "ultra_speed": self.ultra_speed,
                 "instant_mode": self.instant_mode,
-                "instant_text_limit": self.instant_text_limit
+                "instant_text_limit": self.instant_text_limit,
+                "use_bfloat16": self.use_bfloat16,
+                "use_torch_compile": self.use_torch_compile,
+                "stream_chunk_size": self.stream_chunk_size,
+                "model_compiled": self.compiled_model is not None
             },
             "gpu_utilization": self.gpu_utilization,
             "speaker_cache": self.get_cache_stats(),
