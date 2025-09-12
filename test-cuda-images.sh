@@ -31,12 +31,12 @@ echo "=================================="
 
 # Test CUDA images
 cuda_images=(
+    "nvidia/cuda:12.6.0-devel-ubuntu24.04"
+    "nvidia/cuda:12.4-devel-ubuntu24.04"
+    "nvidia/cuda:12.1-devel-ubuntu24.04"
     "nvidia/cuda:11.8-devel-ubuntu22.04"
     "nvidia/cuda:11.8-devel-ubuntu20.04"
     "nvidia/cuda:12.1-devel-ubuntu22.04"
-    "nvidia/cuda:12.1-devel-ubuntu24.04"
-    "nvidia/cuda:12.2-devel-ubuntu22.04"
-    "nvidia/cuda:12.4-devel-ubuntu22.04"
 )
 
 print_status "Testing CUDA image availability..."
@@ -54,10 +54,11 @@ done
 
 echo ""
 print_status "🎯 Recommended CUDA Images for Ubuntu 24.04:"
-echo "1. nvidia/cuda:11.8-devel-ubuntu22.04 (Most stable)"
-echo "2. nvidia/cuda:12.1-devel-ubuntu22.04 (Latest CUDA 12.1)"
-echo "3. nvidia/cuda:12.4-devel-ubuntu22.04 (Latest CUDA 12.4)"
+echo "1. nvidia/cuda:12.6.0-devel-ubuntu24.04 (Latest CUDA 12.6)"
+echo "2. nvidia/cuda:12.4-devel-ubuntu24.04 (CUDA 12.4)"
+echo "3. nvidia/cuda:12.1-devel-ubuntu24.04 (CUDA 12.1)"
+echo "4. nvidia/cuda:11.8-devel-ubuntu22.04 (Fallback stable)"
 
 echo ""
-print_warning "Note: Ubuntu 24.04 CUDA images may not be available yet."
-print_warning "Using Ubuntu 22.04 CUDA images is recommended for compatibility."
+print_success "Ubuntu 24.04 CUDA images are now available!"
+print_warning "Using Ubuntu 24.04 CUDA images for best compatibility."

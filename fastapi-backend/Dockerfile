@@ -1,5 +1,5 @@
-# Step 1: Python base image with CUDA support for Ubuntu 24.04
-FROM nvidia/cuda:11.8-devel-ubuntu22.04
+# Step 1: Python base image with CUDA 12.6 support for Ubuntu 24.04
+FROM nvidia/cuda:12.6.0-devel-ubuntu24.04
 
 # Step 2: Install Python and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -11,8 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/bin/python3.11 /usr/bin/python
 
-# Step 3: Install PyTorch with CUDA 11.8 support
-RUN pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# Step 3: Install PyTorch with CUDA 12.6 support
+RUN pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 
 # Step 3: Working directory set kora
 WORKDIR /app

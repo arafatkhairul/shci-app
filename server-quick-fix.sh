@@ -142,6 +142,16 @@ else
     print_warning "Ollama service not detected - will use external LLM"
 fi
 
+# Fix 9: Configure Git credentials
+print_status "Configuring Git credentials..."
+if [ -f "configure-git-credentials.sh" ]; then
+    chmod +x configure-git-credentials.sh
+    ./configure-git-credentials.sh
+    print_success "Git credentials configured"
+else
+    print_warning "Git credentials script not found - manual configuration needed"
+fi
+
 echo ""
 print_success "🎉 Server quick fix completed!"
 echo ""
