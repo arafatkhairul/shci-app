@@ -64,6 +64,13 @@ class XTTSManager:
         self.use_inference_mode = True  # Enable torch inference mode
         self.compiled_model = None  # Store compiled model for optimization
         
+        # Multi-GPU settings
+        self.gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
+        self.current_gpu = 0  # Current GPU index for load balancing
+        self.gpu_memory_threshold = 0.8  # GPU memory usage threshold (80%)
+        self.gpu_utilization = {}  # Track GPU utilization
+        self.use_multi_gpu = self.gpu_count > 1  # Enable multi-GPU if available
+        
         # Reference audio configuration (from simple_tts_test.py)
         self.reference_voice_path = "00005.wav"  # Default reference audio
         self.fallback_speaker = "Tammie Ema"  # Fallback speaker name
@@ -102,6 +109,97 @@ class XTTSManager:
         log.info(f"Reference voice path: {self.reference_voice_path}")
         log.info(f"Fallback speaker: {self.fallback_speaker}")
         log.info(f"Performance optimizations: FP16={self.use_fp16}, AMP={self.use_amp}, Inference Mode={self.use_inference_mode}")
+        log.info(f"Multi-GPU support: {self.use_multi_gpu} ({self.gpu_count} GPUs detected)")
+        
+        # Initialize GPU utilization tracking
+        if self.use_multi_gpu:
+            self._initialize_gpu_monitoring()
+    
+    def _initialize_gpu_monitoring(self):
+        """Initialize GPU monitoring for multi-GPU setup."""
+        try:
+            for i in range(self.gpu_count):
+                self.gpu_utilization[i] = {
+                    'memory_used': 0,
+                    'memory_total': 0,
+                    'utilization': 0,
+                    'temperature': 0,
+                    'load_count': 0
+                }
+            log.info(f"✅ GPU monitoring initialized for {self.gpu_count} GPUs")
+        except Exception as e:
+            log.error(f"❌ Failed to initialize GPU monitoring: {e}")
+    
+    def _get_gpu_memory_info(self, gpu_id: int) -> dict:
+        """Get GPU memory information."""
+        try:
+            if torch.cuda.is_available() and gpu_id < self.gpu_count:
+                torch.cuda.set_device(gpu_id)
+                memory_allocated = torch.cuda.memory_allocated(gpu_id)
+                memory_reserved = torch.cuda.memory_reserved(gpu_id)
+                memory_total = torch.cuda.get_device_properties(gpu_id).total_memory
+                
+                return {
+                    'allocated': memory_allocated,
+                    'reserved': memory_reserved,
+                    'total': memory_total,
+                    'free': memory_total - memory_reserved,
+                    'usage_percent': (memory_reserved / memory_total) * 100
+                }
+        except Exception as e:
+            log.error(f"❌ Error getting GPU {gpu_id} memory info: {e}")
+        return {}
+    
+    def _select_optimal_gpu(self) -> int:
+        """Select the optimal GPU based on memory usage and load."""
+        if not self.use_multi_gpu:
+            return 0
+        
+        try:
+            best_gpu = 0
+            lowest_usage = float('inf')
+            
+            for gpu_id in range(self.gpu_count):
+                memory_info = self._get_gpu_memory_info(gpu_id)
+                usage_percent = memory_info.get('usage_percent', 0)
+                load_count = self.gpu_utilization[gpu_id]['load_count']
+                
+                # Calculate combined score (memory usage + load count)
+                combined_score = usage_percent + (load_count * 10)
+                
+                if combined_score < lowest_usage:
+                    lowest_usage = combined_score
+                    best_gpu = gpu_id
+            
+            # Update load count for selected GPU
+            self.gpu_utilization[best_gpu]['load_count'] += 1
+            
+            log.info(f"🎯 Selected GPU {best_gpu} (usage: {lowest_usage:.1f}%)")
+            return best_gpu
+            
+        except Exception as e:
+            log.error(f"❌ Error selecting optimal GPU: {e}")
+            return 0
+    
+    def _update_gpu_utilization(self, gpu_id: int):
+        """Update GPU utilization statistics."""
+        try:
+            memory_info = self._get_gpu_memory_info(gpu_id)
+            self.gpu_utilization[gpu_id].update({
+                'memory_used': memory_info.get('allocated', 0),
+                'memory_total': memory_info.get('total', 0),
+                'utilization': memory_info.get('usage_percent', 0)
+            })
+        except Exception as e:
+            log.error(f"❌ Error updating GPU {gpu_id} utilization: {e}")
+    
+    def _cleanup_gpu_load(self, gpu_id: int):
+        """Clean up GPU load count after inference."""
+        try:
+            if gpu_id in self.gpu_utilization:
+                self.gpu_utilization[gpu_id]['load_count'] = max(0, self.gpu_utilization[gpu_id]['load_count'] - 1)
+        except Exception as e:
+            log.error(f"❌ Error cleaning up GPU {gpu_id} load: {e}")
     
     def load_model(self, model_name: str = None) -> bool:
         """
@@ -128,17 +226,33 @@ class XTTSManager:
                 
                 # Initialize TTS with XTTS model (from simple_tts_test.py approach)
                 try:
+                    # Select optimal GPU for model loading
+                    selected_gpu = self._select_optimal_gpu()
+                    device_to_use = f"cuda:{selected_gpu}" if self.use_multi_gpu else self.device
+                    
+                    log.info(f"🚀 Loading model on {device_to_use}")
+                    
                     # Alternative approach: Use context manager for safer loading
                     with torch.serialization.safe_globals([XttsConfig, XttsAudioConfig, BaseDatasetConfig, XttsArgs]):
-                        self.tts = TTS(self.model_name).to(self.device)
-                    log.info("✅ TTS model initialized successfully.")
+                        self.tts = TTS(self.model_name).to(device_to_use)
+                    log.info(f"✅ TTS model initialized successfully on {device_to_use}.")
+                    
+                    # Update GPU utilization
+                    if self.use_multi_gpu:
+                        self._update_gpu_utilization(selected_gpu)
+                        
                 except Exception as e:
                     log.error(f"❌ Failed to initialize TTS model: {e}")
                     # Try one more approach with weights_only=False as fallback
                     try:
                         log.info("Trying alternative loading method...")
-                        self.tts = TTS(self.model_name, weights_only=False).to(self.device)
-                        log.info("✅ TTS model initialized successfully with weights_only=False.")
+                        self.tts = TTS(self.model_name, weights_only=False).to(device_to_use)
+                        log.info(f"✅ TTS model initialized successfully with weights_only=False on {device_to_use}.")
+                        
+                        # Update GPU utilization
+                        if self.use_multi_gpu:
+                            self._update_gpu_utilization(selected_gpu)
+                            
                     except Exception as e2:
                         log.error(f"❌ All initialization attempts failed: {e2}")
                         return False
@@ -335,6 +449,15 @@ class XTTSManager:
             start_time = time.time()
             
             with self.lock:
+                # Select optimal GPU for inference
+                selected_gpu = self._select_optimal_gpu()
+                device_to_use = f"cuda:{selected_gpu}" if self.use_multi_gpu else self.device
+                
+                # Set device context
+                if self.use_multi_gpu:
+                    torch.cuda.set_device(selected_gpu)
+                    log.info(f"🎯 Using GPU {selected_gpu} for inference")
+                
                 # Determine speaker parameters (from simple_tts_test.py logic)
                 speaker_wav_param = None
                 speaker_param = None
@@ -426,6 +549,10 @@ class XTTSManager:
                     
                     if len(audio_data) > 0:
                         log.info(f"✅ Synthesis completed successfully")
+                        
+                        # Update GPU utilization after successful synthesis
+                        if self.use_multi_gpu:
+                            self._update_gpu_utilization(selected_gpu)
                     else:
                         log.error("❌ Audio generation failed. The output file was empty.")
                         return b""
@@ -433,6 +560,10 @@ class XTTSManager:
                 except Exception as synthesis_error:
                     log.error(f"❌ An error occurred during audio generation: {synthesis_error}")
                     return b""
+                finally:
+                    # Clean up GPU load count
+                    if self.use_multi_gpu:
+                        self._cleanup_gpu_load(selected_gpu)
             
             synthesis_time = time.time() - start_time
             
@@ -470,8 +601,11 @@ class XTTSManager:
                 "inference_mode_enabled": self.use_inference_mode,
                 "model_compiled": self.compiled_model is not None,
                 "cuda_available": torch.cuda.is_available(),
-                "cuda_device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0
+                "cuda_device_count": torch.cuda.device_count() if torch.cuda.is_available() else 0,
+                "multi_gpu_enabled": self.use_multi_gpu,
+                "gpu_memory_threshold": self.gpu_memory_threshold
             },
+            "gpu_utilization": self.gpu_utilization,
             "synthesis_params": {
                 "speed": self.speed,
                 "temperature": self.temperature,
@@ -532,6 +666,60 @@ class XTTSManager:
                 
         except Exception as e:
             return {"status": "error", "message": f"Health check failed: {e}"}
+    
+    def get_gpu_status(self) -> Dict[str, Any]:
+        """
+        Get detailed GPU status and utilization information.
+        
+        Returns:
+            Dict containing GPU status for all available GPUs
+        """
+        try:
+            gpu_status = {
+                "multi_gpu_enabled": self.use_multi_gpu,
+                "gpu_count": self.gpu_count,
+                "gpu_details": {}
+            }
+            
+            if self.use_multi_gpu:
+                for gpu_id in range(self.gpu_count):
+                    memory_info = self._get_gpu_memory_info(gpu_id)
+                    utilization_info = self.gpu_utilization.get(gpu_id, {})
+                    
+                    gpu_status["gpu_details"][f"gpu_{gpu_id}"] = {
+                        "memory_allocated": memory_info.get('allocated', 0),
+                        "memory_reserved": memory_info.get('reserved', 0),
+                        "memory_total": memory_info.get('total', 0),
+                        "memory_free": memory_info.get('free', 0),
+                        "usage_percent": memory_info.get('usage_percent', 0),
+                        "load_count": utilization_info.get('load_count', 0),
+                        "utilization": utilization_info.get('utilization', 0)
+                    }
+            else:
+                gpu_status["gpu_details"]["gpu_0"] = {
+                    "memory_allocated": 0,
+                    "memory_reserved": 0,
+                    "memory_total": 0,
+                    "memory_free": 0,
+                    "usage_percent": 0,
+                    "load_count": 0,
+                    "utilization": 0
+                }
+            
+            return gpu_status
+            
+        except Exception as e:
+            return {"status": "error", "message": f"GPU status check failed: {e}"}
+    
+    def reset_gpu_loads(self):
+        """Reset GPU load counts (useful for debugging)."""
+        try:
+            for gpu_id in range(self.gpu_count):
+                if gpu_id in self.gpu_utilization:
+                    self.gpu_utilization[gpu_id]['load_count'] = 0
+            log.info("✅ GPU load counts reset")
+        except Exception as e:
+            log.error(f"❌ Error resetting GPU loads: {e}")
     
     def cleanup(self):
         """Clean up resources."""
