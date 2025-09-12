@@ -618,7 +618,7 @@ pip install --upgrade pip setuptools wheel
 
 # Clean install approach - remove conflicting packages first
 print_status "Cleaning up conflicting packages..."
-pip uninstall -y numpy networkx thinc 2>/dev/null || true
+pip uninstall -y numpy networkx thinc torch torchvision torchaudio 2>/dev/null || true
 
 # Install core dependencies first
 print_status "Installing core dependencies..."
@@ -664,10 +664,14 @@ pip install --no-deps -r requirements.txt || true
 # Install PyTorch with CUDA support if GPU available
 if lspci | grep -i nvidia &> /dev/null; then
     print_status "Installing PyTorch with CUDA support..."
-    pip install torch==2.7.1 torchvision==0.22.1+cu118 torchaudio --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
+    pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
+    pip install torchvision==0.22.1+cu118 --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
+    pip install torchaudio --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
 else
     print_status "Installing PyTorch CPU version..."
-    pip install torch==2.7.1 torchvision==0.22.1+cpu torchaudio --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
+    pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
+    pip install torchvision==0.22.1+cpu --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
+    pip install torchaudio --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
 fi
 
 # Fix all dependency conflicts after PyTorch installation
@@ -679,8 +683,14 @@ pip install "thinc>=8.3.0,<8.4.0" --force-reinstall
 
 # Fix PyTorch version conflicts
 print_status "Fixing PyTorch version conflicts..."
-pip install torch==2.7.1 --force-reinstall --no-deps
-pip install torchvision==0.22.1+cu118 --force-reinstall --no-deps || pip install torchvision==0.22.1+cpu --force-reinstall --no-deps
+pip uninstall -y torch torchvision torchaudio 2>/dev/null || true
+if lspci | grep -i nvidia &> /dev/null; then
+    pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
+    pip install torchvision==0.22.1+cu118 --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
+else
+    pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
+    pip install torchvision==0.22.1+cpu --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
+fi
 
 # Reinstall all TTS dependencies to ensure compatibility
 print_status "Reinstalling TTS dependencies for compatibility..."
@@ -705,8 +715,14 @@ pip install --force-reinstall "thinc>=8.3.0,<8.4.0"
 
 # Final PyTorch compatibility fix
 print_status "Final PyTorch compatibility fix..."
-pip install torch==2.7.1 --force-reinstall --no-deps
-pip install torchvision==0.22.1+cu118 --force-reinstall --no-deps || pip install torchvision==0.22.1+cpu --force-reinstall --no-deps
+pip uninstall -y torch torchvision torchaudio 2>/dev/null || true
+if lspci | grep -i nvidia &> /dev/null; then
+    pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
+    pip install torchvision==0.22.1+cu118 --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
+else
+    pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
+    pip install torchvision==0.22.1+cpu --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
+fi
 
 # Try to install bnnunicodenormalizer again
 print_status "Attempting to install bnnunicodenormalizer..."
@@ -719,6 +735,14 @@ import numpy; print(f'numpy: {numpy.__version__}')
 import networkx; print(f'networkx: {networkx.__version__}')
 import typing_extensions; print(f'typing_extensions: {typing_extensions.__version__}')
 try:
+    import torch; print(f'torch: {torch.__version__}')
+except ImportError:
+    print('torch: not installed')
+try:
+    import torchvision; print(f'torchvision: {torchvision.__version__}')
+except ImportError:
+    print('torchvision: not installed')
+try:
     import thinc; print(f'thinc: {thinc.__version__}')
 except ImportError:
     print('thinc: not installed')
@@ -726,6 +750,10 @@ try:
     import TTS; print(f'TTS: {TTS.__version__}')
 except ImportError:
     print('TTS: not installed')
+try:
+    import bnnunicodenormalizer; print('bnnunicodenormalizer: installed')
+except ImportError:
+    print('bnnunicodenormalizer: not installed')
 "
 
 # Setup frontend environment
