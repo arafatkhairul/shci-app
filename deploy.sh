@@ -133,6 +133,81 @@ else
     sudo apt install -y curl wget git nginx certbot python3-certbot-nginx ufw 2>/dev/null || true
 fi
 
+# Install pyenv and Python 3.11.9
+print_status "Installing pyenv and Python 3.11.9..."
+if [ "$EUID" -eq 0 ]; then
+    # Install dependencies for pyenv
+    apt update 2>/dev/null || true
+    apt install -y make build-essential libssl-dev zlib1g-dev \
+        libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
+        libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git 2>/dev/null || true
+    
+    # Install pyenv
+    curl https://pyenv.run | bash 2>/dev/null || true
+    
+    # Add pyenv to PATH
+    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> /root/.bashrc
+    echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> /root/.bashrc
+    echo 'eval "$(pyenv init -)"' >> /root/.bashrc
+    
+    # Source bashrc
+    source /root/.bashrc 2>/dev/null || true
+    
+    # Install Python 3.11.9
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init -)" 2>/dev/null || true
+    
+    pyenv install 3.11.9 2>/dev/null || true
+    pyenv global 3.11.9 2>/dev/null || true
+    
+    # Create symlinks
+    ln -sf /root/.pyenv/versions/3.11.9/bin/python /usr/local/bin/python
+    ln -sf /root/.pyenv/versions/3.11.9/bin/python3 /usr/local/bin/python3
+    ln -sf /root/.pyenv/versions/3.11.9/bin/python3.11 /usr/local/bin/python3.11
+    ln -sf /root/.pyenv/versions/3.11.9/bin/pip /usr/local/bin/pip
+    ln -sf /root/.pyenv/versions/3.11.9/bin/pip3 /usr/local/bin/pip3
+else
+    # Install dependencies for pyenv
+    sudo apt update 2>/dev/null || true
+    sudo apt install -y make build-essential libssl-dev zlib1g-dev \
+        libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev \
+        libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git 2>/dev/null || true
+    
+    # Install pyenv
+    curl https://pyenv.run | bash 2>/dev/null || true
+    
+    # Add pyenv to PATH
+    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+    echo 'command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+    echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+    
+    # Source bashrc
+    source ~/.bashrc 2>/dev/null || true
+    
+    # Install Python 3.11.9
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init -)" 2>/dev/null || true
+    
+    pyenv install 3.11.9 2>/dev/null || true
+    pyenv global 3.11.9 2>/dev/null || true
+    
+    # Create symlinks
+    sudo ln -sf $HOME/.pyenv/versions/3.11.9/bin/python /usr/local/bin/python
+    sudo ln -sf $HOME/.pyenv/versions/3.11.9/bin/python3 /usr/local/bin/python3
+    sudo ln -sf $HOME/.pyenv/versions/3.11.9/bin/python3.11 /usr/local/bin/python3.11
+    sudo ln -sf $HOME/.pyenv/versions/3.11.9/bin/pip /usr/local/bin/pip
+    sudo ln -sf $HOME/.pyenv/versions/3.11.9/bin/pip3 /usr/local/bin/pip3
+fi
+
+# Verify Python installation
+print_status "Verifying Python 3.11.9 installation..."
+python --version
+python3 --version
+python3.11 --version
+pip --version
+
 # Install Node.js and npm
 print_status "Installing Node.js and npm..."
 if ! command -v node &> /dev/null; then
@@ -143,101 +218,12 @@ if ! command -v node &> /dev/null; then
     fi
 fi
 
-# Remove existing Python versions and install only Python 3.11.9
-print_status "Removing existing Python versions and installing only Python 3.11..."
-if [ "$EUID" -eq 0 ]; then
-    # Remove existing Python versions
-    print_status "Removing existing Python installations..."
-    apt remove -y python3 python3.12 python3.12-dev python3.12-venv python3.12-distutils python3-pip python3-venv 2>/dev/null || true
-    apt autoremove -y
-    
-    # Add deadsnakes PPA
-    add-apt-repository ppa:deadsnakes/ppa -y 2>/dev/null || true
-    apt update 2>/dev/null || true
-    
-    # Check available Python 3.11 versions
-    print_status "Checking available Python 3.11 versions..."
-    apt-cache policy python3.11 | grep -E "Installed|Candidate|Version table"
-    
-    # Install latest available Python 3.11 (not specific version)
-    print_status "Installing latest available Python 3.11..."
-    apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils 2>/dev/null || true
-    
-    # Verify Python 3.11 installation
-    PYTHON_VERSION=$(python3.11 --version 2>&1 | cut -d' ' -f2)
-    print_success "Python 3.11 installed successfully: $PYTHON_VERSION"
-    
-    # Create symlinks
-    if command -v python3.11 &> /dev/null; then
-        ln -sf /usr/bin/python3.11 /usr/bin/python
-        ln -sf /usr/bin/python3.11 /usr/bin/python3
-        print_success "Python symlinks created: python -> python3.11"
-        
-        # Verify symlinks
-        echo "Python version verification:"
-        echo "python --version: $(python --version)"
-        echo "python3 --version: $(python3 --version)"
-        echo "python3.11 --version: $(python3.11 --version)"
-    else
-        print_error "Python 3.11 installation failed"
-        exit 1
-    fi
-else
-    # Remove existing Python versions
-    print_status "Removing existing Python installations..."
-    sudo apt remove -y python3 python3.12 python3.12-dev python3.12-venv python3.12-distutils python3-pip python3-venv 2>/dev/null || true
-    sudo apt autoremove -y
-    
-    # Add deadsnakes PPA
-    sudo add-apt-repository ppa:deadsnakes/ppa -y 2>/dev/null || true
-    sudo apt update 2>/dev/null || true
-    
-    # Check available Python 3.11 versions
-    print_status "Checking available Python 3.11 versions..."
-    apt-cache policy python3.11 | grep -E "Installed|Candidate|Version table"
-    
-    # Install latest available Python 3.11 (not specific version)
-    print_status "Installing latest available Python 3.11..."
-    sudo apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils 2>/dev/null || true
-    
-    # Verify Python 3.11 installation
-    PYTHON_VERSION=$(python3.11 --version 2>&1 | cut -d' ' -f2)
-    print_success "Python 3.11 installed successfully: $PYTHON_VERSION"
-    
-    # Create symlinks
-    if command -v python3.11 &> /dev/null; then
-        sudo ln -sf /usr/bin/python3.11 /usr/bin/python
-        sudo ln -sf /usr/bin/python3.11 /usr/bin/python3
-        print_success "Python symlinks created: python -> python3.11"
-        
-        # Verify symlinks
-        echo "Python version verification:"
-        echo "python --version: $(python --version)"
-        echo "python3 --version: $(python3 --version)"
-        echo "python3.11 --version: $(python3.11 --version)"
-    else
-        print_error "Python 3.11 installation failed"
-        exit 1
-    fi
-fi
+# Python 3.11.9 is now installed via pyenv above
+print_status "Python 3.11.9 installed via pyenv - skipping system Python installation"
+# Skip system Python installation - using pyenv Python 3.11.9
 
-# Install pip for Python 3.11
-print_status "Installing pip for Python 3.11..."
-# Remove existing pip first to avoid conflicts
-if [ "$EUID" -eq 0 ]; then
-    apt remove -y python3-pip python3.11-pip 2>/dev/null || true
-    apt autoremove -y
-else
-    sudo apt remove -y python3-pip python3.11-pip 2>/dev/null || true
-    sudo apt autoremove -y
-fi
-
-# Install pip using ensurepip module
-python3.11 -m ensurepip --upgrade
-
-# Verify pip installation
-PIP_VERSION=$(pip3.11 --version 2>&1 | cut -d' ' -f2)
-print_success "pip installed for Python 3.11: $PIP_VERSION"
+# pip is already installed with pyenv Python 3.11.9
+print_status "pip is already installed with pyenv Python 3.11.9"
 
 # Check for Ollama service
 print_status "Checking for Ollama LLM service..."
