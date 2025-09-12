@@ -169,8 +169,16 @@ if lspci | grep -i nvidia &> /dev/null; then
     
     print_status "NVIDIA Docker support installed successfully!"
     print_warning "GPU will be used for TTS/STT processing in production"
+    
+    # Set GPU Dockerfile
+    export BACKEND_DOCKERFILE="Dockerfile"
+    print_status "Using GPU-enabled Dockerfile"
 else
     print_warning "No NVIDIA GPU detected. Will use CPU for processing."
+    
+    # Set CPU Dockerfile
+    export BACKEND_DOCKERFILE="Dockerfile.cpu"
+    print_status "Using CPU-only Dockerfile"
 fi
 
 # Configure firewall

@@ -1,5 +1,5 @@
 # Step 1: Python base image with CUDA support
-FROM nvidia/cuda:11.8-devel-ubuntu22.04
+FROM nvidia/cuda:11.8-devel-ubuntu20.04
 
 # Step 2: Install Python and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \

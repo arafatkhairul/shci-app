@@ -3,7 +3,7 @@ services:
   backend:
     build:
       context: ./fastapi-backend
-      dockerfile: Dockerfile
+      dockerfile: ${BACKEND_DOCKERFILE:-Dockerfile}
     container_name: shci-backend
     ports:
       - "8000:8000"

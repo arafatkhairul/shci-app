@@ -1,0 +1,46 @@
+# Step 1: Python base image (CPU-only)
+FROM python:3.11-slim
+
+# Step 2: Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc g++ make \
+    portaudio19-dev libasound2-dev \
+    ffmpeg libsndfile1 \
+    curl \
+    wget \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Step 3: Set working directory
+WORKDIR /app
+
+# Step 4: Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Step 5: Install PyTorch CPU version
+RUN pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Step 6: Copy application code
+COPY . .
+
+# Step 7: Create necessary directories
+RUN mkdir -p /app/outputs /app/memdb /app/Models
+
+# Step 8: Set environment variables for CPU
+ENV CUDA_VISIBLE_DEVICES=""
+ENV TORCH_DEVICE=cpu
+ENV TTS_DEVICE=cpu
+ENV WHISPER_DEVICE=cpu
+ENV PYTHONPATH=/app
+
+# Step 9: Expose port
+EXPOSE 8000
+
+# Step 10: Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Step 11: Run the application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4", "--access-log"]

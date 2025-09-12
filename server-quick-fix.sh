@@ -113,7 +113,7 @@ else
     exit 1
 fi
 
-# Fix 7: Check for GPU support
+# Fix 7: Check for GPU support and set Dockerfile
 print_status "Checking GPU support..."
 if lspci | grep -i nvidia &> /dev/null; then
     print_success "NVIDIA GPU detected"
@@ -122,8 +122,16 @@ if lspci | grep -i nvidia &> /dev/null; then
     else
         print_warning "NVIDIA drivers not installed - will be installed during deployment"
     fi
+    
+    # Set GPU Dockerfile
+    export BACKEND_DOCKERFILE="Dockerfile"
+    print_status "Using GPU-enabled Dockerfile"
 else
     print_warning "No NVIDIA GPU detected - will use CPU"
+    
+    # Set CPU Dockerfile
+    export BACKEND_DOCKERFILE="Dockerfile.cpu"
+    print_status "Using CPU-only Dockerfile"
 fi
 
 # Fix 8: Check Ollama service
