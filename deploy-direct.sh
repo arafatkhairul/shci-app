@@ -54,6 +54,17 @@ else
     USER_HOME="$HOME"
 fi
 
+# Fix apt_pkg issue first
+print_status "Checking and fixing apt_pkg module issue..."
+if [ "$EUID" -eq 0 ]; then
+    # Install python3-apt to fix apt_pkg module
+    apt update
+    apt install -y python3-apt software-properties-common
+else
+    sudo apt update
+    sudo apt install -y python3-apt software-properties-common
+fi
+
 # Update system packages
 print_status "Updating system packages..."
 if [ "$EUID" -eq 0 ]; then
