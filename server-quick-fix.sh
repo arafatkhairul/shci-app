@@ -152,6 +152,16 @@ else
     print_warning "Git credentials script not found - manual configuration needed"
 fi
 
+# Fix 10: Check NVIDIA driver availability
+print_status "Checking NVIDIA driver availability..."
+if [ -f "detect-nvidia-drivers.sh" ]; then
+    chmod +x detect-nvidia-drivers.sh
+    ./detect-nvidia-drivers.sh
+    print_success "NVIDIA driver detection completed"
+else
+    print_warning "NVIDIA driver detection script not found"
+fi
+
 echo ""
 print_success "🎉 Server quick fix completed!"
 echo ""

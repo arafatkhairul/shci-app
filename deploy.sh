@@ -143,7 +143,19 @@ if lspci | grep -i nvidia &> /dev/null; then
     # Install NVIDIA drivers for Ubuntu 24.04 with CUDA 12.6
     if [ "$EUID" -eq 0 ]; then
         apt update
-        apt install -y nvidia-driver-560 nvidia-dkms-560
+        
+        # Try to install available NVIDIA drivers
+        if apt install -y nvidia-driver-550 nvidia-dkms-550 2>/dev/null; then
+            print_success "NVIDIA driver 550 installed successfully"
+        elif apt install -y nvidia-driver-545 nvidia-dkms-545 2>/dev/null; then
+            print_success "NVIDIA driver 545 installed successfully"
+        elif apt install -y nvidia-driver-535 nvidia-dkms-535 2>/dev/null; then
+            print_success "NVIDIA driver 535 installed successfully"
+        else
+            print_warning "Specific NVIDIA drivers not found, using ubuntu-drivers"
+            apt install -y ubuntu-drivers-common
+            ubuntu-drivers autoinstall
+        fi
         
         # Install NVIDIA Container Toolkit
         distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
@@ -155,7 +167,19 @@ if lspci | grep -i nvidia &> /dev/null; then
         systemctl restart docker
     else
         sudo apt update
-        sudo apt install -y nvidia-driver-560 nvidia-dkms-560
+        
+        # Try to install available NVIDIA drivers
+        if sudo apt install -y nvidia-driver-550 nvidia-dkms-550 2>/dev/null; then
+            print_success "NVIDIA driver 550 installed successfully"
+        elif sudo apt install -y nvidia-driver-545 nvidia-dkms-545 2>/dev/null; then
+            print_success "NVIDIA driver 545 installed successfully"
+        elif sudo apt install -y nvidia-driver-535 nvidia-dkms-535 2>/dev/null; then
+            print_success "NVIDIA driver 535 installed successfully"
+        else
+            print_warning "Specific NVIDIA drivers not found, using ubuntu-drivers"
+            sudo apt install -y ubuntu-drivers-common
+            sudo ubuntu-drivers autoinstall
+        fi
         
         # Install NVIDIA Container Toolkit
         distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
