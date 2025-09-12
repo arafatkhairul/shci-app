@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# SHCI Voice Assistant - Ubuntu VPS Deployment Script
-# ===================================================
+# SHCI Voice Assistant - Direct Deployment Script (No Docker)
+# ==========================================================
 
 set -e  # Exit on any error
 
@@ -103,31 +103,35 @@ else
     sudo apt install -y curl wget git nginx certbot python3-certbot-nginx ufw
 fi
 
-# Install Docker
-print_status "Installing Docker..."
-if ! command -v docker &> /dev/null; then
-    curl -fsSL https://get.docker.com -o get-docker.sh
+# Install Node.js and npm
+print_status "Installing Node.js and npm..."
+if ! command -v node &> /dev/null; then
     if [ "$EUID" -eq 0 ]; then
-        sh get-docker.sh
-        # For root user, no need to add to docker group
+        apt install -y nodejs npm
     else
-        sudo sh get-docker.sh
-        sudo usermod -aG docker $USER
-        print_warning "Docker installed. Please log out and log back in for group changes to take effect."
+        sudo apt install -y nodejs npm
     fi
 fi
 
-# Install Docker Compose
-print_status "Installing Docker Compose..."
-if ! command -v docker-compose &> /dev/null; then
-    if [ "$EUID" -eq 0 ]; then
-        curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        chmod +x /usr/local/bin/docker-compose
-    else
-        sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        sudo chmod +x /usr/local/bin/docker-compose
-    fi
+# Install Python 3.11.9
+print_status "Installing Python 3.11.9..."
+if [ "$EUID" -eq 0 ]; then
+    add-apt-repository ppa:deadsnakes/ppa -y
+    apt update
+    apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
+    ln -sf /usr/bin/python3.11 /usr/bin/python
+    ln -sf /usr/bin/python3.11 /usr/bin/python3
+else
+    sudo add-apt-repository ppa:deadsnakes/ppa -y
+    sudo apt update
+    sudo apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
+    sudo ln -sf /usr/bin/python3.11 /usr/bin/python
+    sudo ln -sf /usr/bin/python3.11 /usr/bin/python3
 fi
+
+# Install pip for Python 3.11
+print_status "Installing pip for Python 3.11..."
+curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
 
 # Check for Ollama service
 print_status "Checking for Ollama LLM service..."
@@ -381,21 +385,151 @@ sed -i "s/your-domain.com/$DOMAIN_NAME/g" nginx/conf.d/shci.conf
 # Create SSL directory
 sudo mkdir -p /opt/$PROJECT_NAME/ssl
 
-# Build and start services
-print_status "Building and starting services..."
-docker-compose down --remove-orphans
-docker-compose build --no-cache
-docker-compose up -d
+# Setup backend environment
+print_status "Setting up backend environment..."
+cd /opt/$PROJECT_NAME/fastapi-backend
+
+# Create virtual environment
+python3.11 -m venv venv
+source venv/bin/activate
+
+# Install Python dependencies
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Install PyTorch with CUDA support if GPU available
+if lspci | grep -i nvidia &> /dev/null; then
+    print_status "Installing PyTorch with CUDA support..."
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+else
+    print_status "Installing PyTorch CPU version..."
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+fi
+
+# Setup frontend environment
+print_status "Setting up frontend environment..."
+cd /opt/$PROJECT_NAME/web-app
+
+# Install Node.js dependencies
+npm install
+
+# Build frontend for production
+npm run build
+
+# Create systemd services
+print_status "Creating systemd services..."
+
+# Backend service
+if [ "$EUID" -eq 0 ]; then
+    tee /etc/systemd/system/shci-backend.service > /dev/null << EOF
+[Unit]
+Description=SHCI Voice Assistant Backend
+After=network.target
+
+[Service]
+Type=exec
+User=root
+Group=root
+WorkingDirectory=/opt/$PROJECT_NAME/fastapi-backend
+Environment=PATH=/opt/$PROJECT_NAME/fastapi-backend/venv/bin
+EnvironmentFile=/opt/$PROJECT_NAME/.env.production
+ExecStart=/opt/$PROJECT_NAME/fastapi-backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+else
+    sudo tee /etc/systemd/system/shci-backend.service > /dev/null << EOF
+[Unit]
+Description=SHCI Voice Assistant Backend
+After=network.target
+
+[Service]
+Type=exec
+User=$USER
+Group=$USER
+WorkingDirectory=/opt/$PROJECT_NAME/fastapi-backend
+Environment=PATH=/opt/$PROJECT_NAME/fastapi-backend/venv/bin
+EnvironmentFile=/opt/$PROJECT_NAME/.env.production
+ExecStart=/opt/$PROJECT_NAME/fastapi-backend/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+fi
+
+# Frontend service
+if [ "$EUID" -eq 0 ]; then
+    tee /etc/systemd/system/shci-frontend.service > /dev/null << EOF
+[Unit]
+Description=SHCI Voice Assistant Frontend
+After=network.target
+
+[Service]
+Type=exec
+User=root
+Group=root
+WorkingDirectory=/opt/$PROJECT_NAME/web-app
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/$PROJECT_NAME/.env.production
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+else
+    sudo tee /etc/systemd/system/shci-frontend.service > /dev/null << EOF
+[Unit]
+Description=SHCI Voice Assistant Frontend
+After=network.target
+
+[Service]
+Type=exec
+User=$USER
+Group=$USER
+WorkingDirectory=/opt/$PROJECT_NAME/web-app
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/$PROJECT_NAME/.env.production
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+fi
+
+# Enable and start services
+print_status "Enabling and starting services..."
+if [ "$EUID" -eq 0 ]; then
+    systemctl daemon-reload
+    systemctl enable shci-backend.service
+    systemctl enable shci-frontend.service
+    systemctl start shci-backend.service
+    systemctl start shci-frontend.service
+else
+    sudo systemctl daemon-reload
+    sudo systemctl enable shci-backend.service
+    sudo systemctl enable shci-frontend.service
+    sudo systemctl start shci-backend.service
+    sudo systemctl start shci-frontend.service
+fi
 
 # Wait for services to be ready
 print_status "Waiting for services to start..."
 sleep 30
 
 # Check if services are running
-if docker-compose ps | grep -q "Up"; then
+if systemctl is-active --quiet shci-backend.service && systemctl is-active --quiet shci-frontend.service; then
     print_status "Services are running successfully!"
 else
-    print_error "Some services failed to start. Check logs with: docker-compose logs"
+    print_error "Some services failed to start. Check logs with: journalctl -u shci-backend.service -f"
     exit 1
 fi
 
@@ -405,8 +539,12 @@ echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     print_status "Setting up SSL certificate..."
     
-    # Stop nginx container temporarily
-    docker-compose stop nginx
+    # Stop nginx temporarily
+    if [ "$EUID" -eq 0 ]; then
+        systemctl stop nginx
+    else
+        sudo systemctl stop nginx
+    fi
     
     # Install certificate
     if [ "$EUID" -eq 0 ]; then
@@ -419,7 +557,11 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     sed -i 's/# Same location blocks as above/    location \/ {\n        proxy_pass http:\/\/frontend;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection '\''upgrade'\'';\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_cache_bypass $http_upgrade;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/api\/ {\n        limit_req zone=api burst=20 nodelay;\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/ws {\n        limit_req zone=ws burst=10 nodelay;\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade $http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 86400s;\n        proxy_send_timeout 86400s;\n    }\n\n    location \/roleplay\/ {\n        proxy_pass http:\/\/backend;\n        proxy_http_version 1.1;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_set_header X-Forwarded-Proto $scheme;\n        proxy_read_timeout 300s;\n        proxy_connect_timeout 75s;\n    }\n\n    location \/health {\n        proxy_pass http:\/\/backend;\n        access_log off;\n    }/' nginx/conf.d/shci.conf
     
     # Restart nginx
-    docker-compose up -d nginx
+    if [ "$EUID" -eq 0 ]; then
+        systemctl start nginx
+    else
+        sudo systemctl start nginx
+    fi
 fi
 
 # Setup auto-renewal for SSL
@@ -434,35 +576,8 @@ else
     fi
 fi
 
-# Create systemd service for auto-start
-print_status "Creating systemd service..."
-if [ "$EUID" -eq 0 ]; then
-    tee /etc/systemd/system/shci-app.service > /dev/null << EOF
-else
-    sudo tee /etc/systemd/system/shci-app.service > /dev/null << EOF
-fi
-[Unit]
-Description=SHCI Voice Assistant
-Requires=docker.service
-After=docker.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-WorkingDirectory=/opt/$PROJECT_NAME
-ExecStart=/usr/local/bin/docker-compose up -d
-ExecStop=/usr/local/bin/docker-compose down
-TimeoutStartSec=0
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-if [ "$EUID" -eq 0 ]; then
-    systemctl enable shci-app.service
-else
-    sudo systemctl enable shci-app.service
-fi
+# Services are already created and enabled above
+print_status "Systemd services already created and enabled"
 
 # Final status check
 print_status "Deployment completed successfully!"
@@ -477,11 +592,13 @@ echo "• Proxy: Nginx (Port 80/443)"
 echo "• SSL: Let's Encrypt (if configured)"
 echo ""
 echo -e "${BLUE}🔧 Management Commands:${NC}"
-echo "• View logs: docker-compose logs -f"
-echo "• Restart: docker-compose restart"
-echo "• Stop: docker-compose down"
-echo "• Start: docker-compose up -d"
-echo "• Update: git pull && docker-compose up -d --build"
+echo "• View logs: journalctl -u shci-backend.service -f"
+echo "• View logs: journalctl -u shci-frontend.service -f"
+echo "• Restart backend: systemctl restart shci-backend.service"
+echo "• Restart frontend: systemctl restart shci-frontend.service"
+echo "• Stop services: systemctl stop shci-backend.service shci-frontend.service"
+echo "• Start services: systemctl start shci-backend.service shci-frontend.service"
+echo "• Update: git pull && systemctl restart shci-backend.service shci-frontend.service"
 echo ""
 echo -e "${BLUE}📁 Project Location:${NC}"
 echo "/opt/$PROJECT_NAME"
