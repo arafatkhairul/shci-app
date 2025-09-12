@@ -1,0 +1,22 @@
+fastapi==0.116.1
+faster_whisper==1.2.0
+numpy==2.3.2
+python-dotenv==1.1.1
+pyttsx3==2.99
+Requests==2.32.5
+soundfile==0.13.1
+torch==2.8.0
+torchaudio==2.8.0
+uvicorn[standard]==0.35.0
+webrtcvad_wheels==2.0.14
+websocket_client==1.8.0
+
+# XTTS (Coqui TTS) dependencies
+TTS==0.21.3
+torch>=1.13.0
+torchaudio>=0.13.0
+numpy>=1.21.0
+scipy>=1.7.0
+librosa>=0.9.0
+soundfile>=0.10.0
+pydub>=0.25.0

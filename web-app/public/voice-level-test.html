@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Level Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: #2a2a2a;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+            border: 1px solid #444;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .success { background: #28a745; }
+        .error { background: #dc3545; }
+        .warning { background: #ffc107; color: #000; }
+        .info { background: #17a2b8; }
+        .log-output {
+            background: #000;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .mic-level {
+            background: #333;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .level-bar {
+            background: #555;
+            height: 20px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 5px 0;
+        }
+        .level-fill {
+            background: linear-gradient(90deg, #28a745, #ffc107, #dc3545);
+            height: 100%;
+            width: 0%;
+            transition: width 0.1s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Voice Level Test</h1>
+        
+        <div class="test-section">
+            <h2>Audio Context Test</h2>
+            <button onclick="testAudioContext()">Test Audio Context</button>
+            <div id="audioContextStatus" class="status"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Microphone Access Test</h2>
+            <button onclick="testMicrophone()">Test Microphone</button>
+            <div id="microphoneStatus" class="status"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Voice Level Monitoring</h2>
+            <button id="startBtn" onclick="startMonitoring()">Start Monitoring</button>
+            <button id="stopBtn" onclick="stopMonitoring()" disabled>Stop Monitoring</button>
+            <div id="monitoringStatus" class="status"></div>
+            
+            <div class="mic-level">
+                <div>Raw Level: <span id="rawLevel">0.0000</span></div>
+                <div>Normalized Level: <span id="normalizedLevel">0.0000</span></div>
+                <div>Percentage: <span id="percentage">0%</span></div>
+                <div class="level-bar">
+                    <div id="levelFill" class="level-fill"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>Console Logs</h2>
+            <button onclick="clearLogs()">Clear Logs</button>
+            <div id="logOutput" class="log-output"></div>
+        </div>
+    </div>
+
+    <script>
+        let audioContext = null;
+        let analyser = null;
+        let microphone = null;
+        let isMonitoring = false;
+        let animationFrame = null;
+
+        // Console logging function
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logOutput = document.getElementById('logOutput');
+            const logEntry = `[${timestamp}] ${type.toUpperCase()}: ${message}\n`;
+            logOutput.textContent += logEntry;
+            logOutput.scrollTop = logOutput.scrollHeight;
+            console.log(`🎤 ${message}`);
+        }
+
+        function clearLogs() {
+            document.getElementById('logOutput').textContent = '';
+        }
+
+        function updateStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `status ${type}`;
+        }
+
+        async function testAudioContext() {
+            try {
+                log('Testing Audio Context creation...');
+                
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    log(`Audio Context created: sampleRate=${audioContext.sampleRate}, state=${audioContext.state}`);
+                }
+
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                    log(`Audio Context resumed: state=${audioContext.state}`);
+                }
+
+                updateStatus('audioContextStatus', '✅ Audio Context Working', 'success');
+                log('Audio Context test completed successfully');
+            } catch (error) {
+                updateStatus('audioContextStatus', `❌ Audio Context Error: ${error.message}`, 'error');
+                log(`Audio Context test failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function testMicrophone() {
+            try {
+                log('Testing Microphone access...');
+                
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        channelCount: 1,
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false,
+                        sampleRate: 48000,
+                    },
+                });
+
+                log(`Microphone access granted: tracks=${stream.getTracks().length}`);
+                log(`Audio track settings: ${JSON.stringify(stream.getAudioTracks()[0]?.getSettings())}`);
+
+                // Store the stream for monitoring
+                microphone = stream;
+
+                updateStatus('microphoneStatus', '✅ Microphone Access Granted', 'success');
+                log('Microphone test completed successfully');
+            } catch (error) {
+                updateStatus('microphoneStatus', `❌ Microphone Error: ${error.message}`, 'error');
+                log(`Microphone test failed: ${error.message}`, 'error');
+            }
+        }
+
+        function startMonitoring() {
+            if (!audioContext || !microphone) {
+                log('Cannot start monitoring: Audio Context or Microphone not initialized', 'error');
+                return;
+            }
+
+            try {
+                log('Starting Voice Level monitoring...');
+
+                // Create analyser
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                analyser.smoothingTimeConstant = 0.2;
+
+                // Create source from microphone
+                const source = audioContext.createMediaStreamSource(microphone);
+                source.connect(analyser);
+
+                log(`Analyser created: fftSize=${analyser.fftSize}, frequencyBinCount=${analyser.frequencyBinCount}`);
+
+                isMonitoring = true;
+                document.getElementById('startBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = false;
+                updateStatus('monitoringStatus', '🎤 Monitoring Active', 'info');
+
+                // Start monitoring loop
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                let frameCount = 0;
+
+                function monitor() {
+                    if (!isMonitoring) return;
+
+                    analyser.getByteFrequencyData(dataArray);
+                    
+                    // Calculate RMS
+                    const rms = Math.sqrt(dataArray.reduce((sum, value) => sum + (value * value), 0) / dataArray.length) / 255;
+                    
+                    // Enhanced debugging every 30 frames
+                    if (frameCount % 30 === 0) {
+                        log(`Frame ${frameCount}: RMS=${rms.toFixed(4)}, Max=${Math.max(...dataArray)}, Avg=${(dataArray.reduce((a, b) => a + b, 0) / dataArray.length).toFixed(2)}, NonZero=${dataArray.filter(v => v > 0).length}`);
+                    }
+
+                    // Update UI
+                    updateMicLevel(rms);
+                    
+                    frameCount++;
+                    animationFrame = requestAnimationFrame(monitor);
+                }
+
+                monitor();
+                log('Voice Level monitoring started successfully');
+
+            } catch (error) {
+                log(`Failed to start monitoring: ${error.message}`, 'error');
+                updateStatus('monitoringStatus', `❌ Monitoring Error: ${error.message}`, 'error');
+            }
+        }
+
+        function stopMonitoring() {
+            log('Stopping Voice Level monitoring...');
+            
+            isMonitoring = false;
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+                animationFrame = null;
+            }
+
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            updateStatus('monitoringStatus', '⏹️ Monitoring Stopped', 'warning');
+
+            // Reset mic level display
+            updateMicLevel(0);
+            log('Voice Level monitoring stopped');
+        }
+
+        function updateMicLevel(rawValue) {
+            const normalizedValue = Math.min(rawValue / 0.05, 1.0);
+            const percentage = Math.max(normalizedValue * 100, 0.5);
+
+            document.getElementById('rawLevel').textContent = rawValue.toFixed(4);
+            document.getElementById('normalizedLevel').textContent = normalizedValue.toFixed(4);
+            document.getElementById('percentage').textContent = `${percentage.toFixed(0)}%`;
+            document.getElementById('levelFill').style.width = `${percentage}%`;
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            log('Voice Level Test Page Loaded');
+            log(`Browser: ${navigator.userAgent}`);
+            log(`Audio Context Support: ${!!(window.AudioContext || window.webkitAudioContext)}`);
+            log(`MediaDevices Support: ${!!navigator.mediaDevices}`);
+            log(`getUserMedia Support: ${!!navigator.mediaDevices?.getUserMedia}`);
+        });
+    </script>
+</body>
+</html>

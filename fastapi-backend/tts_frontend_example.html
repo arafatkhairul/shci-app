@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time TTS Streaming Example</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .status-connected { background-color: #d4edda; color: #155724; }
+        .status-disconnected { background-color: #f8d7da; color: #721c24; }
+        .status-streaming { background-color: #d1ecf1; color: #0c5460; }
+        .status-idle { background-color: #e2e3e5; color: #383d41; }
+        .status-error { background-color: #f8d7da; color: #721c24; }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .stats {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        
+        .stats h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        
+        .stats-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+        
+        .log-info { color: #0c5460; }
+        .log-success { color: #155724; }
+        .log-warning { color: #856404; }
+        .log-error { color: #721c24; }
+        
+        .config-section {
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .config-section h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        
+        .row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .col {
+            flex: 1;
+        }
+        
+        .volume-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .volume-slider {
+            flex: 1;
+        }
+        
+        .volume-value {
+            min-width: 40px;
+            text-align: center;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 Real-time TTS Streaming</h1>
+        <p style="text-align: center; color: #666;">Coqui TTS with Reference Audio Support</p>
+        
+        <!-- Connection Status -->
+        <div id="tts-status" class="status status-disconnected">
+            Status: Disconnected
+        </div>
+        
+        <!-- Configuration Section -->
+        <div class="config-section">
+            <h3>⚙️ Configuration</h3>
+            <div class="row">
+                <div class="col">
+                    <div class="form-group">
+                        <label for="language-select">Language:</label>
+                        <select id="language-select">
+                            <option value="en">English</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                            <option value="de">German</option>
+                            <option value="it">Italian</option>
+                            <option value="pt">Portuguese</option>
+                            <option value="pl">Polish</option>
+                            <option value="tr">Turkish</option>
+                            <option value="ru">Russian</option>
+                            <option value="nl">Dutch</option>
+                            <option value="cs">Czech</option>
+                            <option value="ar">Arabic</option>
+                            <option value="zh">Chinese</option>
+                            <option value="ja">Japanese</option>
+                            <option value="hu">Hungarian</option>
+                            <option value="ko">Korean</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="form-group">
+                        <label for="speaker-wav">Speaker Reference (optional):</label>
+                        <input type="text" id="speaker-wav" placeholder="path/to/speaker.wav">
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <div class="form-group">
+                        <label for="volume-slider">Volume:</label>
+                        <div class="volume-control">
+                            <input type="range" id="volume-slider" class="volume-slider" min="0" max="1" step="0.1" value="1">
+                            <span id="volume-value" class="volume-value">1.0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="auto-play" checked> Auto-play audio
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Text Input Section -->
+        <div class="form-group">
+            <label for="text-input">Text to Speak:</label>
+            <textarea id="text-input" placeholder="Enter text to convert to speech...">Hello! This is a test of real-time TTS streaming with Coqui TTS. The system supports multiple languages and can use reference audio for voice cloning.</textarea>
+        </div>
+        
+        <!-- Control Buttons -->
+        <div class="button-group">
+            <button id="connect-btn">Connect</button>
+            <button id="speak-btn" disabled>Speak</button>
+            <button id="stop-btn" disabled>Stop</button>
+            <button id="stats-btn" disabled>Get Stats</button>
+            <button id="test-btn" disabled>Test Connection</button>
+        </div>
+        
+        <!-- Statistics -->
+        <div class="stats">
+            <h3>📊 Streaming Statistics</h3>
+            <div id="stats-content">
+                <div class="stats-item">
+                    <span>Active Streamers:</span>
+                    <span id="active-streamers">-</span>
+                </div>
+                <div class="stats-item">
+                    <span>Total Active Streams:</span>
+                    <span id="total-streams">-</span>
+                </div>
+                <div class="stats-item">
+                    <span>Max Concurrent Streams:</span>
+                    <span id="max-streams">-</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Log -->
+        <div class="log">
+            <h3>📝 Activity Log</h3>
+            <div id="log-content"></div>
+        </div>
+    </div>
+
+    <script src="frontend_tts_integration.js"></script>
+    <script>
+        // Initialize TTS client
+        let ttsClient;
+        let currentStreamId = null;
+        
+        // DOM elements
+        const statusElement = document.getElementById('tts-status');
+        const connectBtn = document.getElementById('connect-btn');
+        const speakBtn = document.getElementById('speak-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const statsBtn = document.getElementById('stats-btn');
+        const testBtn = document.getElementById('test-btn');
+        const textInput = document.getElementById('text-input');
+        const languageSelect = document.getElementById('language-select');
+        const speakerWavInput = document.getElementById('speaker-wav');
+        const volumeSlider = document.getElementById('volume-slider');
+        const volumeValue = document.getElementById('volume-value');
+        const autoPlayCheckbox = document.getElementById('auto-play');
+        const logContent = document.getElementById('log-content');
+        const statsContent = document.getElementById('stats-content');
+        
+        // Initialize
+        function init() {
+            ttsClient = new RealTimeTTSClient();
+            setupEventListeners();
+            setupUI();
+        }
+        
+        // Setup event listeners
+        function setupEventListeners() {
+            // TTS Client events
+            ttsClient.on('onConnect', () => {
+                log('Connected to TTS server', 'success');
+                updateButtons(true);
+            });
+            
+            ttsClient.on('onDisconnect', () => {
+                log('Disconnected from TTS server', 'warning');
+                updateButtons(false);
+            });
+            
+            ttsClient.on('onStreamStart', (data) => {
+                log(`Stream started: ${data.stream_id}`, 'info');
+                currentStreamId = data.stream_id;
+                updateButtons(true, true);
+            });
+            
+            ttsClient.on('onStreamComplete', (data) => {
+                log(`Stream completed: ${data.stream_id} (${data.duration?.toFixed(2)}s)`, 'success');
+                currentStreamId = null;
+                updateButtons(true, false);
+            });
+            
+            ttsClient.on('onStreamError', (data) => {
+                log(`Stream error: ${data.message || 'Unknown error'}`, 'error');
+                currentStreamId = null;
+                updateButtons(true, false);
+            });
+            
+            ttsClient.on('onAudioChunk', (data) => {
+                log(`Audio chunk ${data.chunk_index + 1}/${data.total_chunks} received`, 'info');
+            });
+            
+            // UI events
+            connectBtn.addEventListener('click', toggleConnection);
+            speakBtn.addEventListener('click', speakText);
+            stopBtn.addEventListener('click', stopSpeaking);
+            statsBtn.addEventListener('click', getStats);
+            testBtn.addEventListener('click', testConnection);
+            
+            // Configuration changes
+            languageSelect.addEventListener('change', updateConfig);
+            speakerWavInput.addEventListener('change', updateConfig);
+            volumeSlider.addEventListener('input', updateVolume);
+            autoPlayCheckbox.addEventListener('change', updateConfig);
+        }
+        
+        // Setup UI
+        function setupUI() {
+            updateButtons(false);
+            updateVolume();
+        }
+        
+        // Toggle connection
+        async function toggleConnection() {
+            if (ttsClient.isConnected) {
+                ttsClient.disconnect();
+            } else {
+                try {
+                    await ttsClient.connect();
+                } catch (error) {
+                    log(`Connection failed: ${error.message}`, 'error');
+                }
+            }
+        }
+        
+        // Speak text
+        async function speakText() {
+            const text = textInput.value.trim();
+            if (!text) {
+                log('Please enter text to speak', 'warning');
+                return;
+            }
+            
+            try {
+                const streamId = await ttsClient.startTTSStream(text, {
+                    language: languageSelect.value,
+                    speakerWav: speakerWavInput.value || null,
+                    autoPlay: autoPlayCheckbox.checked
+                });
+                
+                log(`Speaking: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`, 'info');
+                currentStreamId = streamId;
+            } catch (error) {
+                log(`Failed to start TTS: ${error.message}`, 'error');
+            }
+        }
+        
+        // Stop speaking
+        function stopSpeaking() {
+            if (currentStreamId) {
+                ttsClient.stopTTSStream(currentStreamId);
+                log(`Stopped stream: ${currentStreamId}`, 'warning');
+                currentStreamId = null;
+                updateButtons(true, false);
+            }
+        }
+        
+        // Get statistics
+        function getStats() {
+            try {
+                ttsClient.getStreamingStats();
+            } catch (error) {
+                log(`Failed to get stats: ${error.message}`, 'error');
+            }
+        }
+        
+        // Test connection
+        async function testConnection() {
+            try {
+                const testText = "This is a connection test.";
+                const streamId = await ttsClient.startTTSStream(testText, {
+                    language: languageSelect.value,
+                    speakerWav: speakerWavInput.value || null
+                });
+                log(`Test stream started: ${streamId}`, 'info');
+            } catch (error) {
+                log(`Test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        // Update configuration
+        function updateConfig() {
+            ttsClient.updateConfig({
+                language: languageSelect.value,
+                speakerWav: speakerWavInput.value || null,
+                autoPlay: autoPlayCheckbox.checked
+            });
+            log('Configuration updated', 'info');
+        }
+        
+        // Update volume
+        function updateVolume() {
+            const volume = parseFloat(volumeSlider.value);
+            volumeValue.textContent = volume.toFixed(1);
+            ttsClient.updateConfig({ volume });
+        }
+        
+        // Update button states
+        function updateButtons(connected, streaming = false) {
+            connectBtn.textContent = connected ? 'Disconnect' : 'Connect';
+            connectBtn.disabled = false;
+            
+            speakBtn.disabled = !connected || streaming;
+            stopBtn.disabled = !connected || !streaming;
+            statsBtn.disabled = !connected;
+            testBtn.disabled = !connected;
+            
+            if (streaming) {
+                speakBtn.textContent = 'Speaking...';
+            } else {
+                speakBtn.textContent = 'Speak';
+            }
+        }
+        
+        // Log messages
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            
+            logContent.appendChild(logEntry);
+            logContent.scrollTop = logContent.scrollHeight;
+            
+            // Keep only last 100 log entries
+            while (logContent.children.length > 100) {
+                logContent.removeChild(logContent.firstChild);
+            }
+        }
+        
+        // Update status display
+        function updateStatus(status) {
+            statusElement.textContent = `Status: ${status}`;
+            statusElement.className = `status status-${status}`;
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', init);
+        
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            if (ttsClient && ttsClient.isConnected) {
+                ttsClient.disconnect();
+            }
+        });
+    </script>
+</body>
+</html>

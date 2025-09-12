@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webkit Speech Recognition Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .container {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+            background: #333;
+            border-left: 4px solid #4CAF50;
+        }
+        .success { border-left-color: #4CAF50; }
+        .error { border-left-color: #f44336; background: #4a1a1a; }
+        .info { border-left-color: #2196F3; }
+        .warning { border-left-color: #ff9800; }
+        .transcript {
+            background: #000;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            min-height: 100px;
+            border: 2px solid #333;
+            margin: 15px 0;
+        }
+        .interim {
+            color: #00ff00;
+            font-style: italic;
+        }
+        .final {
+            color: #ffffff;
+            font-weight: bold;
+        }
+        .confidence-bar {
+            width: 100%;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff4444, #ffaa00, #44ff44);
+            transition: width 0.3s ease;
+        }
+        .history {
+            max-height: 200px;
+            overflow-y: auto;
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        .history-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: #2a2a2a;
+            border-radius: 5px;
+            border-left: 3px solid #4CAF50;
+        }
+        .timestamp {
+            font-size: 12px;
+            color: #888;
+        }
+        .confidence-text {
+            font-size: 12px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎤 Webkit Speech Recognition Test</h1>
+    
+    <div class="container">
+        <h2>Browser Support Check</h2>
+        <div id="browserSupport" class="status info">Checking browser support...</div>
+    </div>
+
+    <div class="container">
+        <h2>Speech Recognition Controls</h2>
+        <div id="recognitionStatus" class="status info">Not initialized</div>
+        <button id="initBtn" onclick="initializeRecognition()">Initialize Recognition</button>
+        <button id="startBtn" onclick="startRecognition()" disabled>Start Recognition</button>
+        <button id="stopBtn" onclick="stopRecognition()" disabled>Stop Recognition</button>
+        <button id="clearBtn" onclick="clearTranscripts()">Clear All</button>
+    </div>
+
+    <div class="container">
+        <h2>Real-time Transcription</h2>
+        <div class="transcript" id="transcript">
+            <div class="interim" id="interimText">Interim results will appear here...</div>
+            <div class="final" id="finalText">Final results will appear here...</div>
+        </div>
+        
+        <div class="confidence-bar">
+            <div class="confidence-fill" id="confidenceBar" style="width: 0%"></div>
+        </div>
+        <div id="confidenceText" class="confidence-text">Confidence: 0%</div>
+    </div>
+
+    <div class="container">
+        <h2>Transcription History</h2>
+        <div class="history" id="history"></div>
+    </div>
+
+    <div class="container">
+        <h2>Settings</h2>
+        <label for="languageSelect">Language:</label>
+        <select id="languageSelect" onchange="updateLanguage()">
+            <option value="en-US">English (US)</option>
+            <option value="en-GB">English (UK)</option>
+            <option value="it-IT">Italian</option>
+            <option value="es-ES">Spanish</option>
+            <option value="fr-FR">French</option>
+            <option value="de-DE">German</option>
+        </select>
+        
+        <label for="continuousCheck">Continuous:</label>
+        <input type="checkbox" id="continuousCheck" checked onchange="updateSettings()">
+        
+        <label for="interimResultsCheck">Interim Results:</label>
+        <input type="checkbox" id="interimResultsCheck" checked onchange="updateSettings()">
+    </div>
+
+    <script>
+        let recognition = null;
+        let isInitialized = false;
+        let isListening = false;
+        let history = [];
+
+        // Check browser support
+        function checkBrowserSupport() {
+            const support = {
+                webkitSpeechRecognition: 'webkitSpeechRecognition' in window,
+                speechRecognition: 'SpeechRecognition' in window,
+                getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+            };
+
+            const supportDiv = document.getElementById('browserSupport');
+            let supportText = 'Browser Support:<br>';
+            supportText += `Webkit Speech Recognition: ${support.webkitSpeechRecognition ? '✅' : '❌'}<br>`;
+            supportText += `Standard Speech Recognition: ${support.speechRecognition ? '✅' : '❌'}<br>`;
+            supportText += `getUserMedia: ${support.getUserMedia ? '✅' : '❌'}`;
+
+            supportDiv.innerHTML = supportText;
+            supportDiv.className = `status ${Object.values(support).some(s => s) ? 'success' : 'error'}`;
+
+            return support;
+        }
+
+        // Initialize speech recognition
+        function initializeRecognition() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                updateStatus('Speech Recognition not supported in this browser', 'error');
+                return;
+            }
+
+            try {
+                const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+                recognition = new SpeechRecognition();
+                
+                // Configure recognition
+                recognition.continuous = document.getElementById('continuousCheck').checked;
+                recognition.interimResults = document.getElementById('interimResultsCheck').checked;
+                recognition.lang = document.getElementById('languageSelect').value;
+                recognition.maxAlternatives = 1;
+
+                // Event handlers
+                recognition.onstart = () => {
+                    updateStatus('🎤 Listening...', 'success');
+                    isListening = true;
+                    updateButtons();
+                };
+
+                recognition.onresult = (event) => {
+                    let interimTranscript = '';
+                    let finalTranscript = '';
+                    let maxConfidence = 0;
+
+                    // Process all results
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const result = event.results[i];
+                        const transcript = result[0].transcript;
+                        const confidence = result[0].confidence || 0;
+
+                        maxConfidence = Math.max(maxConfidence, confidence);
+
+                        if (result.isFinal) {
+                            finalTranscript += transcript;
+                        } else {
+                            interimTranscript += transcript;
+                        }
+                    }
+
+                    // Update display
+                    updateTranscript(interimTranscript, finalTranscript, maxConfidence);
+                };
+
+                recognition.onerror = (event) => {
+                    updateStatus(`❌ Error: ${event.error}`, 'error');
+                    isListening = false;
+                    updateButtons();
+                };
+
+                recognition.onend = () => {
+                    updateStatus('⏹️ Recognition ended', 'info');
+                    isListening = false;
+                    updateButtons();
+                    
+                    // Auto-restart if continuous
+                    if (recognition.continuous && !isListening) {
+                        setTimeout(() => {
+                            if (recognition && !isListening) {
+                                startRecognition();
+                            }
+                        }, 100);
+                    }
+                };
+
+                recognition.onspeechstart = () => {
+                    console.log('Speech started');
+                };
+
+                recognition.onspeechend = () => {
+                    console.log('Speech ended');
+                };
+
+                recognition.onsoundstart = () => {
+                    console.log('Sound detected');
+                };
+
+                recognition.onsoundend = () => {
+                    console.log('Sound ended');
+                };
+
+                recognition.onnomatch = () => {
+                    console.log('No speech match');
+                };
+
+                isInitialized = true;
+                updateStatus('✅ Speech Recognition initialized', 'success');
+                updateButtons();
+                
+            } catch (error) {
+                updateStatus(`❌ Failed to initialize: ${error.message}`, 'error');
+            }
+        }
+
+        // Start recognition
+        function startRecognition() {
+            if (!isInitialized || !recognition) return;
+            
+            try {
+                recognition.start();
+                console.log('Starting speech recognition...');
+            } catch (error) {
+                updateStatus(`❌ Failed to start: ${error.message}`, 'error');
+            }
+        }
+
+        // Stop recognition
+        function stopRecognition() {
+            if (!isInitialized || !recognition) return;
+            
+            try {
+                recognition.stop();
+                console.log('Stopping speech recognition...');
+            } catch (error) {
+                updateStatus(`❌ Failed to stop: ${error.message}`, 'error');
+            }
+        }
+
+        // Update transcript display
+        function updateTranscript(interim, final, confidence) {
+            const interimElement = document.getElementById('interimText');
+            const finalElement = document.getElementById('finalText');
+            const confidenceBar = document.getElementById('confidenceBar');
+            const confidenceText = document.getElementById('confidenceText');
+
+            // Update interim text
+            if (interim) {
+                interimElement.textContent = interim;
+                interimElement.style.display = 'block';
+            } else {
+                interimElement.style.display = 'none';
+            }
+
+            // Update final text
+            if (final) {
+                finalElement.textContent = final;
+                finalElement.style.display = 'block';
+                
+                // Add to history
+                addToHistory(final, confidence, true);
+            } else {
+                finalElement.style.display = 'none';
+            }
+
+            // Update confidence
+            const confidencePercent = Math.round(confidence * 100);
+            confidenceBar.style.width = `${confidencePercent}%`;
+            confidenceText.textContent = `Confidence: ${confidencePercent}%`;
+        }
+
+        // Add to history
+        function addToHistory(text, confidence, isFinal) {
+            const historyItem = {
+                text: text.trim(),
+                confidence: confidence,
+                timestamp: new Date(),
+                isFinal: isFinal
+            };
+            
+            history.unshift(historyItem);
+            
+            // Keep only last 20 items
+            if (history.length > 20) {
+                history = history.slice(0, 20);
+            }
+            
+            updateHistoryDisplay();
+        }
+
+        // Update history display
+        function updateHistoryDisplay() {
+            const historyDiv = document.getElementById('history');
+            historyDiv.innerHTML = '';
+            
+            history.forEach((item, index) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'history-item';
+                itemDiv.innerHTML = `
+                    <div>${item.text}</div>
+                    <div class="timestamp">${item.timestamp.toLocaleTimeString()}</div>
+                    <div class="confidence-text">Confidence: ${Math.round(item.confidence * 100)}%</div>
+                `;
+                historyDiv.appendChild(itemDiv);
+            });
+        }
+
+        // Clear transcripts
+        function clearTranscripts() {
+            document.getElementById('interimText').textContent = 'Interim results will appear here...';
+            document.getElementById('finalText').textContent = 'Final results will appear here...';
+            document.getElementById('confidenceBar').style.width = '0%';
+            document.getElementById('confidenceText').textContent = 'Confidence: 0%';
+            history = [];
+            updateHistoryDisplay();
+        }
+
+        // Update status
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('recognitionStatus');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        // Update buttons
+        function updateButtons() {
+            document.getElementById('initBtn').disabled = isInitialized;
+            document.getElementById('startBtn').disabled = !isInitialized || isListening;
+            document.getElementById('stopBtn').disabled = !isInitialized || !isListening;
+        }
+
+        // Update language
+        function updateLanguage() {
+            if (recognition) {
+                recognition.lang = document.getElementById('languageSelect').value;
+                console.log('Language updated to:', recognition.lang);
+            }
+        }
+
+        // Update settings
+        function updateSettings() {
+            if (recognition) {
+                recognition.continuous = document.getElementById('continuousCheck').checked;
+                recognition.interimResults = document.getElementById('interimResultsCheck').checked;
+                console.log('Settings updated');
+            }
+        }
+
+        // Initialize on page load
+        window.onload = function() {
+            checkBrowserSupport();
+            updateButtons();
+        };
+    </script>
+</body>
+</html>
+
