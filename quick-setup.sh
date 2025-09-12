@@ -23,8 +23,23 @@ fi
 
 # Check if repository exists
 if [ ! -d "fastapi-backend" ] || [ ! -d "web-app" ]; then
-    echo -e "${RED}❌ Repository not found. Please run this from the SHCI project directory.${NC}"
-    echo "Expected: git clone https://github.com/arafatkhairul/shci-app.git"
+    echo -e "${RED}❌ Repository not found. Please clone the repository first.${NC}"
+    echo ""
+    echo -e "${BLUE}📋 Clone Options:${NC}"
+    echo "1. Public repository:"
+    echo "   git clone https://github.com/arafatkhairul/shci-app.git"
+    echo ""
+    echo "2. Private repository with token:"
+    echo "   git clone https://YOUR_TOKEN@github.com/arafatkhairul/shci-app.git"
+    echo ""
+    echo "3. Private repository with SSH:"
+    echo "   git clone git@github.com:arafatkhairul/shci-app.git"
+    echo ""
+    echo "4. Private repository with GitHub CLI:"
+    echo "   gh auth login"
+    echo "   gh repo clone arafatkhairul/shci-app"
+    echo ""
+    echo "See PRIVATE_REPO_SETUP.md for detailed instructions."
     exit 1
 fi
 

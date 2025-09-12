@@ -116,7 +116,47 @@ if [ -d "/opt/$PROJECT_NAME/.git" ]; then
     git pull origin main
 else
     print_status "Cloning repository..."
-    git clone https://github.com/arafatkhairul/shci-app.git /opt/$PROJECT_NAME
+    
+    # Check if repository is private and needs authentication
+    if curl -s -o /dev/null -w "%{http_code}" https://github.com/arafatkhairul/shci-app | grep -q "404"; then
+        print_warning "Repository appears to be private. Please choose authentication method:"
+        echo "1. Personal Access Token"
+        echo "2. SSH Key"
+        echo "3. GitHub CLI"
+        echo ""
+        read -p "Enter your choice (1-3): " auth_choice
+        
+        case $auth_choice in
+            1)
+                read -p "Enter your GitHub Personal Access Token: " github_token
+                git clone https://$github_token@github.com/arafatkhairul/shci-app.git /opt/$PROJECT_NAME
+                ;;
+            2)
+                print_status "Using SSH authentication..."
+                git clone git@github.com:arafatkhairul/shci-app.git /opt/$PROJECT_NAME
+                ;;
+            3)
+                print_status "Using GitHub CLI..."
+                if ! command -v gh &> /dev/null; then
+                    print_status "Installing GitHub CLI..."
+                    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+                    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+                    sudo apt update
+                    sudo apt install gh
+                fi
+                gh auth login
+                gh repo clone arafatkhairul/shci-app /opt/$PROJECT_NAME
+                ;;
+            *)
+                print_error "Invalid choice. Please run the script again."
+                exit 1
+                ;;
+        esac
+    else
+        print_status "Repository is public, cloning normally..."
+        git clone https://github.com/arafatkhairul/shci-app.git /opt/$PROJECT_NAME
+    fi
+    
     cd /opt/$PROJECT_NAME
 fi
 
