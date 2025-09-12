@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # FastAPI Backend Service (CPU-only for local development)
+  backend:
+    build:
+      context: ./fastapi-backend
+      dockerfile: Dockerfile.local
+    container_name: shci-backend-local
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - ENVIRONMENT=development
+      - CUDA_VISIBLE_DEVICES=""
+      - TORCH_DEVICE=cpu
+      - TTS_DEVICE=cpu
+      - WHISPER_DEVICE=cpu
+    volumes:
+      - ./fastapi-backend:/app
+      - ./Models:/app/Models
+      - ./fastapi-backend/outputs:/app/outputs
+      - ./fastapi-backend/memdb:/app/memdb
+    restart: unless-stopped
+    networks:
+      - shci-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Next.js Frontend Service
+  frontend:
+    build:
+      context: ./web-app
+      dockerfile: Dockerfile
+    container_name: shci-frontend-local
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+      - NEXT_PUBLIC_WS_BASE_URL=ws://localhost:8000
+      - NEXT_PUBLIC_WS_PRODUCTION_URL=ws://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - shci-network
+
+networks:
+  shci-network:
+    driver: bridge
+
+volumes:
+  models:
+  outputs:
+  memdb:

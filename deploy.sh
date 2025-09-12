@@ -63,6 +63,30 @@ if ! command -v docker-compose &> /dev/null; then
     sudo chmod +x /usr/local/bin/docker-compose
 fi
 
+# Check for GPU and install NVIDIA Docker support
+print_status "Checking for GPU support..."
+if lspci | grep -i nvidia &> /dev/null; then
+    print_status "NVIDIA GPU detected! Installing NVIDIA Docker support..."
+    
+    # Install NVIDIA drivers
+    sudo apt update
+    sudo apt install -y nvidia-driver-535 nvidia-dkms-535
+    
+    # Install NVIDIA Container Toolkit
+    distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+    curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+    curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+    
+    sudo apt update
+    sudo apt install -y nvidia-container-toolkit
+    sudo systemctl restart docker
+    
+    print_status "NVIDIA Docker support installed successfully!"
+    print_warning "GPU will be used for TTS/STT processing in production"
+else
+    print_warning "No NVIDIA GPU detected. Will use CPU for processing."
+fi
+
 # Configure firewall
 print_status "Configuring firewall..."
 sudo ufw allow ssh

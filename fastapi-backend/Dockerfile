@@ -1,12 +1,18 @@
-# Step 1: Python base image neya
-FROM python:3.11-slim
+# Step 1: Python base image with CUDA support
+FROM nvidia/cuda:11.8-devel-ubuntu22.04
 
-# Step 2: System dependencies for building wheels + audio
+# Step 2: Install Python and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.11 python3.11-dev python3-pip \
     build-essential gcc g++ make \
     portaudio19-dev libasound2-dev \
     ffmpeg libsndfile1 \
-    && rm -rf /var/lib/apt/lists/*
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /usr/bin/python3.11 /usr/bin/python
+
+# Step 3: Install PyTorch with CUDA support
+RUN pip3 install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
 # Step 3: Working directory set kora
 WORKDIR /app

@@ -12,6 +12,10 @@ services:
     environment:
       - PYTHONPATH=/app
       - ENVIRONMENT=production
+      - CUDA_VISIBLE_DEVICES=0,1
+      - TORCH_DEVICE=cuda
+      - TTS_DEVICE=cuda
+      - WHISPER_DEVICE=cuda
     volumes:
       - ./fastapi-backend:/app
       - ./Models:/app/Models
@@ -20,6 +24,13 @@ services:
     restart: unless-stopped
     networks:
       - shci-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 2
+              capabilities: [gpu]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
