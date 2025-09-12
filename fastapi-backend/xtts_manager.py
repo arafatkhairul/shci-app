@@ -287,7 +287,18 @@ class XTTSManager:
                             language=synthesis_language,
                         )
                     
-                    # audio_data is already set from tts() method
+                    # Convert audio data to bytes if it's a list or numpy array
+                    if isinstance(audio_data, list):
+                        # If it's a list, concatenate all audio segments
+                        import numpy as np
+                        audio_data = np.concatenate(audio_data)
+                    
+                    if isinstance(audio_data, np.ndarray):
+                        # Convert numpy array to bytes using soundfile
+                        import soundfile as sf
+                        audio_bytes = io.BytesIO()
+                        sf.write(audio_bytes, audio_data, self.sample_rate, format='WAV')
+                        audio_data = audio_bytes.getvalue()
                     
                     if len(audio_data) > 0:
                         log.info(f"✅ Synthesis completed successfully")
