@@ -502,19 +502,31 @@ source venv/bin/activate
 # Install Python dependencies
 pip install --upgrade pip
 
-# Install dependencies with conflict resolution
-print_status "Installing Python dependencies with conflict resolution..."
+# Install dependencies with complete conflict resolution
+print_status "Installing Python dependencies with complete conflict resolution..."
 pip install --upgrade pip setuptools wheel
+
+# Clean install approach - remove conflicting packages first
+print_status "Cleaning up conflicting packages..."
+pip uninstall -y numpy networkx thinc 2>/dev/null || true
 
 # Install core dependencies first
 print_status "Installing core dependencies..."
 pip install fastapi uvicorn python-dotenv requests
 
+# Install compatible numpy version first
+print_status "Installing compatible numpy version..."
+pip install "numpy>=1.21.0,<2.0.0" --force-reinstall
+
+# Install compatible networkx version
+print_status "Installing compatible networkx version..."
+pip install "networkx>=2.5.0,<3.0.0" --force-reinstall
+
 # Install audio processing dependencies
 print_status "Installing audio processing dependencies..."
-pip install "numpy>=1.21.0,<2.0.0" soundfile librosa pydub scipy
+pip install soundfile librosa pydub scipy
 
-# Install TTS dependencies step by step
+# Install TTS dependencies step by step with compatible versions
 print_status "Installing TTS dependencies..."
 pip install aiohttp anyascii bangla bnnumerizer
 # Skip bnnunicodenormalizer - not available
@@ -525,22 +537,32 @@ pip install "pandas<2.0,>=1.4" pypinyin pysbd pyyaml
 pip install scikit-learn "spacy[ja]>=3" tqdm trainer transformers
 pip install umap-learn unidecode
 
+# Install compatible thinc version
+print_status "Installing compatible thinc version..."
+pip install "thinc>=8.3.0,<8.4.0" --force-reinstall
+
 # Install TTS package with dependency resolution
 print_status "Installing TTS package..."
 pip install TTS==0.21.3 --no-deps || pip install TTS==0.21.3 --force-reinstall --no-deps
 
-# Install remaining TTS dependencies that might be missing
-print_status "Installing any remaining TTS dependencies..."
+# Final dependency check and fix
+print_status "Final dependency check and fix..."
 pip install --upgrade pip
 pip install --no-deps -r requirements.txt || true
 
 # Install PyTorch with CUDA support if GPU available
 if lspci | grep -i nvidia &> /dev/null; then
     print_status "Installing PyTorch with CUDA support..."
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 --force-reinstall
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 --force-reinstall --no-deps
+    # Reinstall compatible dependencies
+    pip install "numpy>=1.21.0,<2.0.0" --force-reinstall
+    pip install "networkx>=2.5.0,<3.0.0" --force-reinstall
 else
     print_status "Installing PyTorch CPU version..."
-    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --force-reinstall
+    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu --force-reinstall --no-deps
+    # Reinstall compatible dependencies
+    pip install "numpy>=1.21.0,<2.0.0" --force-reinstall
+    pip install "networkx>=2.5.0,<3.0.0" --force-reinstall
 fi
 
 # Install remaining dependencies
