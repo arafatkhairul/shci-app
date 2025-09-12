@@ -209,7 +209,21 @@ fi
 
 # Install pip for Python 3.11
 print_status "Installing pip for Python 3.11..."
-curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+# Remove existing pip first to avoid conflicts
+if [ "$EUID" -eq 0 ]; then
+    apt remove -y python3-pip python3.11-pip 2>/dev/null || true
+    apt autoremove -y
+else
+    sudo apt remove -y python3-pip python3.11-pip 2>/dev/null || true
+    sudo apt autoremove -y
+fi
+
+# Install pip using ensurepip module
+python3.11 -m ensurepip --upgrade
+
+# Verify pip installation
+PIP_VERSION=$(pip3.11 --version 2>&1 | cut -d' ' -f2)
+print_success "pip installed for Python 3.11: $PIP_VERSION"
 
 # Check for Ollama service
 print_status "Checking for Ollama LLM service..."
