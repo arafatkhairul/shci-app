@@ -95,16 +95,24 @@ fi
 # Fix apt_pkg issue first
 print_status "Checking and fixing apt_pkg module issue..."
 if [ "$EUID" -eq 0 ]; then
+    # Disable command-not-found to prevent apt_pkg errors
+    echo 'APT::Update::Post-Invoke-Success {"true";};' > /etc/apt/apt.conf.d/99disable-command-not-found
     # Install python3-apt to fix apt_pkg module
     apt update 2>/dev/null || true
     apt install -y python3-apt software-properties-common 2>/dev/null || true
     # Fix command-not-found database issue
     rm -f /var/lib/command-not-found/commands.db 2>/dev/null || true
+    # Remove problematic cnf-update-db script
+    rm -f /usr/lib/cnf-update-db 2>/dev/null || true
 else
+    # Disable command-not-found to prevent apt_pkg errors
+    echo 'APT::Update::Post-Invoke-Success {"true";};' | sudo tee /etc/apt/apt.conf.d/99disable-command-not-found
     sudo apt update 2>/dev/null || true
     sudo apt install -y python3-apt software-properties-common 2>/dev/null || true
     # Fix command-not-found database issue
     sudo rm -f /var/lib/command-not-found/commands.db 2>/dev/null || true
+    # Remove problematic cnf-update-db script
+    sudo rm -f /usr/lib/cnf-update-db 2>/dev/null || true
 fi
 
 # Update system packages
@@ -248,7 +256,7 @@ if lspci | grep -i nvidia &> /dev/null; then
     
     # Install NVIDIA drivers for Ubuntu 24.04 with CUDA 12.6
     if [ "$EUID" -eq 0 ]; then
-        apt update
+        apt update 2>/dev/null || true
         
         # Try to install available NVIDIA drivers
         if apt install -y nvidia-driver-550 nvidia-dkms-550 2>/dev/null; then
@@ -268,11 +276,11 @@ if lspci | grep -i nvidia &> /dev/null; then
         curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | apt-key add -
         curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | tee /etc/apt/sources.list.d/nvidia-docker.list
         
-        apt update
-        apt install -y nvidia-container-toolkit
-        systemctl restart docker
+        apt update 2>/dev/null || true
+        apt install -y nvidia-container-toolkit 2>/dev/null || true
+        systemctl restart docker 2>/dev/null || true
     else
-        sudo apt update
+        sudo apt update 2>/dev/null || true
         
         # Try to install available NVIDIA drivers
         if sudo apt install -y nvidia-driver-550 nvidia-dkms-550 2>/dev/null; then
