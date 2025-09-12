@@ -161,6 +161,28 @@ if command -v apt &> /dev/null; then
     apt update
     
     print_success "PPA added successfully using alternative method"
+    
+    # Now install Python 3.11.9 specifically
+    print_status "Installing Python 3.11.9 specifically..."
+    apt install -y python3.11=3.11.9-1+build1 python3.11-dev=3.11.9-1+build1 python3.11-venv=3.11.9-1+build1 python3.11-distutils=3.11.9-1+build1
+    
+    # Verify installation
+    PYTHON_VERSION=$(python3.11 --version 2>&1 | cut -d' ' -f2)
+    if [[ "$PYTHON_VERSION" == "3.11.9" ]]; then
+        print_success "Python 3.11.9 installed successfully: $PYTHON_VERSION"
+        
+        # Create symlinks
+        ln -sf /usr/bin/python3.11 /usr/bin/python
+        ln -sf /usr/bin/python3.11 /usr/bin/python3
+        print_success "Python symlinks created: python -> python3.11"
+        
+        # Install pip
+        curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+        print_success "pip installed for Python 3.11.9"
+    else
+        print_warning "Python 3.11.9 not found, installed version: $PYTHON_VERSION"
+    fi
+    
     exit 0
 fi
 

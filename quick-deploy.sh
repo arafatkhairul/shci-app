@@ -66,20 +66,58 @@ else
         nodejs npm python3-pip python3-venv
 fi
 
-# Install Python 3.11.9
-print_status "Installing Python 3.11.9..."
+# Install Python 3.11.9 specifically
+print_status "Installing Python 3.11.9 specifically..."
 if [ "$EUID" -eq 0 ]; then
     add-apt-repository ppa:deadsnakes/ppa -y
     apt update
-    apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
-    ln -sf /usr/bin/python3.11 /usr/bin/python
-    ln -sf /usr/bin/python3.11 /usr/bin/python3
+    
+    # Install only Python 3.11.9 specific packages
+    apt install -y python3.11=3.11.9-1+build1 python3.11-dev=3.11.9-1+build1 python3.11-venv=3.11.9-1+build1 python3.11-distutils=3.11.9-1+build1
+    
+    # Verify Python 3.11.9 installation
+    PYTHON_VERSION=$(python3.11 --version 2>&1 | cut -d' ' -f2)
+    if [[ "$PYTHON_VERSION" == "3.11.9" ]]; then
+        print_success "Python 3.11.9 installed successfully: $PYTHON_VERSION"
+    else
+        print_warning "Python 3.11.9 not found, installing latest 3.11..."
+        apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
+    fi
+    
+    # Create symlinks only if Python 3.11.9 is available
+    if command -v python3.11 &> /dev/null; then
+        ln -sf /usr/bin/python3.11 /usr/bin/python
+        ln -sf /usr/bin/python3.11 /usr/bin/python3
+        print_success "Python symlinks created: python -> python3.11"
+    else
+        print_error "Python 3.11 installation failed"
+        exit 1
+    fi
 else
     sudo add-apt-repository ppa:deadsnakes/ppa -y
     sudo apt update
-    sudo apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
-    sudo ln -sf /usr/bin/python3.11 /usr/bin/python
-    sudo ln -sf /usr/bin/python3.11 /usr/bin/python3
+    
+    # Install only Python 3.11.9 specific packages
+    sudo apt install -y python3.11=3.11.9-1+build1 python3.11-dev=3.11.9-1+build1 python3.11-venv=3.11.9-1+build1 python3.11-distutils=3.11.9-1+build1
+    
+    # Verify Python 3.11.9 installation
+    PYTHON_VERSION=$(python3.11 --version 2>&1 | cut -d' ' -f2)
+    if [[ "$PYTHON_VERSION" == "3.11.9" ]]; then
+        print_success "Python 3.11.9 installed successfully: $PYTHON_VERSION"
+    else
+        print_warning "Python 3.11.9 not found, installing latest 3.11..."
+        sudo apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
+    fi
+    
+    # Create symlinks only if Python 3.11.9 is available
+    if command -v python3.11 &> /dev/null; then
+        sudo ln -sf /usr/bin/python3.11 /usr/bin/python
+        sudo ln -sf /usr/bin/python3.11 /usr/bin/python3
+        print_success "Python symlinks created: python -> python3.11"
+    else
+        print_error "Python 3.11 installation failed"
+        exit 1
+    fi
 fi
 
 # Install pip
