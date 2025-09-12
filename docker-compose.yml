@@ -16,6 +16,10 @@ services:
       - TORCH_DEVICE=cuda
       - TTS_DEVICE=cuda
       - WHISPER_DEVICE=cuda
+      - LLM_API_URL=http://host.docker.internal:11434/v1/chat/completions
+      - LLM_MODEL=qwen2.5-14b-gpu
+      - LLM_TIMEOUT=10.0
+      - LLM_RETRIES=1
     volumes:
       - ./fastapi-backend:/app
       - ./Models:/app/Models

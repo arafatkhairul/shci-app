@@ -63,6 +63,16 @@ if ! command -v docker-compose &> /dev/null; then
     sudo chmod +x /usr/local/bin/docker-compose
 fi
 
+# Check for Ollama service
+print_status "Checking for Ollama LLM service..."
+if curl -s http://localhost:11434/api/tags &> /dev/null; then
+    print_status "Ollama service detected and running!"
+    print_status "LLM will use external Ollama service"
+else
+    print_warning "Ollama service not detected on localhost:11434"
+    print_warning "Please ensure Ollama is running for LLM functionality"
+fi
+
 # Check for GPU and install NVIDIA Docker support
 print_status "Checking for GPU support..."
 if lspci | grep -i nvidia &> /dev/null; then
