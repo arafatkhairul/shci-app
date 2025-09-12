@@ -33,6 +33,41 @@ print_error() {
     echo -e "${RED}❌ $1${NC}"
 }
 
+# SSH Safety Function
+ensure_ssh_safety() {
+    print_warning "🔒 Ensuring SSH port 22 is protected..."
+    
+    if [ "$EUID" -eq 0 ]; then
+        # Allow SSH with multiple methods for redundancy
+        ufw allow 22/tcp
+        ufw allow ssh
+        ufw allow out 22/tcp
+        
+        # Verify SSH is allowed
+        if ufw status | grep -q "22/tcp.*ALLOW"; then
+            print_status "✅ SSH port 22 is protected"
+        else
+            print_error "❌ SSH port not protected! Adding again..."
+            ufw allow 22/tcp
+            ufw allow ssh
+        fi
+    else
+        # Allow SSH with multiple methods for redundancy
+        sudo ufw allow 22/tcp
+        sudo ufw allow ssh
+        sudo ufw allow out 22/tcp
+        
+        # Verify SSH is allowed
+        if sudo ufw status | grep -q "22/tcp.*ALLOW"; then
+            print_status "✅ SSH port 22 is protected"
+        else
+            print_error "❌ SSH port not protected! Adding again..."
+            sudo ufw allow 22/tcp
+            sudo ufw allow ssh
+        fi
+    fi
+}
+
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then
     print_warning "Running as root user. This is supported but not recommended for security."
@@ -140,16 +175,38 @@ fi
 
 # Configure firewall
 print_status "Configuring firewall..."
+
+# Ensure SSH safety first
+ensure_ssh_safety
+
 if [ "$EUID" -eq 0 ]; then
-    ufw allow ssh
+    # Allow web ports
     ufw allow 80/tcp
     ufw allow 443/tcp
+    
+    # Enable firewall
     ufw --force enable
+    
+    # Final SSH verification
+    ensure_ssh_safety
 else
-    sudo ufw allow ssh
+    # Allow web ports
     sudo ufw allow 80/tcp
     sudo ufw allow 443/tcp
+    
+    # Enable firewall
     sudo ufw --force enable
+    
+    # Final SSH verification
+    ensure_ssh_safety
+fi
+
+# Show firewall status
+print_status "Firewall status:"
+if [ "$EUID" -eq 0 ]; then
+    ufw status numbered
+else
+    sudo ufw status numbered
 fi
 
 # Create project directory

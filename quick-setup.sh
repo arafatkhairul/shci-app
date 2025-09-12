@@ -109,10 +109,12 @@ chmod +x deploy.sh
 echo -e "${BLUE}🚀 Starting deployment...${NC}"
 echo "This will:"
 echo "• Install NVIDIA Docker support (if GPU detected)"
-echo "• Configure firewall"
+echo "• Configure firewall (SSH port 22 will be protected)"
 echo "• Build and start containers"
 echo "• Setup SSL certificates"
 echo "• Configure auto-start service"
+echo ""
+echo -e "${YELLOW}🔒 SSH Safety: Port 22 will be explicitly allowed before enabling firewall${NC}"
 echo ""
 
 read -p "Continue with deployment? (y/n): " -n 1 -r
