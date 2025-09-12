@@ -133,9 +133,13 @@ else
     sudo apt install -y curl wget git nginx certbot python3-certbot-nginx ufw 2>/dev/null || true
 fi
 
-# Install pyenv and Python 3.11.9
-print_status "Installing pyenv and Python 3.11.9..."
-if [ "$EUID" -eq 0 ]; then
+# Install pyenv and Python 3.11.9 (if needed)
+if [ "$SKIP_PYENV_INSTALL" = "true" ]; then
+    print_success "✅ Skipping pyenv installation - Python 3.11.9 already configured"
+    print_status "Using existing pyenv Python 3.11.9 installation"
+else
+    print_status "Installing pyenv and Python 3.11.9..."
+    if [ "$EUID" -eq 0 ]; then
     # Install dependencies for pyenv
     apt update 2>/dev/null || true
     apt install -y make build-essential libssl-dev zlib1g-dev \
@@ -199,14 +203,30 @@ else
     sudo ln -sf $HOME/.pyenv/versions/3.11.9/bin/python3.11 /usr/local/bin/python3.11
     sudo ln -sf $HOME/.pyenv/versions/3.11.9/bin/pip /usr/local/bin/pip
     sudo ln -sf $HOME/.pyenv/versions/3.11.9/bin/pip3 /usr/local/bin/pip3
+    fi
 fi
 
 # Verify Python installation
 print_status "Verifying Python 3.11.9 installation..."
+if [ "$SKIP_PYENV_INSTALL" = "true" ]; then
+    print_status "Verifying existing pyenv Python 3.11.9 installation..."
+    # Ensure pyenv is sourced
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init -)" 2>/dev/null || true
+fi
+
 python --version
 python3 --version
 python3.11 --version
 pip --version
+
+# Show pyenv status
+if command -v pyenv &> /dev/null; then
+    print_status "pyenv global version: $(pyenv global)"
+    print_status "pyenv versions installed:"
+    pyenv versions
+fi
 
 # Install Node.js and npm
 print_status "Installing Node.js and npm..."
@@ -224,6 +244,31 @@ print_status "Python 3.11.9 installed via pyenv - skipping system Python install
 
 # pip is already installed with pyenv Python 3.11.9
 print_status "pip is already installed with pyenv Python 3.11.9"
+
+# Check pyenv global version
+print_status "Checking pyenv global Python version..."
+if command -v pyenv &> /dev/null; then
+    # Source pyenv if not already sourced
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init -)" 2>/dev/null || true
+    
+    CURRENT_PYENV_VERSION=$(pyenv global 2>/dev/null || echo "none")
+    print_status "Current pyenv global version: $CURRENT_PYENV_VERSION"
+    
+    if [ "$CURRENT_PYENV_VERSION" = "3.11.9" ]; then
+        print_success "✅ pyenv global 3.11.9 is already set!"
+        print_status "Using existing pyenv Python 3.11.9 installation"
+        SKIP_PYENV_INSTALL=true
+    else
+        print_warning "⚠️  pyenv global is not set to 3.11.9 (current: $CURRENT_PYENV_VERSION)"
+        print_status "Will install and configure pyenv with Python 3.11.9"
+        SKIP_PYENV_INSTALL=false
+    fi
+else
+    print_warning "⚠️  pyenv not found - will install pyenv and Python 3.11.9"
+    SKIP_PYENV_INSTALL=false
+fi
 
 # Check for Ollama service
 print_status "Checking for Ollama LLM service..."
