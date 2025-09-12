@@ -518,7 +518,7 @@ fi
 
 # Install remaining dependencies
 print_status "Installing remaining dependencies..."
-pip install numpy>=1.21.0,<2.0.0 --force-reinstall
+pip install "numpy>=1.21.0,<2.0.0" --force-reinstall
 pip install soundfile librosa pydub scipy --force-reinstall
 
 # Setup frontend environment
