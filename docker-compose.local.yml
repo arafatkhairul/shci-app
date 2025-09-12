@@ -9,6 +9,8 @@ services:
     container_name: shci-backend-local
     ports:
       - "8000:8000"
+    env_file:
+      - env.local
     environment:
       - PYTHONPATH=/app
       - ENVIRONMENT=development
@@ -42,6 +44,8 @@ services:
     container_name: shci-frontend-local
     ports:
       - "3000:3000"
+    env_file:
+      - env.local
     environment:
       - NODE_ENV=development
       - NEXT_PUBLIC_API_BASE_URL=http://localhost:8000

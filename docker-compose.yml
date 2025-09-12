@@ -1,9 +1,5 @@
 version: '3.8'
 
-# Load environment variables from .env.production file
-env_file:
-  - .env.production
-
 services:
   # FastAPI Backend Service
   backend:
@@ -13,6 +9,8 @@ services:
     container_name: shci-backend
     ports:
       - "8000:8000"
+    env_file:
+      - .env.production
     environment:
       - PYTHONPATH=/app
       - ENVIRONMENT=${ENVIRONMENT:-production}
@@ -53,6 +51,8 @@ services:
     container_name: shci-frontend
     ports:
       - "3000:3000"
+    env_file:
+      - .env.production
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-https://nodecel.cloud}
