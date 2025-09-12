@@ -22,7 +22,7 @@ EMAIL="office.khairul@gmail.com"  # Your email
 echo -e "${BLUE}🚀 Starting SHCI Complete Deployment${NC}"
 echo "============================================="
 echo -e "${YELLOW}⚠️  WARNING: This script will remove existing Python versions${NC}"
-echo -e "${YELLOW}   and install only Python 3.11.9${NC}"
+echo -e "${YELLOW}   and install only Python 3.11 (latest available)${NC}"
 echo ""
 
 # Function to print status
@@ -130,7 +130,7 @@ if ! command -v node &> /dev/null; then
 fi
 
 # Remove existing Python versions and install only Python 3.11.9
-print_status "Removing existing Python versions and installing only Python 3.11.9..."
+print_status "Removing existing Python versions and installing only Python 3.11..."
 if [ "$EUID" -eq 0 ]; then
     # Remove existing Python versions
     print_status "Removing existing Python installations..."
@@ -141,20 +141,19 @@ if [ "$EUID" -eq 0 ]; then
     add-apt-repository ppa:deadsnakes/ppa -y
     apt update
     
-    # Install only Python 3.11.9 specific packages
-    print_status "Installing Python 3.11.9 specifically..."
-    apt install -y python3.11=3.11.9-1+build1 python3.11-dev=3.11.9-1+build1 python3.11-venv=3.11.9-1+build1 python3.11-distutils=3.11.9-1+build1
+    # Check available Python 3.11 versions
+    print_status "Checking available Python 3.11 versions..."
+    apt-cache policy python3.11 | grep -E "Installed|Candidate|Version table"
     
-    # Verify Python 3.11.9 installation
+    # Install latest available Python 3.11 (not specific version)
+    print_status "Installing latest available Python 3.11..."
+    apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
+    
+    # Verify Python 3.11 installation
     PYTHON_VERSION=$(python3.11 --version 2>&1 | cut -d' ' -f2)
-    if [[ "$PYTHON_VERSION" == "3.11.9" ]]; then
-        print_success "Python 3.11.9 installed successfully: $PYTHON_VERSION"
-    else
-        print_warning "Python 3.11.9 not found, installing latest 3.11..."
-        apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
-    fi
+    print_success "Python 3.11 installed successfully: $PYTHON_VERSION"
     
-    # Create symlinks only if Python 3.11.9 is available
+    # Create symlinks
     if command -v python3.11 &> /dev/null; then
         ln -sf /usr/bin/python3.11 /usr/bin/python
         ln -sf /usr/bin/python3.11 /usr/bin/python3
@@ -179,20 +178,19 @@ else
     sudo add-apt-repository ppa:deadsnakes/ppa -y
     sudo apt update
     
-    # Install only Python 3.11.9 specific packages
-    print_status "Installing Python 3.11.9 specifically..."
-    sudo apt install -y python3.11=3.11.9-1+build1 python3.11-dev=3.11.9-1+build1 python3.11-venv=3.11.9-1+build1 python3.11-distutils=3.11.9-1+build1
+    # Check available Python 3.11 versions
+    print_status "Checking available Python 3.11 versions..."
+    apt-cache policy python3.11 | grep -E "Installed|Candidate|Version table"
     
-    # Verify Python 3.11.9 installation
+    # Install latest available Python 3.11 (not specific version)
+    print_status "Installing latest available Python 3.11..."
+    sudo apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
+    
+    # Verify Python 3.11 installation
     PYTHON_VERSION=$(python3.11 --version 2>&1 | cut -d' ' -f2)
-    if [[ "$PYTHON_VERSION" == "3.11.9" ]]; then
-        print_success "Python 3.11.9 installed successfully: $PYTHON_VERSION"
-    else
-        print_warning "Python 3.11.9 not found, installing latest 3.11..."
-        sudo apt install -y python3.11 python3.11-dev python3.11-venv python3.11-distutils
-    fi
+    print_success "Python 3.11 installed successfully: $PYTHON_VERSION"
     
-    # Create symlinks only if Python 3.11.9 is available
+    # Create symlinks
     if command -v python3.11 &> /dev/null; then
         sudo ln -sf /usr/bin/python3.11 /usr/bin/python
         sudo ln -sf /usr/bin/python3.11 /usr/bin/python3

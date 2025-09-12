@@ -6,7 +6,7 @@ This project now uses a single deployment script (`deploy.sh`) that handles ever
 
 ## ⚠️ Important Warning
 
-**This script will remove existing Python versions and install only Python 3.11.9**
+**This script will remove existing Python versions and install only Python 3.11 (latest available)**
 
 ## Quick Deployment
 
@@ -31,12 +31,12 @@ chmod +x deploy.sh
 
 ### 🐍 Python Management
 - **Removes existing Python versions** (python3, python3.12, etc.)
-- **Installs only Python 3.11.9** specifically
+- **Installs only Python 3.11** (latest available version)
 - Creates symlinks: `python` → `python3.11`
-- Installs pip for Python 3.11.9
+- Installs pip for Python 3.11
 
 ### 🚀 Application Deployment
-- Sets up backend (FastAPI) with Python 3.11.9
+- Sets up backend (FastAPI) with Python 3.11
 - Sets up frontend (Next.js) 
 - Creates systemd services for auto-start
 - Configures Nginx reverse proxy
@@ -88,7 +88,7 @@ sudo systemctl restart shci-backend.service shci-frontend.service
 If you encounter issues:
 
 1. **Check logs**: `sudo journalctl -u shci-backend.service -f`
-2. **Verify Python**: `python --version` (should show 3.11.9)
+2. **Verify Python**: `python --version` (should show 3.11.x)
 3. **Check services**: `sudo systemctl status shci-backend.service`
 4. **Test connectivity**: `curl https://nodecel.cloud/health`
 
