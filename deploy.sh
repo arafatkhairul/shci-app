@@ -626,7 +626,7 @@ pip install fastapi uvicorn python-dotenv requests
 
 # Install compatible numpy version first
 print_status "Installing compatible numpy version..."
-pip install "numpy>=1.21.0,<2.0.0" --force-reinstall
+pip install "numpy>=1.24.0,<2.0.0" --force-reinstall
 
 # Install compatible networkx version
 print_status "Installing compatible networkx version..."
@@ -671,7 +671,7 @@ fi
 
 # Fix all dependency conflicts after PyTorch installation
 print_status "Fixing all dependency conflicts after PyTorch installation..."
-pip install "numpy>=1.21.0,<2.0.0" --force-reinstall
+pip install "numpy>=1.24.0,<2.0.0" --force-reinstall
 pip install "networkx>=2.5.0,<3.0.0" --force-reinstall
 pip install "typing_extensions>=4.14.0" --force-reinstall
 pip install "thinc>=8.3.0,<8.4.0" --force-reinstall
@@ -692,7 +692,7 @@ pip install webrtcvad_wheels websocket_client pyttsx3
 # Final dependency verification and conflict resolution
 print_status "Final dependency verification and conflict resolution..."
 pip install --upgrade pip
-pip install --force-reinstall "numpy>=1.21.0,<2.0.0"
+pip install --force-reinstall "numpy>=1.24.0,<2.0.0"
 pip install --force-reinstall "networkx>=2.5.0,<3.0.0"
 pip install --force-reinstall "typing_extensions>=4.14.0"
 pip install --force-reinstall "thinc>=8.3.0,<8.4.0"
