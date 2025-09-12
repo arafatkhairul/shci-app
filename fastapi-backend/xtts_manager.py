@@ -1089,11 +1089,11 @@ class XTTSManager:
                     
                     if inference_context:
                         with inference_context:
-                        # Enable AMP autocast if available
-                        if self.use_amp and self.device == "cuda":
-                            # Use FP32 for numerical stability
-                            amp_dtype = torch.float32
-                            with torch.autocast(device_type='cuda', dtype=amp_dtype):
+                            # Enable AMP autocast if available
+                            if self.use_amp and self.device == "cuda":
+                                # Use FP32 for numerical stability
+                                amp_dtype = torch.float32
+                                with torch.autocast(device_type='cuda', dtype=amp_dtype):
                                     # Use cached latent or compute new one
                                     if speaker_wav_param and cached_latent is not None:
                                         # Use cached speaker latent for faster synthesis
