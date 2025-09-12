@@ -162,6 +162,16 @@ else
     print_warning "NVIDIA driver detection script not found"
 fi
 
+# Fix 11: Verify Python 3.11.9 installation
+print_status "Verifying Python 3.11.9 installation..."
+if [ -f "verify-python-version.sh" ]; then
+    chmod +x verify-python-version.sh
+    ./verify-python-version.sh
+    print_success "Python 3.11.9 verification completed"
+else
+    print_warning "Python verification script not found"
+fi
+
 echo ""
 print_success "🎉 Server quick fix completed!"
 echo ""

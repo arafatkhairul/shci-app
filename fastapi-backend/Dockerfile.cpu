@@ -1,15 +1,20 @@
 # Step 1: Python base image (CPU-only) for Ubuntu 24.04 compatibility
-FROM python:3.11-slim
+FROM ubuntu:24.04
 
-# Step 2: Install system dependencies
+# Step 2: Install Python 3.11.9 and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
     build-essential gcc g++ make \
     portaudio19-dev libasound2-dev \
     ffmpeg libsndfile1 \
     curl \
     wget \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    && add-apt-repository ppa:deadsnakes/ppa -y \
+    && apt-get update \
+    && apt-get install -y python3.11 python3.11-dev python3.11-venv python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /usr/bin/python3.11 /usr/bin/python
 
 # Step 3: Set working directory
 WORKDIR /app

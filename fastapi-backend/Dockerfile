@@ -3,11 +3,14 @@ FROM nvidia/cuda:12.6.0-devel-ubuntu24.04
 
 # Step 2: Install Python and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 python3.11-dev python3-pip \
+    software-properties-common \
     build-essential gcc g++ make \
     portaudio19-dev libasound2-dev \
     ffmpeg libsndfile1 \
     curl \
+    && add-apt-repository ppa:deadsnakes/ppa -y \
+    && apt-get update \
+    && apt-get install -y python3.11 python3.11-dev python3.11-venv python3-pip \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/bin/python3.11 /usr/bin/python
 
