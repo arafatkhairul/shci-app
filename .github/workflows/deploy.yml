@@ -13,11 +13,51 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code (optional but good practice)
+      # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: SSH to server and run deployment script
+      # Step 2: Setup Node.js for frontend build
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: web-app/package-lock.json
+
+      # Step 3: Install frontend dependencies
+      - name: Install frontend dependencies
+        run: |
+          cd web-app
+          npm ci
+
+      # Step 4: Build frontend
+      - name: Build frontend
+        run: |
+          cd web-app
+          npm run build
+
+      # Step 5: Setup Python for backend
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      # Step 6: Install backend dependencies
+      - name: Install backend dependencies
+        run: |
+          cd fastapi-backend
+          pip install -r requirements.txt
+
+      # Step 7: Run tests (if any)
+      - name: Run tests
+        run: |
+          echo "Running tests..."
+          # Add your test commands here
+          # cd web-app && npm test
+          # cd fastapi-backend && python -m pytest
+
+      # Step 8: SSH to server and run deployment script
       - name: SSH and run deployment script
         uses: appleboy/ssh-action@master
         with:
@@ -27,4 +67,16 @@ jobs:
           script: |
             # Full path to your deployment script on the server
             # Make sure deploy.sh file has execute permission (chmod +x deploy.sh)
+            echo "🚀 Starting deployment..."
             bash /root/shci-app/deploy.sh
+            echo "✅ Deployment completed successfully!"
+
+      # Step 9: Notify deployment status
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "🎉 Deployment successful!"
+          else
+            echo "❌ Deployment failed!"
+          fi
