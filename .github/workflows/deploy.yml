@@ -1,24 +1,23 @@
-# Workflow
+# GitHub Actions Workflow for Production Deployment
 name: Deploy to Production Server
 
-
+# Trigger on push to main branch
 on:
   push:
     branches:
       - main
 
-
 jobs:
   deploy:
-    # কোন মেশিনে চলবে (GitHub-এর একটি ভার্চুয়াল মেশিন)
+    # Run on GitHub's virtual machine
     runs-on: ubuntu-latest
 
     steps:
-      # ১. কোড চেকআউট করা (ঐচ্ছিক কিন্তু ভালো অভ্যাস)
+      # Step 1: Checkout code (optional but good practice)
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ২. সার্ভারে SSH করে ডেপ্লয়মেন্ট স্ক্রিপ্ট চালানো
+      # Step 2: SSH to server and run deployment script
       - name: SSH and run deployment script
         uses: appleboy/ssh-action@master
         with:
@@ -26,6 +25,6 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # সার্ভারে থাকা আপনার ডেপ্লয়মেন্ট স্ক্রিপ্টটির সম্পূর্ণ পাথ
-            # নিশ্চিত করুন যে deploy.sh ফাইলটির execute পারমিশন আছে (chmod +x deploy.sh)
+            # Full path to your deployment script on the server
+            # Make sure deploy.sh file has execute permission (chmod +x deploy.sh)
             bash /root/shci-app/deploy.sh
