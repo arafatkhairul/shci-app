@@ -1,0 +1,31 @@
+# Workflow
+name: Deploy to Production Server
+
+
+on:
+  push:
+    branches:
+      - main
+
+
+jobs:
+  deploy:
+    # কোন মেশিনে চলবে (GitHub-এর একটি ভার্চুয়াল মেশিন)
+    runs-on: ubuntu-latest
+
+    steps:
+      # ১. কোড চেকআউট করা (ঐচ্ছিক কিন্তু ভালো অভ্যাস)
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ২. সার্ভারে SSH করে ডেপ্লয়মেন্ট স্ক্রিপ্ট চালানো
+      - name: SSH and run deployment script
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # সার্ভারে থাকা আপনার ডেপ্লয়মেন্ট স্ক্রিপ্টটির সম্পূর্ণ পাথ
+            # নিশ্চিত করুন যে deploy.sh ফাইলটির execute পারমিশন আছে (chmod +x deploy.sh)
+            bash /root/shci-app/deploy.sh
