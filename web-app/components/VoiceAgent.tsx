@@ -1253,7 +1253,7 @@ export default function VoiceAgent() {
             return `${WS_BASE_URL}/ws`;
         } else {
             // Production: Use production WebSocket server
-            return `${WS_PRODUCTION_URL}/ws`;
+            return `${WS_BASE_URL}/ws`;
         }
     };
 
@@ -2319,50 +2319,47 @@ export default function VoiceAgent() {
                 {siriMode && <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-blue-500/20 animate-pulse" />}
             </div>
 
-            {/* Boxed Layout Container */}
-            <div className=" flex items-center justify-center p-4 sm:p-6 lg:p-8">
-                <div className="w-full max-w-7xl rounded-3xl shadow-2xl overflow-hidden">
-                    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 relative">
-                {/* Minimal Enhanced Navbar */}
-                <div className="bg-white/[0.02] backdrop-blur-sm rounded-xl border border-white/10 p-4 mb-6">
+            {/* Mobile-Optimized Layout Container */}
+            <div className="flex items-center justify-center p-2 sm:p-4 md:p-6 lg:p-8">
+                <div className="w-full max-w-7xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden">
+                    <div className="max-w-6xl mx-auto px-2 sm:px-4 md:px-6 py-3 sm:py-6 md:py-8 relative">
+                {/* Minimal Professional Navbar */}
+                <div className="bg-white/[0.01] backdrop-blur-sm rounded-lg border border-white/5 p-2 sm:p-3 mb-3 sm:mb-4">
                     {/* Main Header Row */}
-                    <div className="flex items-center justify-between mb-4">
-                    {/* Logo & Title Section */}
-                        <div className="flex items-center gap-3">
-                        <div className="relative group">
-                                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-600 to-blue-600 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-105">
-                                    <Bot className="h-6 w-6 text-white" />
+                    <div className="flex items-center justify-between">
+                    {/* Minimal Logo & Title */}
+                        <div className="flex items-center gap-2">
+                        <div className="relative">
+                                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                                    <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                             </div>
                             {connected && (
-                                <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-400 rounded-full border-2 border-black animate-pulse shadow-lg" />
+                                <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border border-black" />
                             )}
                         </div>
-                        <div className="flex flex-col">
-                            <h1 className="text-2xl font-bold text-white tracking-tight">
+                        <div>
+                            <h1 className="text-base sm:text-lg font-semibold text-white">
                                 {currentLang.labels.title}
                             </h1>
-                                <div className="flex items-center gap-2 mt-0.5">
-                                    <Brain className="h-3 w-3 text-indigo-400" />
-                                    <span className="text-xs text-zinc-400 font-medium">
-                                    {currentLang.labels.subtitle}
-                                </span>
-                            </div>
+                            <span className="text-xs text-zinc-500">
+                                {currentLang.labels.subtitle}
+                            </span>
                         </div>
                     </div>
 
-                        {/* Language Dropdown */}
+                        {/* Minimal Language Dropdown */}
                         <div className="relative" ref={languageDropdownRef}>
                         <button
                                 onClick={() => setIsLanguageDropdownOpen(!isLanguageDropdownOpen)}
-                                className="group flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.05] backdrop-blur-sm border border-white/15 hover:bg-white/[0.08] hover:border-white/25 transition-all duration-300"
+                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/[0.03] border border-white/10 hover:bg-white/[0.05] transition-colors"
                         >
-                                <div className="text-lg group-hover:scale-110 transition-transform duration-300">
+                                <div className="text-sm">
                                 {selectedLanguage === "en" ? languages.en.flag : languages.it.flag}
                             </div>
-                                <span className="text-sm font-semibold text-white">
+                                <span className="text-xs font-medium text-white">
                                     {selectedLanguage === "en" ? languages.en.name : languages.it.name}
                                 </span>
-                                <FaChevronDown className={`h-3 w-3 text-zinc-400 group-hover:text-zinc-300 transition-all duration-300 ${
+                                <FaChevronDown className={`h-2 w-2 text-zinc-400 ${
                                     isLanguageDropdownOpen ? 'rotate-180' : ''
                                 }`} />
                             </button>
@@ -2432,26 +2429,26 @@ export default function VoiceAgent() {
                         </div>
                     </div>
 
-                    {/* Controls Section */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Minimal Controls Section */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3">
 
-                        {/* Difficulty Level Section */}
-                        <div className="bg-white/[0.02] backdrop-blur-sm rounded-xl border border-white/10 p-4">
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
-                                    <FaGraduationCap className="h-4 w-4 text-indigo-400" />
+                        {/* Minimal Difficulty Level */}
+                        <div className="bg-white/[0.01] backdrop-blur-sm rounded-lg border border-white/5 p-2 sm:p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                                <div className="p-1.5 rounded-md bg-indigo-500/10">
+                                    <FaGraduationCap className="h-3 w-3 text-indigo-400" />
                                 </div>
                                 <div>
-                                    <h3 className="text-sm font-semibold text-white">
+                                    <h3 className="text-xs font-semibold text-white">
                                         {currentLang.labels.difficultyLevel}
                                     </h3>
-                                    <p className="text-xs text-zinc-400">
+                                    <p className="text-xs text-zinc-500">
                                     {currentLang.labels.difficultyLevelDesc}
                                 </p>
                                 </div>
                             </div>
 
-                            <div className="flex gap-2">
+                            <div className="flex gap-1">
                                 {(["starter", "medium", "advanced"] as const).map((lvl, index) => {
                                     const icons = [FaStar, FaStarHalfAlt, FaStarOfLife];
                                     const IconComponent = icons[index];
@@ -2483,7 +2480,7 @@ export default function VoiceAgent() {
                                         <button
                                             key={lvl}
                                             onClick={() => handleLevelChange(lvl)}
-                                            className={`group relative px-4 py-3 rounded-lg transition-all duration-300 flex items-center gap-2 flex-1 ${
+                                            className={`group relative px-2 py-1.5 rounded-md transition-colors flex items-center gap-1 flex-1 ${
                                                 level === lvl
                                                     ? `${colors[lvl].bg} ${colors[lvl].border} ${colors[lvl].text} shadow-lg border backdrop-blur-sm`
                                                     : "text-zinc-400 hover:text-zinc-300 hover:bg-white/[0.05] border border-white/10 hover:border-white/20"
@@ -2510,15 +2507,15 @@ export default function VoiceAgent() {
                             </div>
                         </div>
 
-                        {/* Role Play Section */}
-                        <div className="bg-white/[0.02] backdrop-blur-sm rounded-lg border border-white/10 p-3">
-                            <div className="flex items-center gap-2 mb-2">
-                                    <FaUserTie className="h-4 w-4 text-emerald-400" />
-                                <h3 className="text-sm font-semibold text-zinc-200">
+                        {/* Minimal Role Play Section */}
+                        <div className="bg-white/[0.01] backdrop-blur-sm rounded-lg border border-white/5 p-2 sm:p-3">
+                            <div className="flex items-center gap-1 mb-2">
+                                    <FaUserTie className="h-3 w-3 text-emerald-400" />
+                                <h3 className="text-xs font-semibold text-zinc-200">
                                         Role Play Mode
                                 </h3>
                                 </div>
-                            <p className="text-xs text-zinc-500 mb-3">
+                            <p className="text-xs text-zinc-500 mb-2">
                                 {userType === 'customer' 
                                     ? "AI acts as staff from your selected organization"
                                     : userType === 'org_owner'
@@ -2776,8 +2773,8 @@ export default function VoiceAgent() {
                     onClose={() => setShowRolePlayAnswers(false)}
                 />
 
-                {/* Voice Control Center with Audio Wave Glow */}
-                <div className="bg-gradient-to-br from-white/[0.03] to-white/[0.01] backdrop-blur-xl rounded-3xl border border-white/15 p-4 sm:p-6 lg:p-8 mb-10 shadow-[0_25px_80px_-25px_rgba(0,0,0,0.9)] relative overflow-hidden">
+                {/* Minimal Voice Control Center */}
+                <div className="bg-gradient-to-br from-white/[0.02] to-white/[0.01] backdrop-blur-xl rounded-xl border border-white/10 p-3 sm:p-4 md:p-6 mb-4 sm:mb-6 relative overflow-hidden">
                     {/* Audio Wave Based Glowing Effects */}
                     {(() => {
                         const isSpeechActive = listening && micLevel > 0.01;
@@ -2992,7 +2989,7 @@ export default function VoiceAgent() {
                                 }}
                                 onMouseDown={(e) => e.stopPropagation()}
                                 onMouseUp={(e) => e.stopPropagation()}
-                                className={`relative z-50 px-6 py-3 rounded-full font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
+                                className={`relative z-50 px-4 py-2 rounded-full font-medium text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer ${
                                     listening 
                                         ? listening && micLevel > 0.01
                                             ? "bg-red-600/20 backdrop-blur-xl text-white hover:bg-red-600/30 shadow-lg"
@@ -3090,45 +3087,42 @@ export default function VoiceAgent() {
                 </div>
 
 
-                {/* Panels */}
-                <div className="grid lg:grid-cols-2 gap-6 lg:gap-8">
-                    {/* Soft Mind-Blowing Voice */}
-                    <div className="group relative rounded-2xl border border-white/8 bg-white/[0.02] backdrop-blur-xl shadow-[0_12px_40px_-12px_rgba(0,0,0,0.8)] overflow-hidden transition-all duration-400 hover:shadow-[0_16px_50px_-12px_rgba(0,0,0,0.9)] hover:border-white/12">
-                        {/* Soft animated background */}
-                        <div className="absolute inset-0 bg-white/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                        
-                        <div className="relative px-5 py-4 border-b border-white/8 bg-white/[0.01]">
+                {/* Minimal Panels */}
+                <div className="grid lg:grid-cols-2 gap-3 sm:gap-4">
+                    {/* Minimal Voice Panel */}
+                    <div className="group relative rounded-lg border border-white/5 bg-white/[0.01] backdrop-blur-xl overflow-hidden transition-colors hover:border-white/10">
+                        <div className="relative px-3 py-3 border-b border-white/5">
                             <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2">
                                     {/* Soft Icon */}
                                     <div className="relative">
-                                        <div className="h-9 w-9 rounded-lg bg-white/[0.05] flex items-center justify-center border border-white/10 shadow-sm group-hover:shadow-md transition-all duration-300">
-                                            <User className="h-4.5 w-4.5 text-zinc-400 group-hover:text-zinc-300 transition-colors duration-300" />
+                                        <div className="h-6 w-6 rounded-md bg-white/[0.03] flex items-center justify-center border border-white/5 transition-colors">
+                                            <User className="h-3 w-3 text-zinc-400" />
                                         </div>
                                     </div>
                                     
                                     <div>
-                                        <h3 className="text-lg font-semibold text-zinc-200 mb-0.5 group-hover:text-zinc-100 transition-colors duration-300">
+                                        <h3 className="text-sm font-medium text-zinc-200">
                                             {currentLang.labels.yourVoice}
                                         </h3>
-                                        <p className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors duration-300">
+                                        <p className="text-xs text-zinc-500">
                                             {currentLang.labels.yourVoiceDesc}
                                         </p>
                                     </div>
                                 </div>
                                 
-                                {/* Soft Status Indicators */}
-                                <div className="flex items-center gap-2">
+                                {/* Minimal Status Indicators */}
+                                <div className="flex items-center gap-1">
                                     {(useWebkitVAD || useFallbackVAD) && (
-                                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/8 shadow-sm">
-                                            <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-                                            <span className="text-xs font-medium text-emerald-300">STT</span>
+                                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
+                                            <div className="w-1 h-1 bg-emerald-400 rounded-full" />
+                                            <span className="text-xs text-emerald-300">STT</span>
                                         </div>
                                     )}
                                     {listening && (
-                                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/8 shadow-sm">
-                                            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-                                            <span className="text-xs font-medium text-blue-300">Live</span>
+                                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
+                                            <div className="w-1 h-1 bg-blue-400 rounded-full" />
+                                            <span className="text-xs text-blue-300">Live</span>
                                         </div>
                                     )}
                                 </div>
@@ -3413,48 +3407,46 @@ export default function VoiceAgent() {
                     </div>
                 </div>
 
-                {/* Footer */}
-                <div className="mt-12 text-center px-4">
-                    <div className="grid gap-3 sm:gap-4 md:gap-6 mb-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 place-items-stretch max-w-6xl mx-auto px-2">
-                        <div className="flex items-center justify-center gap-2 sm:gap-3 bg-white/[0.03] px-3 py-2 sm:px-4 sm:py-2 rounded-xl border border-white/10">
-                            <Headphones className="h-5 w-5 text-emerald-400 shrink-0" aria-hidden="true" />
-                            <span className="text-xs sm:text-sm font-medium leading-tight truncate">
-                                {currentLang.labels.optimalExperience}
+                {/* Minimal Mobile-Optimized Footer */}
+                <div className="mt-6 sm:mt-8 text-center px-2 sm:px-4">
+                    {/* Compact Status Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-3 max-w-4xl mx-auto">
+                        {/* Headphones */}
+                        <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
+                            <Headphones className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400 shrink-0" />
+                            <span className="text-xs font-medium text-zinc-300 truncate">
+                                Optimal
                             </span>
                         </div>
-                        <div className="flex items-center justify-center gap-2 sm:gap-3 bg-white/[0.03] px-3 py-2 sm:px-4 sm:py-2 rounded-xl border border-white/10">
-                            <Mic className="h-5 w-5 text-blue-400 shrink-0" aria-hidden="true" />
-                            <span className="text-xs sm:text-sm font-medium leading-tight truncate">
-                                {currentLang.labels.naturalInterruption}
+                        
+                        {/* Microphone */}
+                        <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
+                            <Mic className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400 shrink-0" />
+                            <span className="text-xs font-medium text-zinc-300 truncate">
+                                Natural
                             </span>
                         </div>
-                        <div className="flex items-center justify-center gap-2 sm:gap-3 bg-white/[0.03] px-3 py-2 sm:px-4 sm:py-2 rounded-xl border border-white/10">
-                            <Activity className="h-5 w-5 text-purple-400 shrink-0" aria-hidden="true" />
-                            <span className="text-xs sm:text-sm font-medium leading-tight truncate">
-                                {currentLang.labels.realTimeProcessing}
+                        
+                        {/* Real-time */}
+                        <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
+                            <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400 shrink-0" />
+                            <span className="text-xs font-medium text-zinc-300 truncate">
+                                Real-time
                             </span>
                         </div>
-                        <div className="flex items-center justify-center gap-2 sm:gap-3 bg-white/[0.03] px-3 py-2 sm:px-4 sm:py-2 rounded-xl border border-white/10">
-                            <Brain className="h-5 w-5 text-indigo-400 shrink-0" aria-hidden="true" />
-                            <span className="text-xs sm:text-sm font-medium leading-tight truncate">
-                                {currentLang.levels[level]} • {currentLang.levels[`${level}Desc` as keyof typeof currentLang.levels]}
-                            </span>
-                        </div>
-
-                        {/* Role Play Status */}
-                        <div className="flex items-center justify-center gap-2 sm:gap-3 bg-white/[0.03] px-3 py-2 sm:px-4 sm:py-2 rounded-xl border border-white/10">
-                            <span className="text-lg">{rolePlayTemplates[rolePlayTemplate].icon}</span>
-                            <span className="text-xs sm:text-sm font-medium leading-tight truncate">
-                                {rolePlayEnabled 
-                                    ? `${rolePlayTemplates[rolePlayTemplate].name} • ${roleTitle}`
-                                    : "Role Play Disabled"
-                                }
+                        
+                        {/* Difficulty Level */}
+                        <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
+                            <Brain className="h-3 w-3 sm:h-4 sm:w-4 text-indigo-400 shrink-0" />
+                            <span className="text-xs font-medium text-zinc-300 truncate">
+                                {currentLang.levels[level]}
                             </span>
                         </div>
                     </div>
 
-                    <p className="text-xs sm:text-sm text-zinc-600 bg-white/5 px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl border border-white/10 inline-block max-w-full">
-                        SHCI Voice Assistant • Professional • Self-Hosted • Intelligent
+                    {/* Minimal Brand Text */}
+                    <p className="text-xs text-zinc-500 bg-white/3 px-3 py-1.5 rounded-lg border border-white/5 inline-block">
+                        SHCI Voice Assistant
                     </p>
                 </div>
                 </div>
