@@ -157,10 +157,14 @@ export class WebkitVADService {
       this.callbacks.onStateChange?.(true);
       console.log('✅ WebkitVADService started successfully');
       
-      // Initialize and start Voice Level monitoring
+      // Initialize and start Voice Level monitoring (disabled on Android Chrome)
       this.initializeVoiceLevelMonitoring().then((success) => {
         if (success) {
           this.startVoiceLevelMonitoring();
+        } else {
+          console.log("📱 Voice level monitoring disabled - using fallback voice level");
+          // Provide a fallback voice level for Android Chrome
+          this.provideFallbackVoiceLevel();
         }
       });
       
@@ -516,6 +520,13 @@ export class WebkitVADService {
     try {
       console.log("🎤 Initializing Voice Level Monitoring...");
       
+      // Check if we're on Android Chrome - disable voice level monitoring to avoid microphone conflict
+      const isAndroidChrome = /Android.*Chrome/.test(navigator.userAgent);
+      if (isAndroidChrome) {
+        console.log("📱 Android Chrome detected - disabling voice level monitoring to prevent microphone conflict");
+        return false;
+      }
+      
       // Get microphone access
       this.microphone = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -714,6 +725,34 @@ export class WebkitVADService {
     }
     
     return Math.min(patternScore, 1.0);
+  }
+
+  /**
+   * Provide fallback voice level for Android Chrome
+   */
+  private provideFallbackVoiceLevel(): void {
+    console.log("📱 Providing fallback voice level for Android Chrome");
+    
+    // Simulate voice level based on speech recognition events
+    let fallbackLevel = 0;
+    const fallbackInterval = setInterval(() => {
+      if (!this.isListening) {
+        clearInterval(fallbackInterval);
+        return;
+      }
+      
+      // Gradually increase voice level when speech is detected
+      if (this.lastSpeechTime > 0 && Date.now() - this.lastSpeechTime < 2000) {
+        fallbackLevel = Math.min(fallbackLevel + 0.1, 0.8);
+      } else {
+        fallbackLevel = Math.max(fallbackLevel - 0.05, 0);
+      }
+      
+      // Update voice level via callback
+      if (this.callbacks.onVoiceLevelUpdate) {
+        this.callbacks.onVoiceLevelUpdate(fallbackLevel, 'fallback-android');
+      }
+    }, 100);
   }
 
   /**
