@@ -87,5 +87,85 @@ else
     exit 1
 fi
 
+# --- TTS Model Status Check ---
+print_status "Checking TTS Model Status..."
+
+# Wait a bit more for TTS initialization
+sleep 3
+
+# Check TTS system status
+cd "$PROJECT_DIR/fastapi-backend"
+
+print_status "🔍 TTS System Status Check:"
+echo "================================"
+
+# Check if TTS system is working
+if python3 -c "
+import sys
+sys.path.append('.')
+try:
+    from tts_factory import get_tts_info
+    info = get_tts_info()
+    
+    print(f'📊 Environment: {info[\"environment\"].upper()}')
+    print(f'🎵 TTS System: {info[\"preferred_system\"].upper()}')
+    print(f'📋 Available Providers: {\", \".join(info[\"available_providers\"])}')
+    
+    if 'piper' in info['providers']:
+        piper_info = info['providers']['piper']
+        device_config = piper_info['device_config']
+        
+        print(f'')
+        print(f'🖥️  DEVICE CONFIGURATION:')
+        print(f'   Device Type: {device_config[\"device_type\"]}')
+        print(f'   Device Name: {device_config[\"device_name\"]}')
+        print(f'   CUDA Available: {\"✅ YES\" if device_config[\"cuda_available\"] else \"❌ NO\"}')
+        print(f'   CUDA Devices: {device_config[\"cuda_device_count\"]}')
+        print(f'   Using CUDA: {\"✅ YES\" if device_config[\"use_cuda\"] else \"❌ NO\"}')
+        
+        if device_config['use_cuda']:
+            print(f'   Performance: 🚀 GPU ACCELERATED')
+        else:
+            print(f'   Performance: 💻 CPU OPTIMIZED')
+        
+        print(f'')
+        print(f'🎯 TTS CONFIGURATION:')
+        print(f'   Model: {piper_info[\"model_name\"]}')
+        print(f'   Sample Rate: {piper_info[\"sample_rate\"]} Hz')
+        print(f'   Length Scale: {piper_info[\"synthesis_params\"][\"length_scale\"]}')
+        print(f'   Noise Scale: {piper_info[\"synthesis_params\"][\"noise_scale\"]}')
+        print(f'   Noise W: {piper_info[\"synthesis_params\"][\"noise_w\"]}')
+        
+        print(f'')
+        print(f'📈 PERFORMANCE SUMMARY:')
+        if device_config['use_cuda']:
+            print(f'   🚀 GPU ACCELERATION: ENABLED')
+            print(f'   ⚡ Performance: HIGH')
+            print(f'   🎯 Optimization: PRODUCTION')
+        else:
+            print(f'   💻 CPU PROCESSING: ENABLED')
+            print(f'   ⚡ Performance: OPTIMIZED')
+            print(f'   🎯 Optimization: DEVELOPMENT')
+    
+    print(f'')
+    print(f'✅ TTS System Status: HEALTHY')
+    
+except Exception as e:
+    print(f'❌ TTS System Error: {e}')
+    sys.exit(1)
+" 2>/dev/null; then
+    print_success "TTS system is working correctly!"
+else
+    print_error "TTS system check failed. Check logs for details."
+    echo ""
+    print_status "Recent TTS logs:"
+    journalctl -u "$BACKEND_SERVICE" --since "2 minutes ago" --no-pager | grep -E "(TTS|Piper|GPU|CPU|Device)" || echo "No TTS logs found"
+fi
+
 echo ""
 print_success "Deployment completed successfully!"
+echo ""
+print_status "🎉 SHCI Voice Assistant is now running!"
+print_status "📊 Check TTS status above to see if GPU/CPU is being used"
+print_status "🔍 Monitor logs with: journalctl -u $BACKEND_SERVICE -f"
+print_status "🌐 Access your application at: http://your-server-ip:3000"
