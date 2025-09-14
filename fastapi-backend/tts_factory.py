@@ -133,7 +133,8 @@ class PiperTTSProvider(TTSInterface):
                 'device_type': 'CPU',
                 'device_name': 'CPU',
                 'cuda_available': False,
-                'cuda_device_count': 0
+                'cuda_device_count': 0,
+                'gpu_id': 0  # Default to GPU 0, will be set to 1 if available
             }
         }
         
@@ -156,24 +157,28 @@ class PiperTTSProvider(TTSInterface):
             device_config['device_info']['cuda_device_count'] = cuda_device_count
             
             if cuda_available and cuda_device_count > 0:
-                device_config['device_info']['device_name'] = torch.cuda.get_device_name(0)
+                # Set GPU ID to 1 if available (since GPU 0 is used by Ollama)
+                if cuda_device_count > 1:
+                    device_config['device_info']['gpu_id'] = 1
+                    device_config['device_info']['device_name'] = torch.cuda.get_device_name(1)
+                    log.info(f"🎯 Using GPU 1 (GPU 0 is used by Ollama): {torch.cuda.get_device_name(1)}")
+                else:
+                    device_config['device_info']['gpu_id'] = 0
+                    device_config['device_info']['device_name'] = torch.cuda.get_device_name(0)
+                    log.info(f"🎯 Using GPU 0: {torch.cuda.get_device_name(0)}")
+                
                 device_config['device_info']['device_type'] = 'GPU'
                 
-                # Auto-configure based on environment
-                if is_production and not force_cpu:
+                # FORCE GPU USAGE if CUDA is available (regardless of environment)
+                if not force_cpu:
                     device_config['use_cuda'] = True
-                    log.info("🚀 Production environment detected - using GPU")
-                elif not is_production and not force_cuda:
-                    device_config['use_cuda'] = False
-                    log.info("💻 Local environment detected - using CPU")
+                    if is_production:
+                        log.info("🚀 Production environment + CUDA available - using GPU")
+                    else:
+                        log.info("💻 Local environment but CUDA available - using GPU anyway")
                 else:
-                    # Manual override
-                    if force_cuda:
-                        device_config['use_cuda'] = True
-                        log.info("🔧 Force CUDA enabled")
-                    elif force_cpu:
-                        device_config['use_cuda'] = False
-                        log.info("🔧 Force CPU enabled")
+                    device_config['use_cuda'] = False
+                    log.info("🔧 Force CPU enabled - ignoring CUDA availability")
             else:
                 log.info("⚠️ CUDA not available - using CPU")
                 
@@ -224,6 +229,16 @@ class PiperTTSProvider(TTSInterface):
             log.info(f"[LOAD] {self.model_path}")
             log.info(f"[DEVICE] Using {'GPU' if self.use_cuda else 'CPU'}")
             
+            # Set CUDA device if using GPU
+            if self.use_cuda and self.device_info['cuda_available']:
+                try:
+                    import torch
+                    gpu_id = self.device_info.get('gpu_id', 0)
+                    torch.cuda.set_device(gpu_id)
+                    log.info(f"[CUDA] Set to GPU {gpu_id}: {torch.cuda.get_device_name(gpu_id)}")
+                except Exception as cuda_set_error:
+                    log.warning(f"Failed to set CUDA device: {cuda_set_error}")
+            
             # Load with CUDA if available and configured
             if self.use_cuda and self.device_info['cuda_available']:
                 try:
@@ -232,7 +247,8 @@ class PiperTTSProvider(TTSInterface):
                         config_path=self.config_path,
                         use_cuda=True
                     )
-                    log.info("[OK] Model loaded successfully with GPU acceleration")
+                    gpu_id = self.device_info.get('gpu_id', 0)
+                    log.info(f"[OK] Model loaded successfully with GPU {gpu_id} acceleration")
                 except Exception as cuda_error:
                     log.warning(f"GPU loading failed, falling back to CPU: {cuda_error}")
                     self.voice = PiperVoice.load(
@@ -376,7 +392,8 @@ class PiperTTSProvider(TTSInterface):
                 "device_type": self.device_info['device_type'],
                 "device_name": self.device_info['device_name'],
                 "cuda_available": self.device_info['cuda_available'],
-                "cuda_device_count": self.device_info['cuda_device_count']
+                "cuda_device_count": self.device_info['cuda_device_count'],
+                "gpu_id": self.device_info.get('gpu_id', 0)
             },
             "synthesis_params": {
                 "length_scale": self.length_scale,
