@@ -77,18 +77,50 @@ class PiperTTSProvider(TTSInterface):
         self.model_path = None
         self.config_path = None
         
-        # Default model configuration
-        self.model_full_name = os.getenv("PIPER_MODEL_NAME", "en_US-ljspeech-high")
-        self.model_path = f"{self.model_full_name}.onnx"
-        self.config_path = f"{self.model_full_name}.onnx.json"
+        # Voice configuration with multiple models
+        self.voice_configs = {
+            "en_US-hfc_male-medium": {
+                "name": "Ryan (Male)",
+                "gender": "male",
+                "quality": "medium",
+                "model_path": "en_US-hfc_male-medium.onnx",
+                "config_path": "en_US-hfc_male-medium.onnx.json",
+                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/hfc_male/medium/en_US-hfc_male-medium.onnx",
+                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/hfc_male/medium/en_US-hfc_male-medium.onnx.json"
+            },
+            "en_US-ryan-high": {
+                "name": "Ryan (Male)",
+                "gender": "male",
+                "quality": "high",
+                "model_path": "en_US-ryan-high.onnx",
+                "config_path": "en_US-ryan-high.onnx.json",
+                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/high/en_US-ryan-high.onnx",
+                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/high/en_US-ryan-high.onnx.json"
+            },
+            "en_US-libritts_r-medium": {
+                "name": "Sarah (Female)",
+                "gender": "female",
+                "quality": "medium",
+                "model_path": "en_US-libritts_r-medium.onnx",
+                "config_path": "en_US-libritts_r-medium.onnx.json",
+                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx",
+                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx.json"
+            },
+            "en_US-ljspeech-high": {
+                "name": "David (Female)",
+                "gender": "female",
+                "quality": "high",
+                "model_path": "en_US-ljspeech-high.onnx",
+                "config_path": "en_US-ljspeech-high.onnx.json",
+                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ljspeech/high/en_US-ljspeech-high.onnx",
+                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ljspeech/high/en_US-ljspeech-high.onnx.json"
+            }
+        }
         
-        # Model download URLs - using correct Piper TTS model
-        self.model_url = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx"
-        self.config_url = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx.json"
-        
-        # Update model paths to match downloaded files
-        self.model_path = "en_US-libritts_r-medium.onnx"
-        self.config_path = "en_US-libritts_r-medium.onnx.json"
+        # Default voice selection
+        self.current_voice = os.getenv("PIPER_VOICE", "en_US-libritts_r-medium")
+        self.model_path = self.voice_configs[self.current_voice]["model_path"]
+        self.config_path = self.voice_configs[self.current_voice]["config_path"]
         
         # Device configuration (GPU/CPU detection)
         self.device_config = self._detect_device_config()
@@ -96,7 +128,7 @@ class PiperTTSProvider(TTSInterface):
         self.device_info = self.device_config['device_info']
         
         # Synthesis parameters
-        self.length_scale = float(os.getenv("PIPER_LENGTH_SCALE", "1.5"))
+        self.length_scale = float(os.getenv("PIPER_LENGTH_SCALE", "0.8"))
         self.noise_scale = float(os.getenv("PIPER_NOISE_SCALE", "0.667"))
         self.noise_w = float(os.getenv("PIPER_NOISE_W", "0.8"))
         
@@ -221,9 +253,14 @@ class PiperTTSProvider(TTSInterface):
     def _initialize_voice(self):
         """Initialize Piper voice model with GPU/CPU configuration."""
         try:
+            # Get URLs for current voice
+            voice_config = self.voice_configs[self.current_voice]
+            model_url = voice_config["model_url"]
+            config_url = voice_config["config_url"]
+            
             # Download model files if missing
-            self._download_if_missing(self.model_path, self.model_url)
-            self._download_if_missing(self.config_path, self.config_url)
+            self._download_if_missing(self.model_path, model_url)
+            self._download_if_missing(self.config_path, config_url)
             
             # Load voice model with device configuration
             log.info(f"[LOAD] {self.model_path}")
@@ -269,10 +306,50 @@ class PiperTTSProvider(TTSInterface):
             log.error(f"Failed to initialize Piper voice: {e}")
             self.available = False
     
-    async def synthesize_async(self, text: str, language: str = "en", **kwargs) -> bytes:
+    def set_voice(self, voice_id: str):
+        """Switch to a different voice model."""
+        if voice_id not in self.voice_configs:
+            log.warning(f"Voice {voice_id} not found, using default")
+            voice_id = "en_US-libritts_r-medium"
+        
+        if voice_id != self.current_voice:
+            log.info(f"🎤 Switching voice from {self.current_voice} to {voice_id}")
+            voice_config = self.voice_configs[voice_id]
+            log.info(f"🎤 New voice config: {voice_config['name']} ({voice_config['gender']}, {voice_config['quality']})")
+            
+            # Update current voice and paths
+            self.current_voice = voice_id
+            self.model_path = voice_config["model_path"]
+            self.config_path = voice_config["config_path"]
+            
+            # Clear existing voice model
+            self.voice = None
+            
+            # Reinitialize voice with new model
+            log.info(f"🎤 Loading new model: {self.model_path}")
+            self._initialize_voice()
+            
+            if self.voice:
+                log.info(f"✅ Voice switched successfully to {voice_config['name']}")
+            else:
+                log.error(f"❌ Failed to load voice model for {voice_id}")
+
+    async def synthesize_async(self, text: str, language: str = "en", voice: str = None, **kwargs) -> bytes:
         """Asynchronously synthesize text using Piper TTS."""
         if not self.available or not self.voice:
             raise RuntimeError("Piper TTS not available")
+        
+        # Switch voice if specified
+        if voice and voice != self.current_voice:
+            log.info(f"🎤 Switching voice from {self.current_voice} to {voice}")
+            self.set_voice(voice)
+        elif voice:
+            log.info(f"🎤 Using current voice: {voice}")
+        
+        # Log current voice being used for synthesis
+        current_voice_config = self.voice_configs.get(self.current_voice, {})
+        voice_name = current_voice_config.get('name', 'Unknown')
+        log.info(f"🎤 Synthesizing with voice: {voice_name} ({self.current_voice})")
         
         try:
             loop = asyncio.get_event_loop()
@@ -283,10 +360,22 @@ class PiperTTSProvider(TTSInterface):
             log.error(f"Piper TTS async synthesis failed: {e}")
             return b""
     
-    def synthesize_sync(self, text: str, language: str = "en", **kwargs) -> bytes:
+    def synthesize_sync(self, text: str, language: str = "en", voice: str = None, **kwargs) -> bytes:
         """Synchronously synthesize text using Piper TTS."""
         if not self.available or not self.voice:
             raise RuntimeError("Piper TTS not available")
+        
+        # Switch voice if specified
+        if voice and voice != self.current_voice:
+            log.info(f"🎤 Switching voice from {self.current_voice} to {voice}")
+            self.set_voice(voice)
+        elif voice:
+            log.info(f"🎤 Using current voice: {voice}")
+        
+        # Log current voice being used for synthesis
+        current_voice_config = self.voice_configs.get(self.current_voice, {})
+        voice_name = current_voice_config.get('name', 'Unknown')
+        log.info(f"🎤 Synthesizing with voice: {voice_name} ({self.current_voice})")
         
         try:
             # Create temporary WAV file
@@ -382,7 +471,8 @@ class PiperTTSProvider(TTSInterface):
             "available": self.is_available(),
             "system_type": "Piper TTS",
             "environment": "local + production",
-            "model_name": self.model_full_name,
+            "current_voice": self.current_voice,
+            "voice_configs": self.voice_configs,
             "model_path": self.model_path,
             "config_path": self.config_path,
             "supported_languages": self.supported_languages,
@@ -414,16 +504,16 @@ class FallbackTTSProvider(TTSInterface):
         
         log.info("✅ Fallback TTS provider initialized")
     
-    async def synthesize_async(self, text: str, language: str = "en", **kwargs) -> bytes:
+    async def synthesize_async(self, text: str, language: str = "en", voice: str = None, **kwargs) -> bytes:
         """Asynchronously synthesize text using fallback TTS."""
         try:
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, self.synthesize_sync, text, language, **kwargs)
+            return await loop.run_in_executor(None, self.synthesize_sync, text, language, voice, **kwargs)
         except Exception as e:
             log.error(f"Fallback TTS async synthesis failed: {e}")
             return b""
     
-    def synthesize_sync(self, text: str, language: str = "en", **kwargs) -> bytes:
+    def synthesize_sync(self, text: str, language: str = "en", voice: str = None, **kwargs) -> bytes:
         """Synchronously synthesize text using fallback TTS."""
         try:
             import pyttsx3
@@ -558,15 +648,15 @@ class TTSFactory:
             ]
         }
     
-    async def synthesize_async(self, text: str, language: str = "en", system: Optional[TTSSystem] = None, **kwargs) -> bytes:
+    async def synthesize_async(self, text: str, language: str = "en", voice: str = None, system: Optional[TTSSystem] = None, **kwargs) -> bytes:
         """Synthesize text using preferred or specified TTS system."""
         provider = self.get_provider(system)
-        return await provider.synthesize_async(text, language, **kwargs)
+        return await provider.synthesize_async(text, language, voice, **kwargs)
     
-    def synthesize_sync(self, text: str, language: str = "en", system: Optional[TTSSystem] = None, **kwargs) -> bytes:
+    def synthesize_sync(self, text: str, language: str = "en", voice: str = None, system: Optional[TTSSystem] = None, **kwargs) -> bytes:
         """Synthesize text using preferred or specified TTS system."""
         provider = self.get_provider(system)
-        return provider.synthesize_sync(text, language, **kwargs)
+        return provider.synthesize_sync(text, language, voice, **kwargs)
 
 # Global TTS factory instance
 tts_factory = TTSFactory()
@@ -576,13 +666,13 @@ def get_tts_provider(system: Optional[TTSSystem] = None) -> TTSInterface:
     """Get TTS provider instance."""
     return tts_factory.get_provider(system)
 
-def synthesize_text(text: str, language: str = "en", system: Optional[TTSSystem] = None, **kwargs) -> bytes:
+def synthesize_text(text: str, language: str = "en", voice: str = None, system: Optional[TTSSystem] = None, **kwargs) -> bytes:
     """Synthesize text using preferred TTS system."""
-    return tts_factory.synthesize_sync(text, language, system, **kwargs)
+    return tts_factory.synthesize_sync(text, language, voice, system, **kwargs)
 
-async def synthesize_text_async(text: str, language: str = "en", system: Optional[TTSSystem] = None, **kwargs) -> bytes:
+async def synthesize_text_async(text: str, language: str = "en", voice: str = None, system: Optional[TTSSystem] = None, **kwargs) -> bytes:
     """Asynchronously synthesize text using preferred TTS system."""
-    return await tts_factory.synthesize_async(text, language, system, **kwargs)
+    return await tts_factory.synthesize_async(text, language, voice, system, **kwargs)
 
 def get_tts_info() -> Dict[str, Any]:
     """Get TTS system information."""

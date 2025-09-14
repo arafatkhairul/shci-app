@@ -18,11 +18,11 @@ import {
     FaBuilding,
     FaSchool,
     FaUserGraduate,
-    FaStar,
     FaStarHalfAlt,
     FaStarOfLife,
     FaChevronDown,
-    FaTimes
+    FaTimes,
+    FaCheck
 } from "react-icons/fa";
 import RolePlayAnswers from "./RolePlayAnswers";
 import WebkitVADService, { VADConfig, VADCallbacks, SpeechResult } from "../services/WebkitVADService";
@@ -152,6 +152,8 @@ export default function VoiceAgent() {
     const [aiSpeaking, setAiSpeaking] = useState(false);
     const [selectedLanguage, setSelectedLanguage] = useState<"en" | "it">("en");
     const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
+    const [selectedVoice, setSelectedVoice] = useState<string>("en_US-libritts_r-medium");
+    const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
     
@@ -200,8 +202,8 @@ export default function VoiceAgent() {
     
     // Customer organization selection state
     const [showOrgSelectionModal, setShowOrgSelectionModal] = useState(false);
-    const [availableOrganizations, setAvailableOrganizations] = useState<Array<{id: number, name: string, details: string}>>([]);
-    const [selectedOrgForCustomer, setSelectedOrgForCustomer] = useState<{id: number, name: string} | null>(null);
+    const [availableOrganizations, setAvailableOrganizations] = useState<Array<{ id: number, name: string, details: string }>>([]);
+    const [selectedOrgForCustomer, setSelectedOrgForCustomer] = useState<{ id: number, name: string } | null>(null);
     const [isLoadingOrgs, setIsLoadingOrgs] = useState(false);
     
     // RAG system state - organization context for LLM
@@ -209,6 +211,7 @@ export default function VoiceAgent() {
 
     // Language dropdown ref for click outside detection
     const languageDropdownRef = useRef<HTMLDivElement>(null);
+    const voiceDropdownRef = useRef<HTMLDivElement>(null);
 
     // ---------- Refs ----------
     const ws = useRef<WebSocket | null>(null);
@@ -243,6 +246,39 @@ export default function VoiceAgent() {
         }
     };
     const clientIdRef = useRef<string>(getClientId());
+
+    // ---------- Voice Configuration ----------
+    const voiceConfig = {
+        en: [
+            { id: "en_US-hfc_male-medium", name: "Ryan (Male)", gender: "male", quality: "medium" },
+            { id: "en_US-ryan-high", name: "Ryan (Male)", gender: "male", quality: "high" },
+            { id: "en_US-libritts_r-medium", name: "Sarah (Female)", gender: "female", quality: "medium" },
+            { id: "en_US-ljspeech-high", name: "David (Female)", gender: "female", quality: "high" }
+        ],
+        it: [
+            { id: "en_US-hfc_male-medium", name: "Ryan (Male)", gender: "male", quality: "medium" },
+            { id: "en_US-ryan-high", name: "Ryan (Male)", gender: "male", quality: "high" },
+            { id: "en_US-libritts_r-medium", name: "Sarah (Female)", gender: "female", quality: "medium" },
+            { id: "en_US-ljspeech-high", name: "David (Female)", gender: "female", quality: "high" }
+        ]
+    };
+
+    // Debug: Log voice configuration
+    console.log('Voice configuration loaded:', voiceConfig);
+
+    // Debug: Log voice dropdown state changes
+    useEffect(() => {
+        console.log('Voice modal state changed:', isVoiceModalOpen);
+        console.log('Voice dropdown ref:', voiceDropdownRef.current);
+        console.log('Available voices:', voiceConfig[selectedLanguage]);
+    }, [isVoiceModalOpen, selectedLanguage]);
+
+    // Debug: Monitor voice selection changes
+    useEffect(() => {
+        console.log('🎤 VOICE DEBUG: selectedVoice changed to:', selectedVoice);
+        console.log('🎤 VOICE DEBUG: Voice config for current language:', voiceConfig[selectedLanguage]);
+        console.log('🎤 VOICE DEBUG: Selected voice details:', voiceConfig[selectedLanguage]?.find(v => v.id === selectedVoice));
+    }, [selectedVoice, selectedLanguage]);
 
     // ---------- Language labels ----------
     const languages = {
@@ -597,6 +633,7 @@ export default function VoiceAgent() {
                 level,
                 use_local_tts: useLocalTTS,
                 language: selectedLanguage,
+                voice: selectedVoice,
                 // role play fields (ALWAYS send)
                 role_play_enabled: rolePlayEnabled,
                 role_play_template: rolePlayTemplate,
@@ -606,6 +643,10 @@ export default function VoiceAgent() {
                 // RAG context for customers
                 rag_context: userType === 'customer' ? organizationContext : "",
             };
+            
+            // Debug voice selection
+            console.log("🎤 VOICE DEBUG: Sending voice preference:", selectedVoice);
+            console.log("🎤 VOICE DEBUG: Full prefs object:", prefs);
             console.log("🔍 STEP 11: Preparing to send prefs with RAG context");
             console.log("🔍 STEP 11a: User type:", userType);
             console.log("🔍 STEP 11b: Organization context:", organizationContext);
@@ -618,6 +659,7 @@ export default function VoiceAgent() {
         level,
         useLocalTTS,
         selectedLanguage,
+        selectedVoice,
         rolePlayEnabled,
         rolePlayTemplate,
         organizationName,
@@ -867,7 +909,7 @@ export default function VoiceAgent() {
         return () => clearInterval(healthCheckInterval);
     }, [listening, aiSpeaking, useWebkitVAD, useFallbackVAD, vadInitialized, fallbackVADInitialized]);
 
-    // Click outside handler for language dropdown
+    // Click outside handler for language and voice dropdowns
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (languageDropdownRef.current && !languageDropdownRef.current.contains(event.target as Node)) {
@@ -876,13 +918,35 @@ export default function VoiceAgent() {
         };
 
         if (isLanguageDropdownOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('click', handleClickOutside);
         }
 
         return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('click', handleClickOutside);
         };
     }, [isLanguageDropdownOpen]);
+
+    // Reset voice selection when language changes (only if current voice is not available)
+    useEffect(() => {
+        const availableVoices = voiceConfig[selectedLanguage];
+        console.log('🎤 VOICE DEBUG: Language changed to:', selectedLanguage, 'Available voices:', availableVoices);
+        console.log('🎤 VOICE DEBUG: Current selected voice:', selectedVoice);
+        
+        if (availableVoices && availableVoices.length > 0) {
+            // Check if current voice is available in the new language
+            const currentVoiceAvailable = availableVoices.some(voice => voice.id === selectedVoice);
+            
+            if (!currentVoiceAvailable) {
+                const newVoice = availableVoices[0].id;
+                console.log('🎤 VOICE DEBUG: Current voice not available, setting to:', newVoice);
+                setSelectedVoice(newVoice);
+            } else {
+                console.log('🎤 VOICE DEBUG: Current voice is available, keeping:', selectedVoice);
+            }
+        } else {
+            console.warn('No voices available for language:', selectedLanguage);
+        }
+    }, [selectedLanguage]);
 
     // Check localStorage for user type on component mount
     useEffect(() => {
@@ -994,7 +1058,7 @@ export default function VoiceAgent() {
     };
 
     // Handle organization selection for customer
-    const handleOrgSelection = async (org: {id: number, name: string}) => {
+    const handleOrgSelection = async (org: { id: number, name: string }) => {
         console.log('🔍 STEP 1: Customer selecting organization:', org);
         setSelectedOrgForCustomer(org);
         localStorage.setItem('selectedOrgId', org.id.toString());
@@ -1082,10 +1146,15 @@ export default function VoiceAgent() {
 
     // keep prefs in sync (any of these change)
     useEffect(() => {
-        if (connected) sendPrefs();
+        if (connected) {
+            console.log('🎤 VOICE DEBUG: sendPrefs triggered by dependency change');
+            console.log('🎤 VOICE DEBUG: Current selectedVoice:', selectedVoice);
+            sendPrefs();
+        }
     }, [
-        useLocalTTS, 
-        selectedLanguage, 
+        useLocalTTS,
+        selectedLanguage,
+        selectedVoice,
         connected,
         // rolePlayEnabled,
         // rolePlayTemplate,
@@ -1170,7 +1239,7 @@ export default function VoiceAgent() {
             window.speechSynthesis.cancel();
             const utter = new SpeechSynthesisUtterance(text);
             utter.lang = selectedLanguage === "en" ? "en-US" : "it-IT";
-            utter.rate = level === "starter" ? 0.9 : level === "medium" ? 1.1 : 1.3;
+            utter.rate = 1.0; // Fixed rate, no difficulty level effect on audio
             utter.onend = () => {
                 setAiSpeaking(false);
                 setFinalTranscript(""); // Clear transcript to prevent waiting state
@@ -1936,7 +2005,8 @@ export default function VoiceAgent() {
 
     // ---------------- UI ----------------
     return (
-        <div className="min-h-screen text-zinc-100 bg-black relative overflow-hidden">
+        <>
+        <div className="min-h-screen text-zinc-100 bg-black">
             {/* User Type Selection Modal */}
             {showUserTypeModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
@@ -2055,8 +2125,7 @@ export default function VoiceAgent() {
                                                 if (orgNameError) setOrgNameError("");
                                             }}
                                             placeholder="Enter your organization name"
-                                            className={`w-full px-4 py-3 rounded-lg bg-white/[0.05] border text-white placeholder-zinc-500 focus:outline-none focus:bg-white/[0.08] transition-all duration-300 ${
-                                                orgNameError 
+                                            className={`w-full px-4 py-3 rounded-lg bg-white/[0.05] border text-white placeholder-zinc-500 focus:outline-none focus:bg-white/[0.08] transition-all duration-300 ${orgNameError
                                                     ? "border-red-400/50 focus:border-red-400/70" 
                                                     : "border-white/10 focus:border-blue-400/50"
                                             }`}
@@ -2258,24 +2327,21 @@ export default function VoiceAgent() {
                                             return (
                                                 <button
                                                     key={org.id}
-                                                    onClick={() => handleOrgSelection({id: org.id, name: org.name})}
-                                                    className={`w-full group relative p-4 rounded-xl transition-all duration-300 text-left ${
-                                                        isSelected
+                                                    onClick={() => handleOrgSelection({ id: org.id, name: org.name })}
+                                                    className={`w-full group relative p-4 rounded-xl transition-all duration-300 text-left ${isSelected
                                                             ? "bg-emerald-500/20 border border-emerald-400/50 shadow-lg"
                                                             : "bg-white/[0.05] border border-white/10 hover:border-emerald-400/50 hover:bg-emerald-500/10"
                                                     }`}
                                                 >
                                                     <div className="flex items-center gap-4">
-                                                        <div className={`p-2 rounded-lg border transition-colors duration-300 ${
-                                                            isSelected
+                                                        <div className={`p-2 rounded-lg border transition-colors duration-300 ${isSelected
                                                                 ? "bg-emerald-500/30 border-emerald-400/50"
                                                                 : "bg-emerald-500/20 border-emerald-500/30 group-hover:bg-emerald-500/30"
                                                         }`}>
                                                             <FaBuilding className="h-5 w-5 text-emerald-400" />
                                                         </div>
                                                         <div className="flex-1">
-                                                            <h3 className={`text-lg font-semibold ${
-                                                                isSelected ? "text-emerald-300" : "text-white"
+                                                            <h3 className={`text-lg font-semibold ${isSelected ? "text-emerald-300" : "text-white"
                                                             }`}>
                                                                 {org.name}
                                                             </h3>
@@ -2316,17 +2382,17 @@ export default function VoiceAgent() {
             <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-indigo-500/5 animate-pulse" />
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.03)_0%,transparent_50%)]" />
-                {siriMode && <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-blue-500/20 animate-pulse" />}
+               
             </div>
 
             {/* Mobile-Optimized Layout Container */}
             <div className="flex items-center justify-center p-2 sm:p-4 md:p-6 lg:p-8">
-                <div className="w-full max-w-7xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden">
+                <div className="w-full max-w-7xl rounded-2xl sm:rounded-3xl shadow-2xl">
                     <div className="max-w-6xl mx-auto px-2 sm:px-4 md:px-6 py-3 sm:py-6 md:py-8 relative">
                 {/* Minimal Professional Navbar */}
-                <div className="bg-white/[0.01] backdrop-blur-sm rounded-lg border border-white/5 p-2 sm:p-3 mb-3 sm:mb-4">
+                        <div className="bg-white/[0.01] backdrop-blur-sm rounded-lg border border-white/5 p-2 sm:p-3 mb-3 sm:mb-4 relative overflow-visible">
                     {/* Main Header Row */}
-                    <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between relative overflow-visible">
                     {/* Minimal Logo & Title */}
                         <div className="flex items-center gap-2">
                         <div className="relative">
@@ -2359,8 +2425,7 @@ export default function VoiceAgent() {
                                 <span className="text-xs font-medium text-white">
                                     {selectedLanguage === "en" ? languages.en.name : languages.it.name}
                                 </span>
-                                <FaChevronDown className={`h-2 w-2 text-zinc-400 ${
-                                    isLanguageDropdownOpen ? 'rotate-180' : ''
+                                        <FaChevronDown className={`h-2 w-2 text-zinc-400 ${isLanguageDropdownOpen ? 'rotate-180' : ''
                                 }`} />
                             </button>
 
@@ -2374,8 +2439,7 @@ export default function VoiceAgent() {
                                                 setSelectedLanguage("en");
                                                 setIsLanguageDropdownOpen(false);
                                             }}
-                                            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-300 ${
-                                                selectedLanguage === "en"
+                                                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-300 ${selectedLanguage === "en"
                                                     ? "bg-indigo-500/20 text-indigo-300"
                                                     : "text-zinc-300 hover:bg-white/[0.05] hover:text-white"
                                             }`}
@@ -2402,8 +2466,7 @@ export default function VoiceAgent() {
                                                 setSelectedLanguage("it");
                                                 setIsLanguageDropdownOpen(false);
                                             }}
-                                            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-300 ${
-                                                selectedLanguage === "it"
+                                                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-300 ${selectedLanguage === "it"
                                                     ? "bg-indigo-500/20 text-indigo-300"
                                                     : "text-zinc-300 hover:bg-white/[0.05] hover:text-white"
                                             }`}
@@ -2427,6 +2490,7 @@ export default function VoiceAgent() {
                                 </div>
                             )}
                         </div>
+
                     </div>
 
                     {/* Minimal Controls Section */}
@@ -2450,7 +2514,7 @@ export default function VoiceAgent() {
 
                             <div className="flex gap-1">
                                 {(["starter", "medium", "advanced"] as const).map((lvl, index) => {
-                                    const icons = [FaStar, FaStarHalfAlt, FaStarOfLife];
+                                            const icons = [FaStarHalfAlt, FaStarHalfAlt, FaStarOfLife];
                                     const IconComponent = icons[index];
                                     const colors = {
                                         starter: {
@@ -2480,17 +2544,14 @@ export default function VoiceAgent() {
                                         <button
                                             key={lvl}
                                             onClick={() => handleLevelChange(lvl)}
-                                            className={`group relative px-2 py-1.5 rounded-md transition-colors flex items-center gap-1 flex-1 ${
-                                                level === lvl
+                                                    className={`group relative px-2 py-1.5 rounded-md transition-colors flex items-center gap-1 flex-1 ${level === lvl
                                                     ? `${colors[lvl].bg} ${colors[lvl].border} ${colors[lvl].text} shadow-lg border backdrop-blur-sm`
                                                     : "text-zinc-400 hover:text-zinc-300 hover:bg-white/[0.05] border border-white/10 hover:border-white/20"
                                             }`}
                                         >
-                                            <div className={`p-1 rounded-md transition-all duration-300 ${
-                                                level === lvl ? colors[lvl].bg : "bg-white/[0.05]"
+                                                    <div className={`p-1 rounded-md transition-all duration-300 ${level === lvl ? colors[lvl].bg : "bg-white/[0.05]"
                                             }`}>
-                                                <IconComponent className={`h-3 w-3 transition-colors duration-300 ${
-                                                    level === lvl ? colors[lvl].icon : "text-zinc-500"
+                                                        <IconComponent className={`h-3 w-3 transition-colors duration-300 ${level === lvl ? colors[lvl].icon : "text-zinc-500"
                                             }`} />
                                             </div>
                                             <span className="text-xs font-semibold tracking-wide">
@@ -2560,8 +2621,7 @@ export default function VoiceAgent() {
                                             setShowRolePlayModal(true);
                                         }
                                     }}
-                                    className={`group flex items-center justify-center gap-2 px-3 py-2 rounded-md transition-all duration-300 ${
-                                    rolePlayEnabled
+                                            className={`group flex items-center justify-center gap-2 px-3 py-2 rounded-md transition-all duration-300 ${rolePlayEnabled
                                             ? "bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shadow-md hover:bg-emerald-500/30"
                                             : "bg-white/[0.05] text-zinc-400 hover:text-zinc-300 hover:bg-white/[0.08] border border-white/15"
                                 }`}
@@ -2629,17 +2689,7 @@ export default function VoiceAgent() {
                     </div>
                 </div>
 
-                {/* Level Change Notification */}
-                {levelChangeNotification && (
-                    <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-gradient-to-r from-indigo-500/90 to-purple-500/90 backdrop-blur-xl rounded-2xl border border-indigo-400/30 px-6 py-4 shadow-2xl animate-in slide-in-from-top-2 duration-300">
-                        <div className="flex items-center gap-3 text-white">
-                            <Brain className="h-5 w-5 text-indigo-200" />
-                            <span className="font-semibold">
-                                Level changed to: {currentLang.levels[level]} • {currentLang.levels[`${level}Desc` as keyof typeof currentLang.levels]}
-                            </span>
-                        </div>
-                    </div>
-                )}
+                      
 
                 {/* Role Play Configuration Modal */}
                 {showRolePlayModal && (
@@ -2670,8 +2720,7 @@ export default function VoiceAgent() {
                                                     setRoleTitle(template.defaultRole);
                                                 }
                                             }}
-                                            className={`p-4 rounded-xl border transition-all duration-300 text-center ${
-                                                rolePlayTemplate === key
+                                                    className={`p-4 rounded-xl border transition-all duration-300 text-center ${rolePlayTemplate === key
                                                     ? "bg-gradient-to-r from-blue-500/25 to-indigo-500/25 border-blue-400/40 text-blue-200"
                                                     : "bg-white/[0.03] border-white/10 text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-300"
                                             }`}
@@ -2774,7 +2823,7 @@ export default function VoiceAgent() {
                 />
 
                 {/* Minimal Voice Control Center */}
-                <div className="bg-gradient-to-br from-white/[0.02] to-white/[0.01] backdrop-blur-xl rounded-xl border border-white/10 p-3 sm:p-4 md:p-6 mb-4 sm:mb-6 relative overflow-hidden">
+                        <div className="bg-gradient-to-br from-white/[0.02] to-white/[0.01] backdrop-blur-xl rounded-xl border border-white/10 p-3 sm:p-4 md:p-6 mb-4 sm:mb-6 overflow-hidden">
                     {/* Audio Wave Based Glowing Effects */}
                     {(() => {
                         const isSpeechActive = listening && micLevel > 0.01;
@@ -2862,7 +2911,7 @@ export default function VoiceAgent() {
                     {/* Static Background */}
                     <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5 rounded-3xl pointer-events-none" />
                     
-                    <div className="relative z-10 flex flex-col items-center">
+                            <div className="relative flex flex-col items-center">
                         {/* Role Play Test Button */}
                         {rolePlayEnabled && (
                             <div className="mb-4 text-center">
@@ -2975,7 +3024,7 @@ export default function VoiceAgent() {
                         </div>
 
                         {/* Small Rounded Button - Fixed Click with Glass UI */}
-                        <div className="flex justify-center relative z-50">
+                                <div className="flex justify-center">
                             <button
                                 onClick={(e) => {
                                     e.preventDefault();
@@ -2989,8 +3038,7 @@ export default function VoiceAgent() {
                                 }}
                                 onMouseDown={(e) => e.stopPropagation()}
                                 onMouseUp={(e) => e.stopPropagation()}
-                                className={`relative z-50 px-4 py-2 rounded-full font-medium text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer ${
-                                    listening 
+                                        className={` px-4 py-2 rounded-full font-medium text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer ${listening
                                         ? listening && micLevel > 0.01
                                             ? "bg-red-600/20 backdrop-blur-xl text-white hover:bg-red-600/30 shadow-lg"
                                             : "bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white shadow-lg"
@@ -3082,6 +3130,29 @@ export default function VoiceAgent() {
                                 )}
                             </button>
                         </div>
+
+                                {/* Voice Selection Dropdown - Moved below Start button */}
+                                <div className="flex justify-center mt-4">
+                                    <div className="relative" ref={voiceDropdownRef}>
+                                        <button
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                console.log('Voice modal clicked, opening modal');
+                                                setIsVoiceModalOpen(true);
+                                            }}
+                                            onMouseDown={(e) => e.stopPropagation()}
+                                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/[0.05] transition-colors"
+                                        >
+                                            <FaMicrophone className="h-4 w-4 text-purple-400" />
+                                            <span className="text-sm font-medium text-white">
+                                                {voiceConfig[selectedLanguage]?.find(v => v.id === selectedVoice)?.name || "Select Voice"}
+                                            </span>
+                                            <FaChevronDown className="h-3 w-3 text-zinc-400" />
+                                        </button>
+
+                                    </div>
+                                </div>
 
                     </div>
                 </div>
@@ -3259,136 +3330,10 @@ export default function VoiceAgent() {
                         <div className="relative p-5 min-h-[180px]">
                             {aiText ? (
                                 <div className="space-y-2">
-                                    {aiText.includes("🔴 GRAMMAR_CORRECTION_START 🔴") ? (
-                                        // Grammar correction display - Ultra Professional Design
-                                        <div className="space-y-3">
-                                            {/* Grammar correction section - Ultra Minimal Professional */}
-                                            <div className="bg-slate-900/20 border border-slate-800/50 rounded-2xl overflow-hidden">
-                                                {/* Ultra clean header */}
-                                                <div className="px-5 py-4 border-b border-slate-800/50">
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full"></div>
-                                                            <span className="text-sm font-medium text-slate-300">Grammar Checker</span>
-                                                        </div>
-                                                        <div className="text-xs text-slate-500 font-medium">AI</div>
-                                                    </div>
-                                                </div>
-                                                
-                                                {/* Ultra clean content */}
-                                                <div className="p-5 space-y-4">
-                                                    {(() => {
-                                                        // Extract grammar correction section
-                                                        const startMarker = "🔴 GRAMMAR_CORRECTION_START 🔴";
-                                                        const endMarker = "🔴 GRAMMAR_CORRECTION_END 🔴";
-                                                        
-                                                        if (!aiText.includes(startMarker) || !aiText.includes(endMarker)) {
-                                                            return (
-                                                                <div className="text-center py-6">
-                                                                    <div className="w-6 h-6 mx-auto mb-3 bg-slate-800/50 rounded-full flex items-center justify-center">
-                                                                        <svg className="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                                        </svg>
-                                                                    </div>
-                                                                    <p className="text-sm text-slate-500">Perfect grammar</p>
-                                                                </div>
-                                                            );
-                                                        }
-                                                        
-                                                        const grammarSection = aiText.split(startMarker)[1]?.split(endMarker)[0]?.trim();
-                                                        if (!grammarSection) {
-                                                            return <div className="text-slate-500 text-sm">No grammar data</div>;
-                                                        }
-                                                        
-                                                        const lines = grammarSection.split('\n').map(line => line.trim()).filter(line => line);
-                                                        let incorrectText = "";
-                                                        let correctText = "";
-                                                        
-                                                        lines.forEach(line => {
-                                                            if (line.includes("INCORRECT:")) {
-                                                                incorrectText = line.replace("INCORRECT:", "").trim();
-                                                            } else if (line.includes("CORRECT:")) {
-                                                                correctText = line.replace("CORRECT:", "").trim();
-                                                            }
-                                                        });
-                                                        
-                                                        // Handle case where both INCORRECT and CORRECT are in the same line
-                                                        if (incorrectText && incorrectText.includes("CORRECT:")) {
-                                                            const parts = incorrectText.split("CORRECT:");
-                                                            incorrectText = parts[0].trim();
-                                                            if (parts[1]) {
-                                                                correctText = parts[1].trim();
-                                                            }
-                                                        }
-                                                        
-                                                        return (
-                                                            <div className="space-y-3">
-                                                                {/* Professional incorrect element */}
-                                                                {incorrectText && (
-                                                                    <div className="group">
-                                                                        <div className="flex items-center gap-2 mb-3">
-                                                                            <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
-                                                                            <span className="text-xs text-red-400 font-semibold uppercase tracking-wide">INCORRECT</span>
-                                                                        </div>
-                                                                        <div className="bg-red-500/5 border-l-4 border-red-500/40 rounded-r-xl p-4 transition-all duration-200 group-hover:bg-red-500/8 group-hover:border-red-500/60">
-                                                                            <p className="text-sm text-slate-200 font-medium leading-relaxed">
-                                                                                {incorrectText}
-                                                                            </p>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                                
-                                                                {/* Professional correct element */}
-                                                                {correctText && (
-                                                                    <div className="group">
-                                                                        <div className="flex items-center gap-2 mb-3">
-                                                                            <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
-                                                                            <span className="text-xs text-emerald-400 font-semibold uppercase tracking-wide">CORRECT</span>
-                                                                        </div>
-                                                                        <div className="bg-emerald-500/5 border-l-4 border-emerald-500/40 rounded-r-xl p-4 transition-all duration-200 group-hover:bg-emerald-500/8 group-hover:border-emerald-500/60">
-                                                                            <p className="text-sm text-slate-200 font-medium leading-relaxed">
-                                                                                {correctText}
-                                                                            </p>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            </div>
-                                            
-                                            {/* LLM Answer section - Ultra Professional Design */}
-                                            {aiText.split("🔴 GRAMMAR_CORRECTION_END 🔴")[1] && (
-                                                <div className="bg-slate-900/20 border border-slate-800/50 rounded-2xl overflow-hidden">
-                                                    {/* Ultra clean header */}
-                                                    <div className="px-5 py-4 border-b border-slate-800/50">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div>
-                                                                <span className="text-sm font-medium text-slate-300">Intelligent Response</span>
-                                                            </div>
-                                                            <div className="text-xs text-slate-500 font-medium">AI</div>
-                                                        </div>
-                                                    </div>
-                                                    
-                                                    {/* Ultra clean content */}
-                                                    <div className="p-5">
-                                                        <div className="text-sm leading-relaxed text-slate-200">
-                                                            {aiText.split("🔴 GRAMMAR_CORRECTION_END 🔴")[1].split('\n').filter(line => line.trim()).map((line, i) => (
-                                                                <p key={i} className="mb-2 last:mb-0">{line.trim()}</p>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        // Normal response display - Single block
+                                            {/* Simplified AI response display for debugging */}
                                         <div className="bg-white/[0.02] rounded-lg p-4 border border-white/6 hover:bg-white/[0.04] transition-all duration-200">
                                             <p className="text-sm leading-relaxed text-zinc-300 whitespace-pre-wrap">{aiText}</p>
                                         </div>
-                                    )}
                                 </div>
                             ) : (
                                 <div className="flex items-center justify-center h-full text-zinc-500">
@@ -3453,5 +3398,79 @@ export default function VoiceAgent() {
                     </div>
                 </div>
             </div>
+
+        {/* Minimal Voice Selection Modal */}
+        {isVoiceModalOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setIsVoiceModalOpen(false)}>
+                <div className="bg-gray-900 rounded-lg border border-white/20 shadow-xl max-w-md w-full mx-4 max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+                    {/* Simple Header */}
+                    <div className="flex items-center justify-between p-4 border-b border-white/10">
+                        <div className="flex items-center gap-2">
+                            <FaMicrophone className="h-5 w-5 text-purple-400" />
+                            <h2 className="text-lg font-semibold text-white">Select Voice</h2>
+                        </div>
+                        <button
+                            onClick={() => setIsVoiceModalOpen(false)}
+                            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                        >
+                            <FaTimes className="h-4 w-4 text-zinc-400" />
+                        </button>
+                    </div>
+
+                    {/* Simple Content */}
+                    <div className="p-4">
+                        <div className="space-y-2 max-h-80 overflow-y-auto">
+                            {voiceConfig[selectedLanguage]?.map((voice) => (
+                                <button
+                                    key={voice.id}
+                                    onClick={() => {
+                                        console.log('🎤 VOICE DEBUG: Voice selected:', voice.id, voice.name);
+                                        console.log('🎤 VOICE DEBUG: Previous voice:', selectedVoice);
+                                        setSelectedVoice(voice.id);
+                                        console.log('🎤 VOICE DEBUG: New voice set to:', voice.id);
+                                        setIsVoiceModalOpen(false);
+                                    }}
+                                    className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
+                                        selectedVoice === voice.id
+                                            ? "bg-purple-500/20 text-purple-200 border border-purple-400/30"
+                                            : "text-zinc-300 hover:bg-white/5 hover:text-white"
+                                    }`}
+                                >
+                                    <div className="text-lg">
+                                        {voice.gender === "female" ? "👩" : "👨"}
+                                    </div>
+                                    <div className="flex flex-col flex-1 min-w-0">
+                                        <span className="text-sm font-medium truncate">
+                                            {voice.name}
+                                        </span>
+                                        <span className="text-xs text-zinc-500 truncate">
+                                            {voice.gender} • {voice.quality} quality
+                                        </span>
+                                    </div>
+                                    {selectedVoice === voice.id && (
+                                        <FaCheck className="h-4 w-4 text-purple-400" />
+                                    )}
+                                </button>
+                            )) || (
+                                <div className="p-4 text-zinc-400 text-center">
+                                    No voices available for {selectedLanguage}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Simple Footer */}
+                    <div className="p-4 border-t border-white/10">
+                        <button
+                            onClick={() => setIsVoiceModalOpen(false)}
+                            className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
     );
 }

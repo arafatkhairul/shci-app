@@ -389,6 +389,7 @@ class SessionMemory:
         self.history: List[Dict[str, str]] = []
         self.greeted: bool = False
         self.language: str = language
+        self.voice: str = "en_US-libritts_r-medium"  # Default voice
         self.client_id: Optional[str] = None
         self.level: str = "starter"
         self._recent_level_change_ts: float = 0.0  # NEW: for context trim on level change
@@ -904,18 +905,18 @@ def format_response_professionally(text: str) -> str:
     return text
 
 # ===================== TTS (Environment-based) =====================
-async def tts_bytes_async(text: str, language: str = "en", speaker_wav: str = None) -> bytes:
+async def tts_bytes_async(text: str, language: str = "en", voice: str = None, speaker_wav: str = None) -> bytes:
     """Async TTS function using environment-based TTS factory"""
     try:
-        log.info(f"TTS synthesis: '{text[:50]}...' (lang={language})")
+        log.info(f"TTS synthesis: '{text[:50]}...' (lang={language}, voice={voice})")
         
         # Get TTS info for logging
         tts_info = get_tts_info()
         log.info(f"Using TTS system: {tts_info['preferred_system']}")
         
-        # Synthesize using TTS factory with ultra-fast mode
+        # Synthesize using TTS factory with voice selection
         # Note: speaker_wav parameter is ignored by Piper TTS
-        audio_bytes = await synthesize_text_async(text, language, speed=2.0)
+        audio_bytes = await synthesize_text_async(text, language, voice)
         
         if audio_bytes:
             log.info(f"✅ TTS synthesis successful: {len(audio_bytes)} bytes")
@@ -928,18 +929,18 @@ async def tts_bytes_async(text: str, language: str = "en", speaker_wav: str = No
         log_exception("tts_synthesis", e)
         return b""
 
-def tts_bytes(text: str, language: str = "en", speaker_wav: str = None) -> bytes:
+def tts_bytes(text: str, language: str = "en", voice: str = None, speaker_wav: str = None) -> bytes:
     """Main TTS function - uses environment-based TTS factory synchronously"""
     try:
-        log.info(f"TTS synthesis (sync): '{text[:50]}...' (lang={language})")
+        log.info(f"TTS synthesis (sync): '{text[:50]}...' (lang={language}, voice={voice})")
         
         # Get TTS info for logging
         tts_info = get_tts_info()
         log.info(f"Using TTS system: {tts_info['preferred_system']}")
         
-        # Synthesize using TTS factory with ultra-fast mode
+        # Synthesize using TTS factory with voice selection
         # Note: speaker_wav parameter is ignored by Piper TTS
-        audio_bytes = synthesize_text(text, language, speed=2.0)
+        audio_bytes = synthesize_text(text, language, voice)
         
         if audio_bytes:
             log.info(f"✅ TTS synthesis successful: {len(audio_bytes)} bytes")
@@ -992,10 +993,10 @@ async def root():
     return {"message": "Voice Agent Backend is running."}
 
 @app.get("/test-tts")
-async def test_tts(text: str = "Hello, this is a test of the Piper TTS system.", lang: str = "en"):
+async def test_tts(text: str = "Hello, this is a test of the Piper TTS system.", lang: str = "en", voice: str = "en_US-libritts_r-medium"):
     try:
-        log.info(f"Test TTS called with text: '{text[:50]}...' and language: {lang}")
-        audio_bytes = await tts_bytes_async(text, lang)
+        log.info(f"Test TTS called with text: '{text[:50]}...', language: {lang}, voice: {voice}")
+        audio_bytes = await tts_bytes_async(text, lang, voice)
         
         if audio_bytes:
             # Piper TTS uses WAV format
@@ -1114,9 +1115,9 @@ async def test_tts_endpoint(
                     "message": f"Invalid TTS system: {tts_system}. Available: piper, fallback"
                 }, status_code=400)
         
-        # Test synthesis with ultra-fast mode
+        # Test synthesis with voice selection
         # Note: speaker_wav parameter is ignored by Piper TTS
-        audio_data = await synthesize_text_async(text, language, system, speed=2.0)
+        audio_data = await synthesize_text_async(text, language, voice, system)
         
         if audio_data:
             audio_b64 = base64.b64encode(audio_data).decode("utf-8")
@@ -1155,7 +1156,7 @@ async def test_tts_streaming(
         log.info(f"Testing TTS streaming: '{text[:50]}...'")
         
         # Test synthesis using TTS factory
-        audio_data = await synthesize_text_async(text, language, speed=2.0)
+        audio_data = await synthesize_text_async(text, language)
         
         if audio_data:
             audio_b64 = base64.b64encode(audio_data).decode("utf-8")
@@ -1710,6 +1711,17 @@ async def ws_endpoint(ws: WebSocket):
                                 changed = True
                                 log.info(f"[{conn_id}] Language={new_language}")
 
+                        if "voice" in data:
+                            new_voice = data["voice"]
+                            if hasattr(mem, 'voice') and mem.voice != new_voice:
+                                mem.voice = new_voice
+                                changed = True
+                                log.info(f"[{conn_id}] Voice={new_voice}")
+                            elif not hasattr(mem, 'voice'):
+                                mem.voice = new_voice
+                                changed = True
+                                log.info(f"[{conn_id}] Voice={new_voice} (initial)")
+
                         if "use_local_tts" in data:
                             server_tts_enabled = not data["use_local_tts"]
                             log.info(f"[{conn_id}] Server TTS: {'enabled' if server_tts_enabled else 'disabled'}")
@@ -1879,7 +1891,7 @@ async def ws_endpoint(ws: WebSocket):
                             if text:
                                 log.info(f"[{conn_id}] TTS request: {text[:60]}...")
                                 async with TTS_SEM:
-                                    audio = await tts_bytes_async(text, mem.language)
+                                    audio = await tts_bytes_async(text, mem.language, mem.voice)
                                 b64 = base64.b64encode(audio).decode("utf-8")
                                 # Piper TTS uses WAV format
                                 audio_format = "wav"
@@ -2040,7 +2052,7 @@ async def ws_endpoint(ws: WebSocket):
                                         try:
                                             async with TTS_SEM:
                                                 log.info(f"[{conn_id}] 🔊 TTS text (grammar correction removed): '{tts_text[:60]}...'")
-                                                audio = await tts_bytes_async(tts_text, mem.language)
+                                                audio = await tts_bytes_async(tts_text, mem.language, mem.voice)
                                                 
                                                 if audio:
                                                     b64 = base64.b64encode(audio).decode("utf-8")
@@ -2173,7 +2185,7 @@ async def ws_endpoint(ws: WebSocket):
                             if server_tts_enabled:
                                 try:
                                     async with TTS_SEM:
-                                        audio = await tts_bytes_async(corrected_ai_text, mem.language)
+                                        audio = await tts_bytes_async(corrected_ai_text, mem.language, mem.voice)
                                         
                                         if audio:
                                             b64 = base64.b64encode(audio).decode("utf-8")
