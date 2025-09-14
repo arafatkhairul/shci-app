@@ -49,7 +49,7 @@ TTS_SYSTEM = os.getenv("TTS_SYSTEM", "piper").lower()
 # ---- Piper TTS Configuration ----
 PIPER_MODEL_NAME = os.getenv("PIPER_MODEL_NAME", "en_US-ljspeech-high").strip()
 PIPER_LENGTH_SCALE = float(os.getenv("PIPER_LENGTH_SCALE", "1.5"))
-PIPER_NOISE_SCALE = float(os.getenv("PIPER_NOISE_SCALE", "0.667"))
+PIPER_NOISE_SCALE = float(os.getenv("PIPER_NOISE_SCALE", "1.0"))
 PIPER_NOISE_W = float(os.getenv("PIPER_NOISE_W", "0.8"))
 
 # ---- Audio Configuration ----
@@ -64,9 +64,6 @@ ASSISTANT_AUTHOR = os.getenv("ASSISTANT_AUTHOR", "NZR DEV")
 # Configuration logging
 log.info(f"🔧 Environment: {TTS_ENVIRONMENT} ({ENVIRONMENT})")
 log.info(f"🤖 LLM: {LLM_API_URL} (model={LLM_MODEL}) timeout={LLM_TIMEOUT}s, retries={LLM_RETRIES}")
-log.info(f"🎵 TTS System: {TTS_SYSTEM}")
-log.info(f"🎯 Piper TTS: {PIPER_MODEL_NAME} (length={PIPER_LENGTH_SCALE}, noise={PIPER_NOISE_SCALE}, w={PIPER_NOISE_W})")
-log.info(f"🔊 Audio: {TTS_OUTPUT_FORMAT} @ {TTS_SAMPLE_RATE}Hz, language={DEFAULT_LANGUAGE}")
 log.info(f"👤 Assistant: {ASSISTANT_NAME} by {ASSISTANT_AUTHOR}")
 
 # ---- Memory store ----
@@ -97,7 +94,6 @@ async def startup_event():
         print("🚀 SHCI VOICE ASSISTANT - STARTING UP")
         print("="*80)
         
-        log.info("🚀 Starting TTS system initialization...")
         
         # Initialize TTS factory
         tts_info = get_tts_info()
@@ -130,11 +126,11 @@ async def startup_event():
         if 'piper' in tts_info['providers']:
             piper_info = tts_info['providers']['piper']
             print(f"\n🎵 TTS CONFIGURATION:")
-            print(f"   Model: {piper_info['model_name']}")
-            print(f"   Sample Rate: {piper_info['sample_rate']} Hz")
-            print(f"   Length Scale: {piper_info['synthesis_params']['length_scale']}")
-            print(f"   Noise Scale: {piper_info['synthesis_params']['noise_scale']}")
-            print(f"   Noise W: {piper_info['synthesis_params']['noise_w']}")
+            print(f"   Voice: {piper_info.get('current_voice', 'Unknown')}")
+            print(f"   Sample Rate: {piper_info.get('sample_rate', 'Unknown')} Hz")
+            print(f"   Length Scale: {piper_info.get('synthesis_params', {}).get('length_scale', 'Unknown')}")
+            print(f"   Noise Scale: {piper_info.get('synthesis_params', {}).get('noise_scale', 'Unknown')}")
+            print(f"   Noise W: {piper_info.get('synthesis_params', {}).get('noise_w', 'Unknown')}")
         
         # Audio Configuration
         print(f"\n🔊 AUDIO CONFIGURATION:")
@@ -189,12 +185,10 @@ async def startup_event():
         print("🎉 SERVER READY TO ACCEPT CONNECTIONS!")
         print("="*80 + "\n")
         
-        log.info("✅ TTS system initialization complete")
         
     except Exception as e:
         print(f"\n❌ STARTUP ERROR: {e}")
         print("="*80 + "\n")
-        log.error(f"❌ TTS startup error: {e}")
         import traceback
         log.error(f"Traceback: {traceback.format_exc()}")
 
@@ -203,13 +197,11 @@ async def shutdown_event():
     """Cleanup TTS resources on shutdown"""
     try:
         # Cleanup streaming resources
-        log.info("🔄 Cleaning up TTS streaming resources...")
         from realtime_tts_streaming import cleanup_streaming
         cleanup_streaming()
         
-        log.info("✅ TTS system shutdown complete")
     except Exception as e:
-        log.error(f"❌ TTS shutdown error: {e}")
+        pass
 
 # ===================== Audio / VAD Configuration =====================
 # Audio processing parameters
@@ -233,8 +225,6 @@ TTS_SEM = asyncio.Semaphore(int(os.getenv("TTS_CONCURRENCY", "1")))
 
 # VAD Configuration logging
 log.info(f"🎤 VAD: trigger={TRIGGER_VOICED_FRAMES}, silence={END_SILENCE_MS}ms, max={MAX_UTTER_MS}ms")
-log.info(f"🔊 Audio: min_utter={MIN_UTTER_SEC}s, min_rms={MIN_RMS}")
-log.info(f"⚡ Concurrency: STT={os.getenv('STT_CONCURRENCY', '1')}, TTS={os.getenv('TTS_CONCURRENCY', '1')}")
 
 # ===================== Identity / Persona =====================
 # Assistant identity (already configured above)
@@ -301,14 +291,14 @@ ROLE_PLAY_TEMPLATES = {
 
 # ===================== Difficulty Level Styles =====================
 LEVEL_STYLES = {
-    "starter": {
-        "prompt": """STYLE (Starter / A2):
-- Use simple vocabulary and clear sentences.
-- Provide helpful information in 2-3 sentences.
+    "easy": {
+        "prompt": """STYLE (Easy / A1-A2):
+- Use very simple vocabulary and short sentences.
+- Provide helpful information in 1-2 sentences.
 - Be friendly and encouraging. Use simple present tense.
-- Give practical details about your role and organization.""",
-        "temperature": 0.3,
-        "max_tokens": 120,
+- Give basic details about your role and organization.""",
+        "temperature": 0.2,
+        "max_tokens": 80,
     },
     "medium": {
         "prompt": """STYLE (Medium / B1–B2):
@@ -319,8 +309,8 @@ LEVEL_STYLES = {
         "temperature": 0.5,
         "max_tokens": 180,
     },
-    "advanced": {
-        "prompt": """STYLE (Advanced / C1):
+    "fast": {
+        "prompt": """STYLE (Fast / C1):
 - Give comprehensive, detailed responses in 4-5 sentences.
 - Use rich vocabulary and natural expressions.
 - Provide thorough information about your role and organization.
@@ -391,8 +381,13 @@ class SessionMemory:
         self.language: str = language
         self.voice: str = "en_US-libritts_r-medium"  # Default voice
         self.client_id: Optional[str] = None
-        self.level: str = "starter"
+        self.level: str = "medium"
         self._recent_level_change_ts: float = 0.0  # NEW: for context trim on level change
+        
+        # Speech speed settings
+        self.speech_speed: str = "medium"  # easy (slow), medium (normal), fast (fast)
+        self.noise_scale: float = 0.667  # Default noise_scale for Piper TTS (voice clarity)
+        self.length_scale: float = 1.0  # Default length_scale for Piper TTS (speech speed)
         
         # Role play settings
         self.role_play_enabled: bool = False
@@ -454,9 +449,10 @@ class SessionMemory:
             self.organization_name = config['organization_name']
             self.organization_details = config['organization_details']
             self.role_title = config['role_title']
-            log.info(f"Loaded role play config from DB: {config}")
+            # Role play config loaded from DB
         else:
-            log.info(f"No role play config found in DB for client: {client_id}")
+            # No role play config found in DB
+            pass
     
     def save_role_play_to_db(self, client_id: str):
         """Save role play configuration to database"""
@@ -473,7 +469,8 @@ class SessionMemory:
         
         success = roleplay_db.save_role_play_config(client_id, config)
         if success:
-            log.info(f"Saved role play config to DB for client: {client_id}")
+            # Role play config saved to DB
+            pass
         else:
             log.error(f"Failed to save role play config to DB for client: {client_id}")
         return success
@@ -530,7 +527,7 @@ def shortcut_answer(text: str, mem: SessionMemory) -> Optional[str]:
     current_lang = LANGUAGES[mem.language]
     if re.search(current_lang["shortcut_patterns"]["name"], text, re.I):
         who = current_lang["assistant_name"]
-        if mem.level == "starter":
+        if mem.level == "easy":
             return f"I'm {who}. Nice to meet you."
         elif mem.level == "medium":
             return f"I'm {who}. It's a pleasure to make your acquaintance."
@@ -540,7 +537,7 @@ def shortcut_answer(text: str, mem: SessionMemory) -> Optional[str]:
         if mem.last_destination:
             who = mem.user_name or ("tu" if mem.language == "it" else "you")
             base_response = current_lang["responses"]["destination_remembered"].format(name=who, destination=mem.last_destination)
-            if mem.level == "starter":
+            if mem.level == "easy":
                 return base_response
             elif mem.level == "medium":
                 return f"I remember! {base_response}"
@@ -550,7 +547,7 @@ def shortcut_answer(text: str, mem: SessionMemory) -> Optional[str]:
     if re.search(current_lang["shortcut_patterns"]["my_name"], text, re.I):
         if mem.user_name:
             base_response = current_lang["responses"]["name_remembered"].format(name=mem.user_name)
-            if mem.level == "starter":
+            if mem.level == "easy":
                 return base_response
             elif mem.level == "medium":
                 return f"That's right! {base_response}"
@@ -615,7 +612,7 @@ def enforce_level_style(text: str, level: str) -> str:
     if not sents:
         sents = [text]
 
-    if level == "starter":
+    if level == "easy":
         # 2-3 sentences, simple vocabulary
         if len(sents) >= 2:
             # Take first 2-3 sentences, ensure they're not too long
@@ -623,7 +620,7 @@ def enforce_level_style(text: str, level: str) -> str:
             total_words = 0
             for sent in sents[:3]:
                 words = len(sent.split())
-                if total_words + words <= 50:  # Reasonable limit for starter
+                if total_words + words <= 50:  # Reasonable limit for easy
                     result_sents.append(sent)
                     total_words += words
                 else:
@@ -649,7 +646,7 @@ def enforce_level_style(text: str, level: str) -> str:
         else:
             return " ".join(sents)
 
-    else:  # advanced
+    else:  # fast
         # 4-5 sentences, rich vocabulary
         if len(sents) >= 4:
             # Take first 4-5 sentences
@@ -657,7 +654,7 @@ def enforce_level_style(text: str, level: str) -> str:
             total_words = 0
             for sent in sents[:5]:
                 words = len(sent.split())
-                if total_words + words <= 120:  # Reasonable limit for advanced
+                if total_words + words <= 120:  # Reasonable limit for fast
                     result_sents.append(sent)
                     total_words += words
                 else:
@@ -668,14 +665,14 @@ def enforce_level_style(text: str, level: str) -> str:
 
 # ===================== LLM Integration =====================
 # ===================== LLM Integration =====================
-def _llm_request_sync(messages: List[Dict[str, str]], level: str = "starter") -> str:
+def _llm_request_sync(messages: List[Dict[str, str]], level: str = "easy") -> str:
     # headers
     headers = {"Content-Type": "application/json"}
     if LLM_API_KEY:
         headers["Authorization"] = f"Bearer {LLM_API_KEY}"
 
     # level -> decoding params
-    lvl = LEVEL_STYLES.get(level, LEVEL_STYLES["starter"])
+    lvl = LEVEL_STYLES.get(level, LEVEL_STYLES["easy"])
     log.info(f"[LLM] Request level={level} temp={lvl['temperature']} max_tokens={lvl['max_tokens']}")
 
     # OpenAI-compatible chat payload (nodecel gateway compatible)
@@ -727,7 +724,7 @@ def post_shorten(text: str, hard_limit: int = 110) -> str:
 
 async def llm_reply(user_text: str, mem: SessionMemory) -> str:
     if not user_text.strip(): return ""
-    lvl = LEVEL_STYLES.get(mem.level, LEVEL_STYLES["starter"])
+    lvl = LEVEL_STYLES.get(mem.level, LEVEL_STYLES["medium"])
     log.info(f"[LLM] Using level: {mem.level} | temp: {lvl['temperature']} | max_tokens: {lvl['max_tokens']}")
     
     # Organization-based RAG approach: Check organizations table first
@@ -737,30 +734,21 @@ async def llm_reply(user_text: str, mem: SessionMemory) -> str:
     # Check if organization name is provided in memory
     if hasattr(mem, 'organization_name') and mem.organization_name:
         organization_name = mem.organization_name
-        log.info(f"[LLM] 🔍 STEP 1: Found organization name in memory: '{organization_name}'")
     
     # If no organization name, try to extract from RAG context
     if not organization_name and hasattr(mem, 'rag_context') and mem.rag_context:
-        log.info(f"[LLM] 🔍 STEP 2: Checking RAG context for organization name")
-        log.info(f"[LLM] 🔍 STEP 2a: RAG context length: {len(mem.rag_context)}")
-        
         # Get all organizations and check if any name appears in the RAG context
         organizations = organization_db.get_all_organizations(limit=50)
         for org in organizations:
             if org['name'].lower() in mem.rag_context.lower():
                 organization_name = org['name']
-                log.info(f"[LLM] 🔍 STEP 2b: Found organization '{organization_name}' in RAG context")
                 break
     
     # If we found an organization, get its details from database
     if organization_name:
-        log.info(f"[LLM] 🔍 STEP 3: Retrieving organization details for '{organization_name}'")
-        
         org_data = organization_db.get_organization(organization_name)
         if org_data:
             organization_details = org_data['details']
-            log.info(f"[LLM] 🔍 STEP 4: Retrieved organization data from database")
-            log.info(f"[LLM] 🔍 STEP 4a: Organization details length: {len(organization_details)}")
             
             # Create organization-based context
             organization_context = f"""You are an AI assistant representing {org_data['name']}.
@@ -784,17 +772,13 @@ RESPONSE FORMATTING INSTRUCTIONS:
 
 IMPORTANT: Format your response as a single, well-organized paragraph or structured text block. Do not split information across multiple separate lines unless absolutely necessary for clarity."""
             
-            log.info(f"[LLM] 🔍 STEP 5: Generated organization-based context")
-            log.info(f"[LLM] 🔍 STEP 5a: Context length: {len(organization_context)}")
             
             system_messages = [{"role":"system","content":organization_context}]
         else:
-            log.warning(f"[LLM] 🔍 STEP 4: Organization '{organization_name}' not found in database")
             # Fall back to standard persona
             persona = LANGUAGES[mem.language]["persona"]
             system_messages = [{"role":"system","content":persona}]
     else:
-        log.info(f"[LLM] 🔍 STEP 1: No organization name found, using standard persona")
         # No organization specified, use standard persona
         persona = LANGUAGES[mem.language]["persona"]
         system_messages = [{"role":"system","content":persona}]
@@ -905,24 +889,20 @@ def format_response_professionally(text: str) -> str:
     return text
 
 # ===================== TTS (Environment-based) =====================
-async def tts_bytes_async(text: str, language: str = "en", voice: str = None, speaker_wav: str = None) -> bytes:
+async def tts_bytes_async(text: str, language: str = "en", voice: str = None, speaker_wav: str = None, length_scale: float = None) -> bytes:
     """Async TTS function using environment-based TTS factory"""
     try:
-        log.info(f"TTS synthesis: '{text[:50]}...' (lang={language}, voice={voice})")
         
         # Get TTS info for logging
         tts_info = get_tts_info()
-        log.info(f"Using TTS system: {tts_info['preferred_system']}")
         
-        # Synthesize using TTS factory with voice selection
+        # Synthesize using TTS factory with voice selection and dynamic length_scale
         # Note: speaker_wav parameter is ignored by Piper TTS
-        audio_bytes = await synthesize_text_async(text, language, voice)
+        audio_bytes = await synthesize_text_async(text, language, voice, length_scale=length_scale)
         
         if audio_bytes:
-            log.info(f"✅ TTS synthesis successful: {len(audio_bytes)} bytes")
             return audio_bytes
         else:
-            log.error("TTS synthesis failed - no audio returned")
             return b""
             
     except Exception as e:
@@ -932,21 +912,17 @@ async def tts_bytes_async(text: str, language: str = "en", voice: str = None, sp
 def tts_bytes(text: str, language: str = "en", voice: str = None, speaker_wav: str = None) -> bytes:
     """Main TTS function - uses environment-based TTS factory synchronously"""
     try:
-        log.info(f"TTS synthesis (sync): '{text[:50]}...' (lang={language}, voice={voice})")
         
         # Get TTS info for logging
         tts_info = get_tts_info()
-        log.info(f"Using TTS system: {tts_info['preferred_system']}")
         
         # Synthesize using TTS factory with voice selection
         # Note: speaker_wav parameter is ignored by Piper TTS
         audio_bytes = synthesize_text(text, language, voice)
         
         if audio_bytes:
-            log.info(f"✅ TTS synthesis successful: {len(audio_bytes)} bytes")
             return audio_bytes
         else:
-            log.error("TTS synthesis failed - no audio returned")
             return b""
             
     except Exception as e:
@@ -995,7 +971,6 @@ async def root():
 @app.get("/test-tts")
 async def test_tts(text: str = "Hello, this is a test of the Piper TTS system.", lang: str = "en", voice: str = "en_US-libritts_r-medium"):
     try:
-        log.info(f"Test TTS called with text: '{text[:50]}...', language: {lang}, voice: {voice}")
         audio_bytes = await tts_bytes_async(text, lang, voice)
         
         if audio_bytes:
@@ -1010,7 +985,7 @@ async def test_tts(text: str = "Hello, this is a test of the Piper TTS system.",
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get("/test-level")
-async def test_level(text: str = "This is a test of the level enforcement system.", level: str = "starter"):
+async def test_level(text: str = "This is a test of the level enforcement system.", level: str = "medium"):
     try:
         log.info(f"Test level enforcement: level={level}, text='{text[:50]}...'")
         enforced_text = enforce_level_style(text, level)
@@ -1036,7 +1011,7 @@ async def test_roleplay(
     question: str = "What do you do here?"
 ):
     try:
-        log.info(f"Test role play: template={template}, org={organization_name}")
+        # Test role play functionality
         
         # Create a mock SessionMemory for testing
         class MockMemory:
@@ -1079,16 +1054,13 @@ async def test_roleplay(
 async def get_tts_info_endpoint():
     """Get TTS system information"""
     try:
-        log.info("Getting TTS info...")
         tts_info = get_tts_info()
-        log.info(f"TTS info retrieved successfully: {tts_info['environment']}")
         return {
             "status": "success",
             "tts_info": tts_info,
             "timestamp": time.time()
         }
     except Exception as e:
-        log.error(f"Error getting TTS info: {e}")
         import traceback
         log.error(f"Traceback: {traceback.format_exc()}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -1102,7 +1074,6 @@ async def test_tts_endpoint(
 ):
     """Test TTS functionality with different systems"""
     try:
-        log.info(f"Testing TTS: '{text[:50]}...'")
         
         # Determine TTS system
         system = None
@@ -1153,7 +1124,6 @@ async def test_tts_streaming(
 ):
     """Test TTS streaming functionality"""
     try:
-        log.info(f"Testing TTS streaming: '{text[:50]}...'")
         
         # Test synthesis using TTS factory
         audio_data = await synthesize_text_async(text, language)
@@ -1187,7 +1157,7 @@ async def test_tts_streaming(
 async def test_roleplay_db(client_id: str = "u1zg6u8u29dmeye1eor"):
     """Test role play configuration from database"""
     try:
-        log.info(f"Testing role play DB for client: {client_id}")
+        # Testing role play DB functionality
         
         # Get config from database
         config = roleplay_db.get_role_play_config(client_id)
@@ -1428,7 +1398,7 @@ async def test_roleplay_detailed(
 ):
     """Test detailed role play responses"""
     try:
-        log.info(f"Testing detailed role play: org={organization_name}, role={role_title}")
+        # Testing detailed role play functionality
         
         # Create mock SessionMemory for testing
         class MockMemory:
@@ -1638,7 +1608,6 @@ async def check_organization_exists(name: str):
 async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     conn_id = uuid.uuid4().hex[:8]
-    log.info(f"[{conn_id}] 🔌 NEW CLIENT CONNECTED - WebSocket established")
 
     mem = SessionMemory(language=DEFAULT_LANGUAGE)
     server_tts_enabled = True
@@ -1670,13 +1639,12 @@ async def ws_endpoint(ws: WebSocket):
                 try:
                     data = json.loads(msg["text"])
                     typ = data.get("type")
-                    log.info(f"[{conn_id}] 📨 Received WebSocket message: {typ}")
                     if typ == "final_transcript":
                         log.info(f"[{conn_id}] 🎤 FINAL_TRANSCRIPT MESSAGE RECEIVED: {data}")
                     elif typ == "client_prefs":
-                        log.info(f"[{conn_id}] ⚙️ CLIENT_PREFS MESSAGE RECEIVED: {data}")
+                        pass
                     else:
-                        log.debug(f"[{conn_id}] 📨 Message data: {data}")
+                        pass
                     if typ == "client_prefs":
                         changed = False
                         if "client_id" in data and not mem.client_id:
@@ -1692,7 +1660,7 @@ async def ws_endpoint(ws: WebSocket):
                             
                                                     # Load role play config from database
                         mem.load_role_play_from_db(cid)
-                        log.info(f"[{conn_id}] Loaded role play config for {cid}")
+                        # Role play config loaded for client
                         
                         # If role play is enabled in DB, ensure memory reflects it
                         db_config = roleplay_db.get_role_play_config(cid)
@@ -1702,7 +1670,7 @@ async def ws_endpoint(ws: WebSocket):
                             mem.organization_name = db_config['organization_name']
                             mem.organization_details = db_config['organization_details']
                             mem.role_title = db_config['role_title']
-                            log.info(f"[{conn_id}] Force-enabled role play from DB: org='{mem.organization_name}', role='{mem.role_title}'")
+                            # Role play force-enabled from DB
 
                         if "language" in data:
                             new_language = data["language"]
@@ -1724,11 +1692,10 @@ async def ws_endpoint(ws: WebSocket):
 
                         if "use_local_tts" in data:
                             server_tts_enabled = not data["use_local_tts"]
-                            log.info(f"[{conn_id}] Server TTS: {'enabled' if server_tts_enabled else 'disabled'}")
 
                         if "level" in data:
                             new_level = data["level"]
-                            if new_level in ("starter", "medium", "advanced") and new_level != mem.level:
+                            if new_level in ("easy", "medium", "fast") and new_level != mem.level:
                                 old_level = mem.level
                                 mem.level = new_level
                                 mem._recent_level_change_ts = time.time()
@@ -1740,42 +1707,46 @@ async def ws_endpoint(ws: WebSocket):
                                 log.info(f"[{conn_id}] Level changed: {old_level} → {mem.level}")
                                 await send_json(ws, {"type": "level_changed", "level": mem.level})
                                 changed = True
-                            elif new_level not in ("starter", "medium", "advanced"):
+                            elif new_level not in ("easy", "medium", "fast"):
                                 log.warning(f"[{conn_id}] Invalid level: {new_level}")
+                        
+                        # Handle speech speed settings
+                        if "speech_speed" in data:
+                            new_speech_speed = data["speech_speed"]
+                            if new_speech_speed in ("easy", "medium", "fast") and new_speech_speed != mem.speech_speed:
+                                mem.speech_speed = new_speech_speed
+                                log.info(f"[{conn_id}] Speech speed changed: {mem.speech_speed}")
+                                changed = True
+                        
+                        if "length_scale" in data:
+                            new_length_scale = data["length_scale"]
+                            if isinstance(new_length_scale, (int, float)) and new_length_scale != mem.length_scale:
+                                mem.length_scale = new_length_scale
+                                log.info(f"[{conn_id}] Length scale changed: {mem.length_scale:.2f}")
+                                changed = True
                         
                         # Handle RAG context for organization-based RAG
                         if "rag_context" in data:
                             rag_context = data["rag_context"]
-                            log.info(f"[{conn_id}] 🔍 STEP 12: Received rag_context from frontend")
-                            log.info(f"[{conn_id}] 🔍 STEP 12a: RAG context content: {rag_context[:200]}...")
-                            log.info(f"[{conn_id}] 🔍 STEP 12b: RAG context length: {len(rag_context)}")
-                            log.info(f"[{conn_id}] 🔍 STEP 12c: Current mem.rag_context: {mem.rag_context[:200]}...")
                             
                             if rag_context and rag_context != mem.rag_context:
                                 mem.rag_context = rag_context
-                                log.info(f"[{conn_id}] 🔍 STEP 13: RAG context updated successfully!")
-                                log.info(f"[{conn_id}] 🔍 STEP 13a: New RAG context length: {len(rag_context)}")
                                 
                                 # Try to extract organization name from RAG context
                                 organizations = organization_db.get_all_organizations(limit=50)
                                 for org in organizations:
                                     if org['name'].lower() in rag_context.lower():
                                         mem.organization_name = org['name']
-                                        log.info(f"[{conn_id}] 🔍 STEP 13b: Extracted organization name: '{org['name']}'")
                                         break
                                 
                                 changed = True
-                            else:
-                                log.info(f"[{conn_id}] 🔍 STEP 13: RAG context unchanged or empty")
                         
                         # Handle direct organization name setting
                         if "organization_name" in data:
                             org_name = data["organization_name"]
-                            log.info(f"[{conn_id}] 🔍 STEP 14: Received organization_name from frontend: '{org_name}'")
                             
                             if org_name and org_name != mem.organization_name:
                                 mem.organization_name = org_name
-                                log.info(f"[{conn_id}] 🔍 STEP 15: Organization name updated to: '{org_name}'")
                                 changed = True
                         
                         # Real-time TTS streaming commands (DISABLED - realtime_tts_streaming removed)
@@ -1831,46 +1802,43 @@ async def ws_endpoint(ws: WebSocket):
                                 "organization_name": mem.organization_name,
                                 "role_title": mem.role_title
                             })
-                            log.info(f"[{conn_id}] Sent role play update: enabled={mem.role_play_enabled}, org={mem.organization_name}")
+                            # Role play update sent to frontend
 
                         # Role play settings - Update memory first
                         if "role_play_enabled" in data:
                             mem.role_play_enabled = data["role_play_enabled"]
                             changed = True
-                            log.info(f"[{conn_id}] Role play {'enabled' if mem.role_play_enabled else 'disabled'}")
+                            # Role play state updated
 
                         if "role_play_template" in data:
                             new_template = data["role_play_template"]
                             if new_template in ROLE_PLAY_TEMPLATES:
                                 mem.role_play_template = new_template
                                 changed = True
-                                log.info(f"[{conn_id}] Role play template: {mem.role_play_template}")
+                                # Role play template updated
 
                         if "organization_name" in data:
                             mem.organization_name = data["organization_name"]
                             changed = True
-                            log.info(f"[{conn_id}] Organization: {mem.organization_name}")
+                            # Organization name updated
 
                         if "organization_details" in data:
                             mem.organization_details = data["organization_details"]
                             changed = True
-                            log.info(f"[{conn_id}] Organization details updated")
+                            # Organization details updated
 
                         if "role_title" in data:
                             mem.role_title = data["role_title"]
                             changed = True
-                            log.info(f"[{conn_id}] Role title: {mem.role_title}")
+                            # Role title updated
                         
                         # Save role play config to database when any role play field changes
                         if any(key in data for key in ["role_play_enabled", "role_play_template", "organization_name", "organization_details", "role_title"]):
                             if mem.client_id:
                                 mem.save_role_play_to_db(mem.client_id)
-                                log.info(f"[{conn_id}] Saved role play config to DB: enabled={mem.role_play_enabled}, org={mem.organization_name}, role={mem.role_title}")
+                                # Role play config saved to DB
 
-                        # Debug: Log all role play data received
-                        if any(key in data for key in ["role_play_enabled", "role_play_template", "organization_name", "organization_details", "role_title"]):
-                            log.info(f"[{conn_id}] Role play data received: enabled={data.get('role_play_enabled')}, template={data.get('role_play_template')}, org={data.get('organization_name')}, role={data.get('role_title')}")
-                            log.info(f"[{conn_id}] Current mem state: enabled={mem.role_play_enabled}, template={mem.role_play_template}, org={mem.organization_name}, role={mem.role_title}")
+                        # Role play data received and processed
                             
                             # Log the exact data being saved to DB
                             db_config = {
@@ -1889,9 +1857,8 @@ async def ws_endpoint(ws: WebSocket):
                         try:
                             text = data.get("text", "")
                             if text:
-                                log.info(f"[{conn_id}] TTS request: {text[:60]}...")
                                 async with TTS_SEM:
-                                    audio = await tts_bytes_async(text, mem.language, mem.voice)
+                                    audio = await tts_bytes_async(text, mem.language, mem.voice, length_scale=mem.length_scale)
                                 b64 = base64.b64encode(audio).decode("utf-8")
                                 # Piper TTS uses WAV format
                                 audio_format = "wav"
@@ -1942,11 +1909,11 @@ async def ws_endpoint(ws: WebSocket):
                         
                     elif typ == "get_roleplay_state":
                         try:
-                            log.info(f"[{conn_id}] Received get_roleplay_state request")
+                            # Received get_roleplay_state request
                             if mem.client_id:
                                 # Get latest state from database
                                 db_config = roleplay_db.get_role_play_config(mem.client_id)
-                                log.info(f"[{conn_id}] Database config for {mem.client_id}: {db_config}")
+                                
                                 
                                 if db_config:
                                     # Update memory with DB state
@@ -1956,7 +1923,7 @@ async def ws_endpoint(ws: WebSocket):
                                     mem.organization_details = db_config.get('organization_details', '')
                                     mem.role_title = db_config.get('role_title', '')
                                     
-                                    log.info(f"[{conn_id}] Updated memory: enabled={mem.role_play_enabled}, org='{mem.organization_name}', role='{mem.role_title}'")
+                                    # Memory updated with role play state
                                     
                                     # Send current state to frontend
                                     response_data = {
@@ -1969,10 +1936,10 @@ async def ws_endpoint(ws: WebSocket):
                                     }
                                     
                                     await send_json(ws, response_data)
-                                    log.info(f"[{conn_id}] Sent role play state to frontend: {response_data}")
+                                    # Role play state sent to frontend
                                 else:
                                     # No config found, send disabled state
-                                    log.info(f"[{conn_id}] No role play config found for client {mem.client_id}")
+                                    # No role play config found for client
                                     await send_json(ws, {
                                         "type": "role_play_updated",
                                         "enabled": False,
@@ -2012,9 +1979,6 @@ async def ws_endpoint(ws: WebSocket):
                                 try:
                                     log.info(f"[{conn_id}] 🤖 Starting LLM processing for: '{text[:60]}...'")
                                     log.info(f"[{conn_id}] 📊 Memory state: level={mem.level}, language={mem.language}")
-                                    log.info(f"[{conn_id}] 🔍 STEP 16: About to call LLM with RAG context")
-                                    log.info(f"[{conn_id}] 🔍 STEP 16a: mem.rag_context length: {len(mem.rag_context)}")
-                                    log.info(f"[{conn_id}] 🔍 STEP 16b: mem.organization_name: {mem.organization_name}")
                                     
                                     ai_text = await llm_reply(text, mem)
                                     if not ai_text:
@@ -2022,8 +1986,6 @@ async def ws_endpoint(ws: WebSocket):
                                         return
                                     
                                     log.info(f"[{conn_id}] ✅ LLM response received: '{ai_text[:60]}...'")
-                                    log.info(f"[{conn_id}] 🔍 STEP 17: Full LLM response: {ai_text}")
-                                    log.info(f"[{conn_id}] 🔍 STEP 17a: Response length: {len(ai_text)}")
                                     
                                     # Direct LLM response with level enforcement
                                     corrected_ai_text = enforce_level_style(ai_text, mem.level)
@@ -2051,8 +2013,7 @@ async def ws_endpoint(ws: WebSocket):
                                     if server_tts_enabled:
                                         try:
                                             async with TTS_SEM:
-                                                log.info(f"[{conn_id}] 🔊 TTS text (grammar correction removed): '{tts_text[:60]}...'")
-                                                audio = await tts_bytes_async(tts_text, mem.language, mem.voice)
+                                                audio = await tts_bytes_async(tts_text, mem.language, mem.voice, length_scale=mem.length_scale)
                                                 
                                                 if audio:
                                                     b64 = base64.b64encode(audio).decode("utf-8")
@@ -2064,9 +2025,8 @@ async def ws_endpoint(ws: WebSocket):
                                                         "audio_base64": b64,
                                                         "audio_format": audio_format
                                                     })
-                                                    log.info(f"[{conn_id}] 🔊 TTS audio sent to frontend")
                                                 else:
-                                                    log.error(f"[{conn_id}] TTS generation returned no audio.")
+                                                    pass
                                         except Exception as e:
                                             log_exception(f"[{conn_id}] tts_auto", e)
                                             await send_json(ws, {"type": "error", "message": "TTS generation failed"})
@@ -2084,6 +2044,30 @@ async def ws_endpoint(ws: WebSocket):
 
                     elif typ == "ping":
                         await send_json(ws, {"type": "pong"})
+                    
+                    elif typ == "set_speech_speed":
+                        try:
+                            length_scale = data.get("length_scale", 1.0)
+                            speed_level = data.get("speed_level", "medium")
+                            speed_description = {"easy": "Slow", "medium": "Normal", "fast": "Fast"}.get(speed_level, speed_level)
+                            
+                            # Update memory with new speed setting
+                            mem.speech_speed = speed_level
+                            mem.length_scale = length_scale
+                            
+                            log.info(f"[{conn_id}] Speech speed changed: {speed_level}")
+                            log.info(f"[{conn_id}] Length scale changed: {length_scale:.2f}")
+                            
+                            # Send confirmation back to frontend
+                            await send_json(ws, {
+                                "type": "speed_confirmed", 
+                                "speed_level": speed_level,
+                                "length_scale": length_scale
+                            })
+                            
+                        except Exception as e:
+                            log_exception(f"[{conn_id}] set_speech_speed", e)
+                            await send_json(ws, {"type": "error", "message": "Failed to set speech speed"})
                 except Exception as e:
                     log_exception(f"[{conn_id}] text_parse", e)
                 continue
@@ -2185,7 +2169,7 @@ async def ws_endpoint(ws: WebSocket):
                             if server_tts_enabled:
                                 try:
                                     async with TTS_SEM:
-                                        audio = await tts_bytes_async(corrected_ai_text, mem.language, mem.voice)
+                                        audio = await tts_bytes_async(corrected_ai_text, mem.language, mem.voice, length_scale=mem.length_scale)
                                         
                                         if audio:
                                             b64 = base64.b64encode(audio).decode("utf-8")
@@ -2231,7 +2215,6 @@ async def ws_endpoint(ws: WebSocket):
                 mem_store.save(mem)
         except Exception as e:
             log_exception(f"[{conn_id}] mem_save_on_close", e)
-        log.info(f"[{conn_id}] Connection closed")
 
 @app.get("/api/test-grammar")
 async def test_grammar():
@@ -2240,7 +2223,7 @@ async def test_grammar():
     
     # Create a test memory
     test_mem = SessionMemory("en")
-    test_mem.level = "starter"
+    test_mem.level = "easy"
     
     # Test the LLM response
     try:

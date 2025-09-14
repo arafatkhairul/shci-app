@@ -42,7 +42,7 @@ TTS_SYSTEM=piper              # piper/fallback
 ```bash
 PIPER_MODEL_NAME=en_US-ljspeech-high
 PIPER_LENGTH_SCALE=1.5        # Speech speed (1.0 = normal)
-PIPER_NOISE_SCALE=0.667       # Voice clarity
+PIPER_NOISE_SCALE=3.0       # Voice clarity
 PIPER_NOISE_W=0.8             # Voice stability
 ```
 
@@ -138,7 +138,7 @@ DEFAULT_LANGUAGE=en
 TTS_OUTPUT_FORMAT=wav
 TTS_SAMPLE_RATE=22050
 PIPER_LENGTH_SCALE=1.2        # Slightly faster speech
-PIPER_NOISE_SCALE=0.7         # Clearer voice
+PIPER_NOISE_SCALE=3.0         # Clearer voice
 ```
 
 ### High-Performance Setup

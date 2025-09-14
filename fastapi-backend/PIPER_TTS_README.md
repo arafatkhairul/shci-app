@@ -28,7 +28,7 @@ TTS_ENVIRONMENT=local  # or production
 # Piper TTS Model Configuration
 PIPER_MODEL_NAME=en_US-libritts_r-medium
 PIPER_LENGTH_SCALE=1.5
-PIPER_NOISE_SCALE=0.667
+PIPER_NOISE_SCALE=3.0
 PIPER_NOISE_W=0.8
 
 # Audio Configuration
@@ -67,7 +67,7 @@ audio_data = synthesize_text(
     "Hello, how are you?", 
     "en",
     length_scale=1.5,    # Speech speed (1.0 = normal)
-    noise_scale=0.667,    # Voice clarity
+    noise_scale=3.0,    # Voice clarity
     noise_w=0.8          # Voice variation
 )
 ```
@@ -145,7 +145,7 @@ print(f"Available Providers: {info['available_providers']}")
    # Adjust parameters
    synthesize_text(text, "en", 
                    length_scale=1.0,  # Slower speech
-                   noise_scale=0.5,   # Clearer voice
+                   noise_scale=3.0,   # Clearer voice
                    noise_w=0.6)       # Less variation
    ```
 

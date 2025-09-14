@@ -22,7 +22,6 @@ try:
     PIPER_TTS_AVAILABLE = True
 except ImportError:
     PIPER_TTS_AVAILABLE = False
-    log.warning("Piper TTS not available - install with: pip install piper-tts")
 
 # Import requests for model downloading
 try:
@@ -127,10 +126,10 @@ class PiperTTSProvider(TTSInterface):
         self.use_cuda = self.device_config['use_cuda']
         self.device_info = self.device_config['device_info']
         
-        # Synthesis parameters - ULTRA-FAST for old Intel Xeon
-        self.length_scale = float(os.getenv("PIPER_LENGTH_SCALE", "0.4"))  # Ultra-fast speech
-        self.noise_scale = float(os.getenv("PIPER_NOISE_SCALE", "0.3"))    # Minimal processing
-        self.noise_w = float(os.getenv("PIPER_NOISE_W", "0.4"))             # Ultra-optimized for CPU
+        # Synthesis parameters - Balanced for old Intel Xeon
+        self.length_scale = float(os.getenv("PIPER_LENGTH_SCALE", "0.6"))  # Balanced speech speed
+        self.noise_scale = float(os.getenv("PIPER_NOISE_SCALE", "1.0"))    # Default to medium speed
+        self.noise_w = float(os.getenv("PIPER_NOISE_W", "0.5"))             # Balanced for CPU
         
         # Server performance optimizations (after attributes are initialized)
         self._apply_server_optimizations()
@@ -154,15 +153,12 @@ class PiperTTSProvider(TTSInterface):
         
         if self.available:
             self._initialize_voice()
-            log.info("✅ Piper TTS provider initialized")
-            log.info(f"🔧 Device: {self.device_info['device_type']} ({self.device_info['device_name']})")
             log.info(f"🔧 CUDA: {'Enabled' if self.use_cuda else 'Disabled'}")
         else:
-            log.warning("❌ Piper TTS provider not available")
+            pass
     
     def _detect_device_config(self):
         """Force CPU usage for Piper TTS - GPU completely disabled."""
-        log.info("🔧 FORCING CPU USAGE - GPU completely disabled for Piper TTS")
         
         # Disable CUDA completely
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -180,7 +176,6 @@ class PiperTTSProvider(TTSInterface):
             }
         }
         
-        log.info("✅ Piper TTS will run ONLY on CPU")
         return device_config
     
     def _apply_server_optimizations(self):
@@ -203,19 +198,19 @@ class PiperTTSProvider(TTSInterface):
         if "Intel" in platform.processor() or "x86_64" in platform.machine():
             log.info("🔧 Detected Intel CPU - Applying optimizations")
             
-            log.info("🚀 Using ULTRA-FAST CPU optimization for old Intel Xeon")
-            # Set environment variables for aggressive CPU performance
-            os.environ["OMP_NUM_THREADS"] = str(min(cpu_count, 6))  # Limit threads aggressively
+            log.info("🚀 Using Balanced CPU optimization for old Intel Xeon")
+            # Set environment variables for balanced CPU performance
+            os.environ["OMP_NUM_THREADS"] = str(min(cpu_count, 6))  # Limit threads
             os.environ["MKL_NUM_THREADS"] = str(min(cpu_count, 6))
             os.environ["NUMEXPR_NUM_THREADS"] = str(min(cpu_count, 6))
             os.environ["OPENBLAS_NUM_THREADS"] = str(min(cpu_count, 6))
             os.environ["MKL_DYNAMIC"] = "false"
             os.environ["OMP_DYNAMIC"] = "false"
             
-            # Ultra-optimize for older CPU architecture
-            self.length_scale = min(self.length_scale, 0.4)  # Ultra-fast processing
-            self.noise_scale = min(self.noise_scale, 0.3)    # Minimal complexity
-            self.noise_w = min(self.noise_w, 0.4)            # Ultra-optimized for CPU
+            # Balanced optimization for older CPU architecture
+            self.length_scale = min(self.length_scale, 0.6)  # Balanced processing
+            self.noise_scale = min(self.noise_scale, 3.0)    # Allow up to 3.0 for easy speed
+            self.noise_w = min(self.noise_w, 0.5)            # Balanced for CPU
         
         # Memory optimization
         if memory.total < 32 * (1024**3):  # Less than 32GB RAM
@@ -350,9 +345,9 @@ class PiperTTSProvider(TTSInterface):
             # Remove unsupported parameters from kwargs as Piper TTS doesn't support them
             piper_kwargs = {k: v for k, v in kwargs.items() if k not in ['speaker_wav', 'speed']}
             # Use optimized streaming for better performance
-            return await loop.run_in_executor(None, self.synthesize_stream_optimized, text, language, **piper_kwargs)
+            # Note: run_in_executor doesn't accept **kwargs, so we pass parameters directly
+            return await loop.run_in_executor(None, self.synthesize_stream_optimized, text, language, voice, piper_kwargs)
         except Exception as e:
-            log.error(f"Piper TTS async synthesis failed: {e}")
             return b""
     
     def synthesize_sync(self, text: str, language: str = "en", voice: str = None, **kwargs) -> bytes:
@@ -384,9 +379,13 @@ class PiperTTSProvider(TTSInterface):
                 wf.setframerate(self.voice.config.sample_rate)
                 
                 # Get synthesis parameters
+                kwargs = kwargs or {}
                 length_scale = kwargs.get('length_scale', self.length_scale)
                 noise_scale = kwargs.get('noise_scale', self.noise_scale)
                 noise_w = kwargs.get('noise_w', self.noise_w)
+                
+                # Debug log for noise_scale
+                log.info(f"🎵 NOISE_SCALE DEBUG: kwargs={kwargs}, noise_scale={noise_scale}, self.noise_scale={self.noise_scale}")
                 
                 # Detect API signature
                 sig = inspect.signature(PiperVoice.synthesize)
@@ -462,16 +461,14 @@ class PiperTTSProvider(TTSInterface):
                 with open(temp_path, 'rb') as f:
                     audio_data = f.read()
                 
-            log.info(f"✅ Piper TTS synthesis completed: {len(audio_data)} bytes")
             return audio_data
                     
         except Exception as e:
-            log.error(f"Piper TTS synthesis failed: {e}")
             import traceback
             log.error(f"Traceback: {traceback.format_exc()}")
             return b""
     
-    def synthesize_stream_optimized(self, text: str, language: str = "en", voice: str = None, **kwargs) -> bytes:
+    def synthesize_stream_optimized(self, text: str, language: str = "en", voice: str = None, kwargs: dict = None) -> bytes:
         """Optimized synthesis for real-time response using memory buffer."""
         if not self.available:
             raise RuntimeError("Piper TTS not available")
@@ -498,9 +495,13 @@ class PiperTTSProvider(TTSInterface):
                 wf.setframerate(self.voice.config.sample_rate)
                 
                 # Get synthesis parameters
+                kwargs = kwargs or {}
                 length_scale = kwargs.get('length_scale', self.length_scale)
                 noise_scale = kwargs.get('noise_scale', self.noise_scale)
                 noise_w = kwargs.get('noise_w', self.noise_w)
+                
+                # Debug log for noise_scale
+                log.info(f"🎵 NOISE_SCALE DEBUG: kwargs={kwargs}, noise_scale={noise_scale}, self.noise_scale={self.noise_scale}")
                 
                 # Detect API signature
                 sig = inspect.signature(PiperVoice.synthesize)
@@ -598,7 +599,6 @@ class FallbackTTSProvider(TTSInterface):
         self.available = True
         self.sample_rate = 22050
         
-        log.info("✅ Fallback TTS provider initialized")
     
     async def synthesize_async(self, text: str, language: str = "en", voice: str = None, **kwargs) -> bytes:
         """Asynchronously synthesize text using fallback TTS."""
@@ -606,7 +606,6 @@ class FallbackTTSProvider(TTSInterface):
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, self.synthesize_sync, text, language, voice, **kwargs)
         except Exception as e:
-            log.error(f"Fallback TTS async synthesis failed: {e}")
             return b""
     
     def synthesize_sync(self, text: str, language: str = "en", voice: str = None, **kwargs) -> bytes:
@@ -636,7 +635,6 @@ class FallbackTTSProvider(TTSInterface):
                 with open(temp_path, 'rb') as f:
                     audio_data = f.read()
                 
-                log.info(f"✅ Fallback TTS synthesis completed: {len(audio_data)} bytes")
                 return audio_data
                 
             finally:
@@ -645,7 +643,6 @@ class FallbackTTSProvider(TTSInterface):
                     os.unlink(temp_path)
             
         except Exception as e:
-            log.error(f"Fallback TTS synthesis failed: {e}")
             return b""
     
     def is_available(self) -> bool:
@@ -675,7 +672,6 @@ class TTSFactory:
         self.environment = self._detect_environment()
         self.preferred_system = self._get_preferred_system()
         
-        log.info(f"TTS Factory initialized - Environment: {self.environment.value}, Preferred: {self.preferred_system.value}")
     
     def _detect_environment(self) -> TTSEnvironment:
         """Detect current environment."""
@@ -715,7 +711,6 @@ class TTSFactory:
         
         provider = self.providers.get(system)
         if not provider or not provider.is_available():
-            log.warning(f"Requested TTS system {system.value} not available, using fallback")
             return self.providers[TTSSystem.FALLBACK]
         
         return provider

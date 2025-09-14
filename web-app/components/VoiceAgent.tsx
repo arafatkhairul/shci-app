@@ -16,6 +16,8 @@ import {
     FaPause, 
     FaMicrophone,
     FaBuilding,
+    FaClock,
+    FaTachometerAlt,
     FaSchool,
     FaUserGraduate,
     FaStarHalfAlt,
@@ -57,7 +59,7 @@ export default function VoiceAgent() {
     const [showTranscription, setShowTranscription] = useState(false);
 
     // Difficulty level state
-    const [level, setLevel] = useState<"starter" | "medium" | "advanced">("starter");
+    const [level, setLevel] = useState<"easy" | "medium" | "fast">("medium");
     const [levelChangeNotification, setLevelChangeNotification] = useState(false);
     
     // Role play state
@@ -119,14 +121,6 @@ export default function VoiceAgent() {
         
         // Enhanced console logging with different levels
         if (filteredValue > 0.001) {
-            console.log(`🎤 VOICE DETECTED [${source}]:`, {
-                raw: filteredValue.toFixed(4),
-                normalized: normalizedValue.toFixed(4),
-                percentage: (normalizedValue * 100).toFixed(1) + '%',
-                timestamp: new Date().toLocaleTimeString(),
-                level: filteredValue > 0.01 ? 'HIGH' : filteredValue > 0.005 ? 'MEDIUM' : 'LOW',
-                smoothed: smoothedValue.toFixed(4)
-            });
         } else if (source === 'vad-analyser' && Math.random() < 0.01) { // Log 1% of silence frames
             console.log(`🔇 Silence [${source}]:`, {
                 raw: filteredValue.toFixed(4),
@@ -152,7 +146,7 @@ export default function VoiceAgent() {
     const [aiSpeaking, setAiSpeaking] = useState(false);
     const [selectedLanguage, setSelectedLanguage] = useState<"en" | "it">("en");
     const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
-    const [selectedVoice, setSelectedVoice] = useState<string>("en_US-libritts_r-medium");
+    const [selectedVoice, setSelectedVoice] = useState<string>("en_US-ljspeech-high");
     const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
@@ -181,7 +175,6 @@ export default function VoiceAgent() {
         // If we have a final transcript and we're not speaking or processing, we're waiting for response
         if (finalTranscript && !aiSpeaking && !isProcessing && listening) {
             setIsWaitingForResponse(true);
-            console.log('🎯 Speech ended - waiting for AI response');
         } else if (aiSpeaking || isProcessing) {
             setIsWaitingForResponse(false);
         }
@@ -263,21 +256,13 @@ export default function VoiceAgent() {
         ]
     };
 
-    // Debug: Log voice configuration
-    console.log('Voice configuration loaded:', voiceConfig);
 
     // Debug: Log voice dropdown state changes
     useEffect(() => {
-        console.log('Voice modal state changed:', isVoiceModalOpen);
-        console.log('Voice dropdown ref:', voiceDropdownRef.current);
-        console.log('Available voices:', voiceConfig[selectedLanguage]);
     }, [isVoiceModalOpen, selectedLanguage]);
 
     // Debug: Monitor voice selection changes
     useEffect(() => {
-        console.log('🎤 VOICE DEBUG: selectedVoice changed to:', selectedVoice);
-        console.log('🎤 VOICE DEBUG: Voice config for current language:', voiceConfig[selectedLanguage]);
-        console.log('🎤 VOICE DEBUG: Selected voice details:', voiceConfig[selectedLanguage]?.find(v => v.id === selectedVoice));
     }, [selectedVoice, selectedLanguage]);
 
     // ---------- Language labels ----------
@@ -293,15 +278,15 @@ export default function VoiceAgent() {
                 paused: "Microphone paused",
             },
             levels: {
-                starter: "Starter",
+                easy: "Easy",
                 medium: "Medium",
-                advanced: "Advanced",
-                starterDesc: "Slow & Simple",
+                fast: "Fast",
+                easyDesc: "Slow & Simple",
                 mediumDesc: "Natural & Clear",
-                advancedDesc: "Fast & Rich",
-                starterDetail: "CEFR A2 • Basic vocab • Simple sentences",
+                fastDesc: "Fast & Rich",
+                easyDetail: "CEFR A2 • Basic vocab • Simple sentences",
                 mediumDetail: "CEFR B1-B2 • Intermediate • Natural flow",
-                advancedDetail: "CEFR C1 • Rich vocab • Native-like",
+                fastDetail: "CEFR C1 • Rich vocab • Native-like",
             },
             labels: {
                 title: "SHCI",
@@ -344,15 +329,15 @@ export default function VoiceAgent() {
                 paused: "Microfono in pausa",
             },
             levels: {
-                starter: "Principiante",
+                easy: "Principiante",
                 medium: "Intermedio",
-                advanced: "Avanzato",
-                starterDesc: "Lento & Semplice",
+                fast: "Avanzato",
+                easyDesc: "Lento & Semplice",
                 mediumDesc: "Naturale & Chiaro",
-                advancedDesc: "Veloce & Ricco",
-                starterDetail: "CEFR A2 • Vocabolario base • Frasi semplici",
+                fastDesc: "Veloce & Ricco",
+                easyDetail: "CEFR A2 • Vocabolario base • Frasi semplici",
                 mediumDetail: "CEFR B1-B2 • Intermedio • Flusso naturale",
-                advancedDetail: "CEFR C1 • Vocabolario ricco • Come nativo",
+                fastDetail: "CEFR C1 • Vocabolario ricco • Come nativo",
             },
             labels: {
                 title: "SHCI",
@@ -498,18 +483,15 @@ export default function VoiceAgent() {
 
     const vadCallbacks: VADCallbacks = {
         onSpeechStart: () => {
-            console.log('VAD: Speech started');
             setListening(true);
             setStatus(currentLang.status.listening);
             setShowTranscription(true);
         },
         onSpeechEnd: () => {
-            console.log('VAD: Speech ended - keeping microphone active');
             // Don't automatically turn off microphone - keep it active for continuous listening
             setStatus(currentLang.status.connected);
         },
         onSpeechResult: (transcript: string, isFinal: boolean, confidence: number) => {
-            console.log('VAD: Speech result', { transcript, isFinal, confidence });
             setVadTranscript(transcript);
             setVadConfidence(confidence);
             
@@ -549,25 +531,21 @@ export default function VoiceAgent() {
             // Don't set listening to false - let only the Stop button control that
         },
         onVoiceLevelUpdate: (level: number, source: string) => {
-            console.log('VAD Voice Level Update:', { level, source });
             updateMicLevel(level, source);
         }
     };
 
     const fallbackVADCallbacks: FallbackVADCallbacks = {
         onSpeechStart: () => {
-            console.log('Fallback VAD: Speech started');
             setListening(true);
             setStatus(currentLang.status.listening);
             setShowTranscription(true);
         },
         onSpeechEnd: () => {
-            console.log('Fallback VAD: Speech ended - keeping microphone active');
             // Don't automatically turn off microphone - keep it active for continuous listening
             setStatus(currentLang.status.connected);
         },
         onSpeechResult: (transcript: string, isFinal: boolean, confidence: number) => {
-            console.log('Fallback VAD: Speech result', { transcript, isFinal, confidence });
             setVadTranscript(transcript);
             setVadConfidence(confidence);
             
@@ -607,7 +585,6 @@ export default function VoiceAgent() {
             // Don't set listening to false - let only the Stop button control that
         },
         onVoiceLevelUpdate: (level: number, source: string) => {
-            console.log('Fallback VAD Voice Level Update:', { level, source });
             updateMicLevel(level, source);
         }
     };
@@ -645,14 +622,6 @@ export default function VoiceAgent() {
             };
             
             // Debug voice selection
-            console.log("🎤 VOICE DEBUG: Sending voice preference:", selectedVoice);
-            console.log("🎤 VOICE DEBUG: Full prefs object:", prefs);
-            console.log("🔍 STEP 11: Preparing to send prefs with RAG context");
-            console.log("🔍 STEP 11a: User type:", userType);
-            console.log("🔍 STEP 11b: Organization context:", organizationContext);
-            console.log("🔍 STEP 11c: RAG context being sent:", prefs.rag_context);
-            console.log("🔍 STEP 11d: RAG context length:", prefs.rag_context.length);
-            console.log("🔍 STEP 11e: Full prefs object:", prefs);
             ws.current.send(JSON.stringify(prefs));
         }
     }, [
@@ -672,12 +641,8 @@ export default function VoiceAgent() {
 
     // Monitor organization context changes and send preferences
     useEffect(() => {
-        console.log('🔍 RAG DEBUG: Organization context changed:', organizationContext);
-        console.log('🔍 RAG DEBUG: Context length:', organizationContext.length);
-        
         // Send preferences to backend when organization context changes
         if (organizationContext && ws.current?.readyState === WebSocket.OPEN) {
-            console.log('🔍 RAG DEBUG: Sending preferences due to context change');
             setTimeout(() => {
                 sendPrefs();
             }, 200); // Small delay to ensure state is fully updated
@@ -737,8 +702,6 @@ export default function VoiceAgent() {
             const success = vadService.current.start();
             if (success) {
                 setUseWebkitVAD(true);
-                console.log('✅ Webkit VAD started successfully - Speech-to-text enabled');
-                console.log('🎤 Webkit VAD Status:', vadService.current.getStatus());
             } else {
                 console.log('❌ Failed to start Webkit VAD');
             }
@@ -762,8 +725,6 @@ export default function VoiceAgent() {
             const success = fallbackVADService.current.start();
             if (success) {
                 setUseFallbackVAD(true);
-                console.log('⚠️ Fallback VAD started successfully - Voice detection only (no speech-to-text)');
-                console.log('🎤 Fallback VAD Status:', fallbackVADService.current.getStatus());
             } else {
                 console.log('❌ Failed to start Fallback VAD');
             }
@@ -808,7 +769,6 @@ export default function VoiceAgent() {
     // Monitor TTS speaking state - Ensure continuous speech recognition
     useEffect(() => {
         if (aiSpeaking) {
-            console.log('🔊 TTS Speaking - Temporarily pausing VAD to prevent audio loop');
             // Temporarily pause VAD services during audio playback to prevent feedback
             if (useWebkitVAD && vadService.current) {
                 vadService.current.stop();
@@ -817,11 +777,9 @@ export default function VoiceAgent() {
                 fallbackVADService.current.stop();
             }
         } else {
-            console.log('🔇 TTS Stopped - Restarting VAD for continuous speech recognition');
             // Restart VAD services after audio playback to ensure speech recognition continues
             setTimeout(() => {
                 if (listening && !aiSpeaking) {
-                    console.log('🔄 Restarting VAD services after audio playback...');
                     
                     if (useWebkitVAD && vadService.current && vadInitialized) {
                         try {
@@ -830,9 +788,7 @@ export default function VoiceAgent() {
                                 vadService.current.setWebSocket(ws.current);
                             }
                             vadService.current.start();
-                            console.log('✅ Webkit VAD restarted successfully after audio');
                         } catch (error) {
-                            console.log('❌ Failed to restart Webkit VAD after audio:', error);
                             // Try to reinitialize if restart fails
                             setTimeout(() => {
                                 initializeVAD().then((success) => {
@@ -847,9 +803,7 @@ export default function VoiceAgent() {
                     if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized) {
                         try {
                             fallbackVADService.current.start();
-                            console.log('✅ Fallback VAD restarted successfully after audio');
                         } catch (error) {
-                            console.log('❌ Failed to restart Fallback VAD after audio:', error);
                             // Try to reinitialize if restart fails
                             setTimeout(() => {
                                 initializeFallbackVAD().then((success) => {
@@ -929,8 +883,6 @@ export default function VoiceAgent() {
     // Reset voice selection when language changes (only if current voice is not available)
     useEffect(() => {
         const availableVoices = voiceConfig[selectedLanguage];
-        console.log('🎤 VOICE DEBUG: Language changed to:', selectedLanguage, 'Available voices:', availableVoices);
-        console.log('🎤 VOICE DEBUG: Current selected voice:', selectedVoice);
         
         if (availableVoices && availableVoices.length > 0) {
             // Check if current voice is available in the new language
@@ -938,13 +890,10 @@ export default function VoiceAgent() {
             
             if (!currentVoiceAvailable) {
                 const newVoice = availableVoices[0].id;
-                console.log('🎤 VOICE DEBUG: Current voice not available, setting to:', newVoice);
                 setSelectedVoice(newVoice);
             } else {
-                console.log('🎤 VOICE DEBUG: Current voice is available, keeping:', selectedVoice);
             }
         } else {
-            console.warn('No voices available for language:', selectedLanguage);
         }
     }, [selectedLanguage]);
 
@@ -975,9 +924,7 @@ export default function VoiceAgent() {
                     name: savedSelectedOrgName
                 });
                 // Load organization context for RAG
-                console.log('🔍 RAG DEBUG: Loading organization context on mount for ID:', savedSelectedOrgId);
                 loadOrganizationContext(parseInt(savedSelectedOrgId));
-                console.log('Restored selected organization for customer:', savedSelectedOrgName);
             }
             setShowUserTypeModal(false);
         } else {
@@ -1029,55 +976,38 @@ export default function VoiceAgent() {
     // Load organization context for RAG system
     const loadOrganizationContext = async (orgId: number) => {
         try {
-            console.log('🔍 STEP 5: Starting API call to fetch organization ID:', orgId);
             const response = await fetch(`${API_BASE_URL}/api/organizations/by-id/${orgId}`);
-            console.log('🔍 STEP 6: API response status:', response.status);
-            
             const data = await response.json();
-            console.log('🔍 STEP 7: API response data:', data);
             
             if (data.success && data.organization) {
                 const org = data.organization;
-                console.log('🔍 STEP 8: Organization data received:', org);
-                console.log('🔍 STEP 8a: Organization name:', org.name);
-                console.log('🔍 STEP 8b: Organization details:', org.details);
                 
                 // Create RAG context for LLM
                 const context = `You are representing ${org.name}. ${org.details ? `Organization details: ${org.details}` : 'No additional details provided.'} Always respond as if you are a staff member of ${org.name} and provide helpful, professional assistance.`;
-                console.log('🔍 STEP 9: Created RAG context:', context);
                 
                 setOrganizationContext(context);
-                console.log('🔍 STEP 10: Organization context set in state');
-                console.log('🔍 STEP 10a: Context length:', context.length);
             } else {
-                console.error('🔍 STEP ERROR: Failed to load organization:', data);
+                console.error('Failed to load organization:', data);
             }
         } catch (error) {
-            console.error('🔍 STEP ERROR: Error loading organization context:', error);
+            console.error('Error loading organization context:', error);
         }
     };
 
     // Handle organization selection for customer
     const handleOrgSelection = async (org: { id: number, name: string }) => {
-        console.log('🔍 STEP 1: Customer selecting organization:', org);
         setSelectedOrgForCustomer(org);
         localStorage.setItem('selectedOrgId', org.id.toString());
         localStorage.setItem('selectedOrgName', org.name);
         setShowOrgSelectionModal(false);
         
-        console.log('🔍 STEP 2: Saved to localStorage - ID:', org.id, 'Name:', org.name);
-        
         // Load organization context for RAG
-        console.log('🔍 STEP 3: Loading organization context for RAG...');
         await loadOrganizationContext(org.id);
         
         // Send updated preferences to backend immediately
-        console.log('🔍 STEP 4: Sending updated preferences to backend...');
         setTimeout(() => {
             sendPrefs();
         }, 100); // Small delay to ensure state is updated
-        
-        console.log('🔍 STEP 5: Organization selection complete for:', org.name);
     };
 
     // Handle organization details update
@@ -1122,7 +1052,6 @@ export default function VoiceAgent() {
     useEffect(() => {
         if (connected && vadService.current && vadInitialized && ws.current?.readyState === WebSocket.OPEN) {
             vadService.current.setWebSocket(ws.current);
-            console.log('WebSocket set for VAD service');
         }
     }, [connected]); // Only depend on connected state
 
@@ -1131,24 +1060,47 @@ export default function VoiceAgent() {
         if (connected && vadSupported && vadInitialized && !useWebkitVAD && vadService.current) {
             // Auto-activate VAD when everything is ready (but don't start listening)
             setUseWebkitVAD(true);
-            console.log('VAD auto-activated (ready for manual start)');
         }
     }, [connected, vadSupported, vadInitialized]); // Remove useWebkitVAD from dependencies to prevent infinite loop
 
-    const handleLevelChange = (newLevel: "starter" | "medium" | "advanced") => {
-        console.log(`Frontend: Changing level from ${level} to ${newLevel}`);
+    const handleLevelChange = (newLevel: "easy" | "medium" | "fast") => {
         setLevel(newLevel);
         setLevelChangeNotification(true);
         setTimeout(() => setLevelChangeNotification(false), 3000);
-        // send immediately (no race with effect)
-        setTimeout(sendPrefs, 0);
+        
+        // Send combined level and speech speed update to prevent conflicts
+        if (ws.current?.readyState === WebSocket.OPEN) {
+            const speedToLengthScale = {
+                easy: 1.5,    // Slow audio (higher length_scale = slower)
+                medium: 1.0,  // Normal audio (default)
+                fast: 0.6     // Fast audio (lower length_scale = faster)
+            };
+            const lengthScale = speedToLengthScale[newLevel];
+            
+            // Send both level and speech speed in one message to prevent conflicts
+            ws.current.send(JSON.stringify({
+                type: "client_prefs",
+                client_id: clientIdRef.current,
+                level: newLevel,
+                speech_speed: newLevel,
+                length_scale: lengthScale,
+                speed_level: newLevel,
+                use_local_tts: useLocalTTS,
+                language: selectedLanguage,
+                voice: selectedVoice,
+                role_play_enabled: rolePlayEnabled,
+                role_play_template: rolePlayTemplate,
+                organization_name: organizationName,
+                organization_details: organizationDetails,
+                role_title: roleTitle,
+                rag_context: userType === 'customer' ? organizationContext : ""
+            }));
+        }
     };
 
     // keep prefs in sync (any of these change)
     useEffect(() => {
         if (connected) {
-            console.log('🎤 VOICE DEBUG: sendPrefs triggered by dependency change');
-            console.log('🎤 VOICE DEBUG: Current selectedVoice:', selectedVoice);
             sendPrefs();
         }
     }, [
@@ -1282,7 +1234,7 @@ export default function VoiceAgent() {
             const audioBuf = await audioCtx.current.decodeAudioData(array.buffer);
             const src = audioCtx.current.createBufferSource();
             src.buffer = audioBuf;
-            src.playbackRate.value = level === "starter" ? 0.9 : level === "medium" ? 1.05 : 1.2;
+            // Audio playback rate removed - now controlled by backend noise_scale
             src.connect(audioCtx.current.destination);
             src.onended = () => {
                 setAiSpeaking(false);
@@ -1296,6 +1248,7 @@ export default function VoiceAgent() {
             src.start(0);
         } catch {
             const el = new Audio(`data:audio/mp3;base64,${base64}`);
+            // Fallback audio playback rate removed - now controlled by backend noise_scale
             if (currentAudioRef.current) {
                 currentAudioRef.current.pause();
                 currentAudioRef.current.src = "";
@@ -1345,14 +1298,30 @@ export default function VoiceAgent() {
                     setStatus(currentLang.status.connected);
                     isConnecting = false;
 
-                    // initial prefs (NOW including level + stable client_id)
+                    // initial prefs (NOW including level + stable client_id + speech speed)
                     try {
+                        const speedToLengthScale = {
+                            easy: 2.5,    // Slow audio 
+                            medium: 1.0,  // Normal audio (default)
+                            fast: 0.30     // Fast audio 
+                        };
+                        const lengthScale = speedToLengthScale[level];
+                        
                         ws.current?.send(JSON.stringify({
                             type: "client_prefs",
                             client_id: clientIdRef.current,
                             level,
                             use_local_tts: useLocalTTS,
                             language: selectedLanguage,
+                            speech_speed: level,
+                            noise_scale: noiseScale
+                        }));
+                        
+                        // Also send initial speech speed setting
+                        ws.current?.send(JSON.stringify({
+                            type: "set_speech_speed",
+                            length_scale: lengthScale,
+                            speed_level: level
                         }));
                     } catch { }
 
@@ -1365,7 +1334,6 @@ export default function VoiceAgent() {
                 ws.current.onmessage = async (event) => {
                     try {
                         const data = JSON.parse(event.data);
-                        console.log("📨 Received WebSocket message:", data.type, data);
                         switch (data.type) {
                             case "ai_text":
                                 console.log("🤖 AI Response received:", data.text);
@@ -1411,12 +1379,10 @@ export default function VoiceAgent() {
                                 break;
 
                             case "level_changed":
-                                // optional: trust server echo if needed
-                                // setLevel(data.level as any);
-                                console.log(`Level changed to: ${data.level}`);
+                                // Update level from backend confirmation
+                                setLevel(data.level as "easy" | "medium" | "fast");
                                 break;
                             case "role_play_updated":
-                                console.log("Backend: Role play updated:", data);
                                 // Update local state to match backend
                                 setRolePlayEnabled(data.enabled);
                                 setRolePlayTemplate(data.template);
@@ -1513,7 +1479,6 @@ export default function VoiceAgent() {
             return;
         }
         if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-            console.log("WebSocket not connected");
             setStatus(currentLang.status.disconnected);
             return;
         }
@@ -1818,7 +1783,6 @@ export default function VoiceAgent() {
                     channels: 1,
                     timestamp: new Date().toISOString(),
                 }));
-                console.log("📡 WebSocket microphone_started message sent");
             } catch (error) {
                 console.log("❌ Failed to send microphone_started message:", error);
             }
@@ -2496,72 +2460,50 @@ export default function VoiceAgent() {
                     {/* Minimal Controls Section */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3">
 
-                        {/* Minimal Difficulty Level */}
-                        <div className="bg-white/[0.01] backdrop-blur-sm rounded-lg border border-white/5 p-2 sm:p-3">
-                            <div className="flex items-center gap-2 mb-2">
-                                <div className="p-1.5 rounded-md bg-indigo-500/10">
-                                    <FaGraduationCap className="h-3 w-3 text-indigo-400" />
+                        {/* Speech Speed Control */}
+                        <div className="bg-white/[0.02] backdrop-blur-sm rounded-lg border border-white/8 p-4">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="p-2 rounded-lg bg-indigo-500/10">
+                                    <svg className="h-4 w-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
                                 </div>
                                 <div>
-                                    <h3 className="text-xs font-semibold text-white">
-                                        {currentLang.labels.difficultyLevel}
+                                    <h3 className="text-sm font-semibold text-white">
+                                        Speech Speed
                                     </h3>
-                                    <p className="text-xs text-zinc-500">
-                                    {currentLang.labels.difficultyLevelDesc}
-                                </p>
+                                    <p className="text-xs text-zinc-400">
+                                        Adjust AI response playback speed
+                                    </p>
                                 </div>
                             </div>
 
-                            <div className="flex gap-1">
-                                {(["starter", "medium", "advanced"] as const).map((lvl, index) => {
-                                            const icons = [FaStarHalfAlt, FaStarHalfAlt, FaStarOfLife];
+                            <div className="flex gap-2">
+                                {(["easy", "medium", "fast"] as const).map((lvl, index) => {
+                                    const icons = [FaClock, FaPlay, FaTachometerAlt];
                                     const IconComponent = icons[index];
-                                    const colors = {
-                                        starter: {
-                                            bg: "bg-emerald-500/15",
-                                            border: "border-emerald-400/40",
-                                            text: "text-emerald-300",
-                                            hover: "hover:bg-emerald-500/25",
-                                            icon: "text-emerald-400"
-                                        },
-                                        medium: {
-                                            bg: "bg-blue-500/15",
-                                            border: "border-blue-400/40", 
-                                            text: "text-blue-300",
-                                            hover: "hover:bg-blue-500/25",
-                                            icon: "text-blue-400"
-                                        },
-                                        advanced: {
-                                            bg: "bg-purple-500/15",
-                                            border: "border-purple-400/40",
-                                            text: "text-purple-300", 
-                                            hover: "hover:bg-purple-500/25",
-                                            icon: "text-purple-400"
-                                        }
-                                    };
+                                    const speeds = ["Slow", "Normal", "Fast"];
+                                    const labels = ["Easy", "Medium", "Fast"];
                                     
                                     return (
                                         <button
                                             key={lvl}
                                             onClick={() => handleLevelChange(lvl)}
-                                                    className={`group relative px-2 py-1.5 rounded-md transition-colors flex items-center gap-1 flex-1 ${level === lvl
-                                                    ? `${colors[lvl].bg} ${colors[lvl].border} ${colors[lvl].text} shadow-lg border backdrop-blur-sm`
-                                                    : "text-zinc-400 hover:text-zinc-300 hover:bg-white/[0.05] border border-white/10 hover:border-white/20"
+                                            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 flex-1 ${
+                                                level === lvl
+                                                    ? "bg-emerald-500 text-white shadow-md"
+                                                    : "bg-white/[0.05] text-zinc-400 hover:text-zinc-300 hover:bg-white/[0.08]"
                                             }`}
                                         >
-                                                    <div className={`p-1 rounded-md transition-all duration-300 ${level === lvl ? colors[lvl].bg : "bg-white/[0.05]"
-                                            }`}>
-                                                        <IconComponent className={`h-3 w-3 transition-colors duration-300 ${level === lvl ? colors[lvl].icon : "text-zinc-500"
-                                            }`} />
+                                            <IconComponent className="h-3 w-3" />
+                                            <div className="flex flex-col items-start">
+                                                <span className="text-xs font-medium">
+                                                    {labels[index]}
+                                                </span>
+                                                <span className="text-xs opacity-75">
+                                                    {speeds[index]}
+                                                </span>
                                             </div>
-                                            <span className="text-xs font-semibold tracking-wide">
-                                                {currentLang.levels[lvl]}
-                                            </span>
-                                            
-                                            {/* Active indicator */}
-                                            {level === lvl && (
-                                                <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${colors[lvl].bg} border-2 border-white/20`} />
-                                            )}
                                         </button>
                                     );
                                 })}
@@ -2569,122 +2511,89 @@ export default function VoiceAgent() {
                         </div>
 
                         {/* Minimal Role Play Section */}
-                        <div className="bg-white/[0.01] backdrop-blur-sm rounded-lg border border-white/5 p-2 sm:p-3">
-                            <div className="flex items-center gap-1 mb-2">
-                                    <FaUserTie className="h-3 w-3 text-emerald-400" />
-                                <h3 className="text-xs font-semibold text-zinc-200">
-                                        Role Play Mode
-                                </h3>
+                        <div className="bg-white/[0.02] backdrop-blur-sm rounded-lg border border-white/8 p-4">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="p-2 rounded-lg bg-emerald-500/10">
+                                    <FaUserTie className="h-4 w-4 text-emerald-400" />
                                 </div>
-                            <p className="text-xs text-zinc-500 mb-2">
-                                {userType === 'customer' 
-                                    ? "AI acts as staff from your selected organization"
-                                    : userType === 'org_owner'
-                                    ? "Configure how AI represents your organization"
-                                    : "AI acts as organization staff"
-                                }
-                            </p>
+                                <div>
+                                    <h3 className="text-sm font-semibold text-white">
+                                        Role Play Mode
+                                    </h3>
+                                    <p className="text-xs text-zinc-400">
+                                        AI acts as staff from your selected organization
+                                    </p>
+                                </div>
+                            </div>
 
-                            <div className="flex flex-col gap-2">
-                                {/* Organization Display for Customers */}
-                                {userType === 'customer' && selectedOrgForCustomer && (
-                                    <div className="px-3 py-2 rounded-md bg-emerald-500/10 border border-emerald-400/20">
+                            {/* Show selected organization if available */}
+                            {(rolePlayEnabled && organizationName) || (userType === 'customer' && selectedOrgForCustomer) || (userType === 'org_owner' && orgName) ? (
+                                <div className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-400/20 mb-3">
+                                    <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <FaBuilding className="h-3 w-3 text-emerald-400" />
-                                            <span className="text-xs font-semibold text-emerald-300">
-                                                Interacting with: {selectedOrgForCustomer.name}
-                                            </span>
-                            </div>
-                                    </div>
-                                )}
-
-                                {/* Organization Display for Org Owners */}
-                                {userType === 'org_owner' && orgName && (
-                                    <div className="px-3 py-2 rounded-md bg-blue-500/10 border border-blue-400/20">
-                                        <div className="flex items-center gap-2">
-                                            <FaBuilding className="h-3 w-3 text-blue-400" />
-                                            <span className="text-xs font-semibold text-blue-300">
-                                                Managing: {orgName}
+                                            <span className="text-xs font-medium text-emerald-300">
+                                                {rolePlayEnabled && organizationName 
+                                                    ? organizationName
+                                                    : userType === 'customer' && selectedOrgForCustomer
+                                                    ? selectedOrgForCustomer.name
+                                                    : userType === 'org_owner' && orgName
+                                                    ? orgName
+                                                    : "Organization Selected"
+                                                }
                                             </span>
                                         </div>
-                                    </div>
-                                )}
-
-                                {/* Main Role Play Button */}
-                            <button
-                                    onClick={() => {
-                                        if (userType === 'org_owner' && orgName) {
-                                            handleConfigureRolePlay();
-                                        } else if (userType === 'customer') {
-                                            handleConfigureRolePlay();
-                                        } else {
-                                            setShowRolePlayModal(true);
-                                        }
-                                    }}
-                                            className={`group flex items-center justify-center gap-2 px-3 py-2 rounded-md transition-all duration-300 ${rolePlayEnabled
-                                            ? "bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 shadow-md hover:bg-emerald-500/30"
-                                            : "bg-white/[0.05] text-zinc-400 hover:text-zinc-300 hover:bg-white/[0.08] border border-white/15"
-                                }`}
-                            >
-                                {rolePlayEnabled ? (
-                                    <FaBuilding className="h-3 w-3 text-current" />
-                                ) : (
-                                    <FaCog className="h-3 w-3 text-zinc-500" />
-                                )}
-                                <span className="text-xs font-semibold">
-                                        {rolePlayEnabled 
-                                            ? rolePlayTemplates[rolePlayTemplate].name 
-                                            : userType === 'customer' 
-                                                ? "Select Organization"
-                                                : userType === 'org_owner'
-                                                ? "Configure Organization"
-                                                : "Configure Role Play"
-                                        }
-                                </span>
-                            </button>
-                                
-                                {/* Role Play Action Buttons */}
-                                {rolePlayEnabled && (
-                                    <div className="flex gap-1">
-                                        <button
-                                            onClick={() => setShowRolePlayAnswers(true)}
-                                            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-blue-500/25 text-blue-200 border border-blue-400/30 hover:bg-blue-500/35 transition-all duration-300"
-                                            title="View Database"
-                                        >
-                                            <Database className="h-3 w-3" />
-                                            <span className="text-xs font-medium">Database</span>
-                                        </button>
                                         <button
                                             onClick={() => {
-                                                console.log("Clearing role play from header...");
+                                                // Clear role play and organization data
+                                                setRolePlayEnabled(false);
+                                                setOrganizationName("");
+                                                setOrganizationDetails("");
+                                                setRoleTitle("");
+                                                setSelectedOrgForCustomer(null);
+                                                
                                                 // Send WebSocket message to clear role play
                                                 if (ws.current?.readyState === WebSocket.OPEN) {
                                                     ws.current.send(JSON.stringify({
                                                         type: "clear_roleplay"
                                                     }));
                                                 }
-                                                // Clear local state immediately for better UX
-                                                setRolePlayEnabled(false);
-                                                setOrganizationName("");
-                                                setOrganizationDetails("");
-                                                setRoleTitle("");
                                             }}
-                                            className="flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md bg-red-500/25 text-red-200 border border-red-400/30 hover:bg-red-500/35 transition-all duration-300"
-                                            title="Disable Role Play"
+                                            className="p-1 rounded-full hover:bg-red-500/20 transition-colors duration-200 group"
+                                            title="Remove Organization"
                                         >
-                                            <FaTimes className="h-3 w-3" />
-                                            <span className="text-xs font-medium">Disable</span>
+                                            <svg className="h-3 w-3 text-red-400 group-hover:text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
                                         </button>
-                            </div>
-                                )}
-                            
-                            {/* Role Play Status */}
-                            {rolePlayEnabled && (
-                                    <div className="text-xs text-green-300 bg-green-500/10 px-2 py-1.5 rounded-md border border-green-400/30 text-center">
-                                        <strong>Active:</strong> {organizationName} • {roleTitle}
+                                    </div>
                                 </div>
-                            )}
-                            </div>
+                            ) : null}
+
+                            <button
+                                onClick={() => {
+                                    if (userType === 'org_owner' && orgName) {
+                                        handleConfigureRolePlay();
+                                    } else if (userType === 'customer') {
+                                        handleConfigureRolePlay();
+                                    } else {
+                                        setShowRolePlayModal(true);
+                                    }
+                                }}
+                                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.05] text-zinc-400 hover:text-zinc-300 hover:bg-white/[0.08] transition-all duration-200 w-full"
+                            >
+                                <FaCog className="h-3 w-3" />
+                                <span className="text-xs font-medium">
+                                    {rolePlayEnabled 
+                                        ? "Configure Role Play"
+                                        : userType === 'customer' 
+                                            ? "Select Organization"
+                                            : userType === 'org_owner'
+                                            ? "Configure Organization"
+                                            : "Configure Role Play"
+                                    }
+                                </span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -3329,11 +3238,169 @@ export default function VoiceAgent() {
                         {/* Soft Organized Content */}
                         <div className="relative p-5 min-h-[180px]">
                             {aiText ? (
-                                <div className="space-y-2">
-                                            {/* Simplified AI response display for debugging */}
-                                        <div className="bg-white/[0.02] rounded-lg p-4 border border-white/6 hover:bg-white/[0.04] transition-all duration-200">
-                                            <p className="text-sm leading-relaxed text-zinc-300 whitespace-pre-wrap">{aiText}</p>
+                                <div className="space-y-4">
+                                    {/* Grammar Correction Block */}
+                                    {aiText.includes('🔴 GRAMMAR_CORRECTION_START 🔴') && (
+                                        <div className="bg-red-500/10 border border-red-400/30 rounded-lg p-4">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                                                <h4 className="text-sm font-semibold text-red-300">Grammar Checker</h4>
+                                                <div className="ml-auto text-xs text-red-400">AI</div>
+                                            </div>
+                                            
+                                            {(() => {
+                                                const startMarker = '🔴 GRAMMAR_CORRECTION_START 🔴';
+                                                const endMarker = '🔴 GRAMMAR_CORRECTION_END 🔴';
+                                                const startIndex = aiText.indexOf(startMarker);
+                                                const endIndex = aiText.indexOf(endMarker);
+                                                
+                                                
+                                                if (startIndex !== -1 && endIndex !== -1) {
+                                                    const grammarText = aiText.substring(startIndex + startMarker.length, endIndex).trim();
+                                                    
+                                                    
+                                                    // More robust parsing - handle different formats
+                                                    let incorrectText = '';
+                                                    let correctText = '';
+                                                    
+                                                    // Clean the grammar text first
+                                                    const cleanGrammarText = grammarText.replace(/^\s*[-•]\s*/gm, '').trim();
+                                                    
+                                                    // Try multiple parsing patterns
+                                                    const patterns = [
+                                                        // Pattern 1: "INCORRECT: text CORRECT: text"
+                                                        /INCORRECT:\s*([^C]+?)\s*CORRECT:\s*(.+)/i,
+                                                        // Pattern 2: "INCORRECT: text\nCORRECT: text"
+                                                        /INCORRECT:\s*([^\n]+)\s*\n\s*CORRECT:\s*([^\n]+)/i,
+                                                        // Pattern 3: "❌ text ✅ text"
+                                                        /❌\s*([^✅]+?)\s*✅\s*(.+)/,
+                                                        // Pattern 4: "Wrong: text Correct: text"
+                                                        /Wrong:\s*([^C]+?)\s*Correct:\s*(.+)/i,
+                                                        // Pattern 5: "Error: text Fixed: text"
+                                                        /Error:\s*([^F]+?)\s*Fixed:\s*(.+)/i
+                                                    ];
+                                                    
+                                                    for (const pattern of patterns) {
+                                                        const match = cleanGrammarText.match(pattern);
+                                                        if (match) {
+                                                            incorrectText = match[1].trim();
+                                                            correctText = match[2].trim();
+                                                            break;
+                                                        }
+                                                    }
+                                                    
+                                                    // If no pattern matched, try line-by-line parsing
+                                                    if (!incorrectText && !correctText) {
+                                                        const lines = cleanGrammarText.split('\n').map(line => line.trim()).filter(line => line);
+                                                        
+                                                        for (const line of lines) {
+                                                            if (line.match(/^(INCORRECT|❌|Wrong|Error):/i)) {
+                                                                incorrectText = line.replace(/^(INCORRECT|❌|Wrong|Error):\s*/i, '').trim();
+                                                            } else if (line.match(/^(CORRECT|✅|Correct|Fixed):/i)) {
+                                                                correctText = line.replace(/^(CORRECT|✅|Correct|Fixed):\s*/i, '').trim();
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    // Final fallback - if we have text but no clear structure
+                                                    if (!incorrectText && !correctText && cleanGrammarText.length > 0) {
+                                                        // Try to split by common separators
+                                                        const separators = ['→', '->', '→', '→', '→'];
+                                                        for (const sep of separators) {
+                                                            if (cleanGrammarText.includes(sep)) {
+                                                                const parts = cleanGrammarText.split(sep);
+                                                                if (parts.length === 2) {
+                                                                    incorrectText = parts[0].trim();
+                                                                    correctText = parts[1].trim();
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    
+                                                    return (
+                                                        <div className="space-y-4">
+                                                            {incorrectText && correctText && (
+                                                                <div className="bg-gradient-to-r from-red-500/10 to-orange-500/10 border border-red-400/30 rounded-xl p-5 shadow-lg">
+                                                                    <div className="flex items-center gap-3 mb-4">
+                                                                        <div className="w-3 h-3 bg-red-400 rounded-full animate-pulse"></div>
+                                                                        <h5 className="text-sm font-bold text-red-300 uppercase tracking-wide">Grammar Correction</h5>
+                                                                        <div className="ml-auto">
+                                                                            <span className="text-xs bg-red-500/20 text-red-300 px-2 py-1 rounded-full">AI</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    
+                                                                    <div className="space-y-3">
+                                                                        <div className="bg-red-500/5 border-l-4 border-red-400 rounded-lg p-4">
+                                                                            <div className="flex items-center gap-2 mb-2">
+                                                                                <span className="text-xs font-semibold text-red-400 uppercase tracking-wide">❌ Incorrect</span>
+                                                                            </div>
+                                                                            <p className="text-sm text-red-200 line-through decoration-red-400 decoration-2">
+                                                                                {incorrectText}
+                                                                            </p>
+                                                                        </div>
+                                                                        
+                                                                        <div className="flex items-center justify-center">
+                                                                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                                                                            </svg>
+                                                                        </div>
+                                                                        
+                                                                        <div className="bg-green-500/5 border-l-4 border-green-400 rounded-lg p-4">
+                                                                            <div className="flex items-center gap-2 mb-2">
+                                                                                <span className="text-xs font-semibold text-green-400 uppercase tracking-wide">✅ Correct</span>
+                                                                            </div>
+                                                                            <p className="text-sm text-green-200 font-medium">
+                                                                                {correctText}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {correctText && !incorrectText && (
+                                                                <div className="bg-green-500/10 border border-green-400/30 rounded-xl p-5 shadow-lg">
+                                                                    <div className="flex items-center gap-3 mb-3">
+                                                                        <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                                                                        <h5 className="text-sm font-bold text-green-300 uppercase tracking-wide">Grammar Check</h5>
+                                                                        <div className="ml-auto">
+                                                                            <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full">AI</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="bg-green-500/5 border-l-4 border-green-400 rounded-lg p-4">
+                                                                        <p className="text-sm text-green-200 font-medium">
+                                                                            {correctText}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                }
+                                                return null;
+                                            })()}
                                         </div>
+                                    )}
+                                    
+                                    {/* AI Response Block */}
+                                    <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-400/30 rounded-xl p-5 shadow-lg">
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                                            <h4 className="text-sm font-bold text-green-300 uppercase tracking-wide">Intelligent Response</h4>
+                                            <div className="ml-auto">
+                                                <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full">AI</span>
+                                            </div>
+                                        </div>
+                                        <div className="bg-green-500/5 border-l-4 border-green-400 rounded-lg p-4">
+                                            <p className="text-sm leading-relaxed text-green-200 whitespace-pre-wrap">
+                                                {aiText.includes('🔴 GRAMMAR_CORRECTION_START 🔴') 
+                                                    ? aiText.split('🔴 GRAMMAR_CORRECTION_END 🔴')[1]?.trim() || aiText
+                                                    : aiText
+                                                }
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="flex items-center justify-center h-full text-zinc-500">
@@ -3399,73 +3466,86 @@ export default function VoiceAgent() {
                 </div>
             </div>
 
-        {/* Minimal Voice Selection Modal */}
+        {/* Professional Voice Selection Modal */}
         {isVoiceModalOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[99999]" onClick={() => setIsVoiceModalOpen(false)}>
-                <div className="bg-gray-900 rounded-lg border border-white/20 shadow-xl max-w-md w-full mx-4 max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                    {/* Simple Header */}
-                    <div className="flex items-center justify-between p-4 border-b border-white/10">
-                        <div className="flex items-center gap-2">
-                            <FaMicrophone className="h-5 w-5 text-purple-400" />
-                            <h2 className="text-lg font-semibold text-white">Select Voice</h2>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/20 shadow-xl p-5 max-w-md w-full mx-4">
+                    {/* Modal Header */}
+                    <div className="flex items-center justify-center mb-4">
+                        <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30">
+                            <FaMicrophone className="h-6 w-6 text-emerald-400" />
                         </div>
-                        <button
-                            onClick={() => setIsVoiceModalOpen(false)}
-                            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                        >
-                            <FaTimes className="h-4 w-4 text-zinc-400" />
-                        </button>
+                    </div>
+                    
+                    <div className="text-center mb-5">
+                        <h2 className="text-xl font-bold text-white mb-2">
+                            Select Voice
+                        </h2>
+                        <p className="text-zinc-400 text-xs">
+                            Choose your preferred AI voice
+                        </p>
                     </div>
 
-                    {/* Simple Content */}
-                    <div className="p-4">
-                        <div className="space-y-2 max-h-80 overflow-y-auto">
-                            {voiceConfig[selectedLanguage]?.map((voice) => (
-                                <button
-                                    key={voice.id}
-                                    onClick={() => {
-                                        console.log('🎤 VOICE DEBUG: Voice selected:', voice.id, voice.name);
-                                        console.log('🎤 VOICE DEBUG: Previous voice:', selectedVoice);
-                                        setSelectedVoice(voice.id);
-                                        console.log('🎤 VOICE DEBUG: New voice set to:', voice.id);
-                                        setIsVoiceModalOpen(false);
-                                    }}
-                                    className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
+                    {/* Voice Options */}
+                    <div className="space-y-3 mb-5">
+                        {voiceConfig[selectedLanguage]?.map((voice) => (
+                            <button
+                                key={voice.id}
+                                onClick={() => {
+                                    console.log('🎤 VOICE DEBUG: Voice selected:', voice.id, voice.name);
+                                    setSelectedVoice(voice.id);
+                                    setIsVoiceModalOpen(false);
+                                }}
+                                className={`w-full group relative p-3 rounded-xl transition-all duration-300 text-left border-2 ${
+                                    selectedVoice === voice.id
+                                        ? "bg-emerald-500/15 border-emerald-400/50 shadow-md shadow-emerald-500/10"
+                                        : "bg-white/[0.05] border-white/10 hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:shadow-md hover:shadow-emerald-500/5"
+                                }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-lg border transition-all duration-300 ${
                                         selectedVoice === voice.id
-                                            ? "bg-purple-500/20 text-purple-200 border border-purple-400/30"
-                                            : "text-zinc-300 hover:bg-white/5 hover:text-white"
-                                    }`}
-                                >
-                                    <div className="text-lg">
-                                        {voice.gender === "female" ? "👩" : "👨"}
+                                            ? "bg-emerald-500/30 border-emerald-400/50"
+                                            : "bg-emerald-500/20 border-emerald-500/30 group-hover:bg-emerald-500/30 group-hover:border-emerald-400/50"
+                                    }`}>
+                                        <div className="text-lg">
+                                            {voice.gender === "female" ? "👩" : "👨"}
+                                        </div>
                                     </div>
                                     <div className="flex flex-col flex-1 min-w-0">
-                                        <span className="text-sm font-medium truncate">
+                                        <span className="text-sm font-semibold text-white">
                                             {voice.name}
                                         </span>
-                                        <span className="text-xs text-zinc-500 truncate">
-                                            {voice.gender} • {voice.quality} quality
+                                        <span className="text-xs text-zinc-400">
+                                            {voice.gender} • {voice.quality}
                                         </span>
                                     </div>
                                     {selectedVoice === voice.id && (
-                                        <FaCheck className="h-4 w-4 text-purple-400" />
+                                        <div className="p-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30">
+                                            <svg className="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        </div>
                                     )}
-                                </button>
-                            )) || (
-                                <div className="p-4 text-zinc-400 text-center">
-                                    No voices available for {selectedLanguage}
                                 </div>
-                            )}
-                        </div>
+                            </button>
+                        )) || (
+                            <div className="text-center py-8">
+                                <div className="p-4 rounded-full bg-zinc-800/50 mx-auto w-fit mb-4">
+                                    <FaMicrophone className="h-8 w-8 text-zinc-500" />
+                                </div>
+                                <p className="text-zinc-400">No voices available for {selectedLanguage}</p>
+                            </div>
+                        )}
                     </div>
 
-                    {/* Simple Footer */}
-                    <div className="p-4 border-t border-white/10">
+                    {/* Modal Footer */}
+                    <div className="pt-4 border-t border-white/10">
                         <button
                             onClick={() => setIsVoiceModalOpen(false)}
-                            className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+                            className="w-full px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-semibold transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-emerald-500/20 text-sm"
                         >
-                            Close
+                            Done
                         </button>
                     </div>
                 </div>

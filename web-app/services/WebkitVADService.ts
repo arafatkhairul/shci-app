@@ -96,7 +96,6 @@ export class WebkitVADService {
       this.setupRecognition();
       this.isInitialized = true;
       
-      console.log('WebkitVADService initialized successfully');
       return true;
     } catch (error) {
       console.error('Failed to initialize WebkitVADService:', error);
@@ -146,7 +145,6 @@ export class WebkitVADService {
     try {
       // Ensure recognition is properly set up before starting
       if (!this.recognition) {
-        console.log('Reinitializing recognition...');
         const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
         this.recognition = new SpeechRecognition();
         this.setupRecognition();
@@ -155,14 +153,12 @@ export class WebkitVADService {
       this.recognition.start();
       this.isListening = true;
       this.callbacks.onStateChange?.(true);
-      console.log('✅ WebkitVADService started successfully');
       
       // Initialize and start Voice Level monitoring (disabled on Android Chrome)
       this.initializeVoiceLevelMonitoring().then((success) => {
         if (success) {
           this.startVoiceLevelMonitoring();
         } else {
-          console.log("📱 Voice level monitoring disabled - using fallback voice level");
           // Provide a fallback voice level for Android Chrome
           this.provideFallbackVoiceLevel();
         }
@@ -175,10 +171,8 @@ export class WebkitVADService {
       
       // Try to reinitialize if start fails
       setTimeout(() => {
-        console.log('Attempting to reinitialize WebkitVADService...');
         this.initialize().then((success) => {
           if (success) {
-            console.log('WebkitVADService reinitialized successfully');
           }
         });
       }, 1000);
@@ -204,7 +198,6 @@ export class WebkitVADService {
       this.stopVoiceLevelMonitoring();
       
       this.callbacks.onStateChange?.(false);
-      console.log('✅ WebkitVADService stopped successfully');
     } catch (error) {
       console.error('Failed to stop VAD:', error);
       // Force cleanup even if stop fails
@@ -220,7 +213,6 @@ export class WebkitVADService {
    */
   private restart(): void {
     // Disabled auto-restart - only restart manually via start() method
-    console.log('VAD restart requested but disabled for manual control');
     return;
   }
 
@@ -228,7 +220,6 @@ export class WebkitVADService {
    * Handle recognition start
    */
   private handleStart(): void {
-    console.log('Speech recognition started');
     this.lastSpeechTime = Date.now();
     this.startSpeechTimeout();
   }
@@ -237,7 +228,6 @@ export class WebkitVADService {
    * Handle speech recognition results
    */
   private handleResult(event: any): void {
-    console.log('🎤 Speech recognition result received:', event);
     let interimTranscript = '';
     let finalTranscript = '';
     let maxConfidence = 0;
@@ -252,10 +242,8 @@ export class WebkitVADService {
 
       if (result.isFinal) {
         finalTranscript += transcript;
-        console.log('🎤 Final transcript detected:', transcript);
       } else {
         interimTranscript += transcript;
-        console.log('🎤 Interim transcript:', transcript);
       }
     }
 
@@ -282,7 +270,6 @@ export class WebkitVADService {
       
       // Send individual transcript to WebSocket immediately for instant processing
       this.sendToWebSocket('final_transcript', speechResult.transcript, speechResult.confidence);
-      console.log('🎤 Individual transcript sent:', speechResult.transcript);
     }
 
     // Handle interim results - send immediately for instant feedback
@@ -305,7 +292,6 @@ export class WebkitVADService {
       
       // Send interim result to WebSocket immediately for instant feedback
       this.sendToWebSocket('interim_transcript', speechResult.transcript, speechResult.confidence);
-      console.log('🎤 Interim transcript sent immediately:', speechResult.transcript);
     }
   }
 
@@ -313,7 +299,6 @@ export class WebkitVADService {
    * Handle speech start
    */
   private handleSpeechStart(): void {
-    console.log('Speech started');
     this.lastSpeechTime = Date.now();
     this.clearSilenceTimer();
     this.startSpeechTimeout();
@@ -324,7 +309,6 @@ export class WebkitVADService {
    * Handle speech end
    */
   private handleSpeechEnd(): void {
-    console.log('Speech ended');
     this.startSilenceTimer();
     this.callbacks.onSpeechEnd?.();
   }
@@ -333,7 +317,6 @@ export class WebkitVADService {
    * Handle sound start
    */
   private handleSoundStart(): void {
-    console.log('Sound detected');
     this.lastSpeechTime = Date.now();
     this.clearSilenceTimer();
   }
@@ -342,7 +325,6 @@ export class WebkitVADService {
    * Handle sound end
    */
   private handleSoundEnd(): void {
-    console.log('Sound ended');
     this.startSilenceTimer();
   }
 
@@ -350,7 +332,6 @@ export class WebkitVADService {
    * Handle no match
    */
   private handleNoMatch(): void {
-    console.log('No speech match');
     this.startSilenceTimer();
   }
 
@@ -394,14 +375,12 @@ export class WebkitVADService {
    * Handle recognition end
    */
   private handleEnd(): void {
-    console.log('Speech recognition ended');
     const wasListening = this.isListening;
     this.isListening = false;
     this.clearTimers();
     this.callbacks.onStateChange?.(false);
     
     // Disabled auto-restart for manual control
-    console.log('VAD ended - manual restart required');
   }
 
   /**
@@ -409,7 +388,6 @@ export class WebkitVADService {
    */
   private startSilenceTimer(): void {
     // Disabled silence timer for manual control
-    console.log('Silence timer disabled for manual control');
     return;
   }
 
@@ -428,7 +406,6 @@ export class WebkitVADService {
    */
   private startSpeechTimeout(): void {
     // Disabled speech timeout for manual control
-    console.log('Speech timeout disabled for manual control');
     return;
   }
 
@@ -482,20 +459,12 @@ export class WebkitVADService {
    */
   public setWebSocket(websocket: WebSocket): void {
     this.websocket = websocket;
-    console.log('WebSocket set for VAD service');
   }
 
   /**
    * Send transcript to WebSocket
    */
   private sendToWebSocket(type: string, text: string, confidence?: number): void {
-    console.log(`🎤 Attempting to send ${type} to WebSocket:`, {
-      websocketExists: !!this.websocket,
-      websocketState: this.websocket?.readyState,
-      websocketOpen: this.websocket?.readyState === WebSocket.OPEN,
-      text: text.trim()
-    });
-    
     if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
       const message = {
         type,
@@ -503,13 +472,6 @@ export class WebkitVADService {
         ...(confidence !== undefined && { confidence })
       };
       this.websocket.send(JSON.stringify(message));
-      console.log(`✅ Sent to WebSocket: ${type}`, message);
-    } else {
-      console.error(`❌ Cannot send ${type} to WebSocket:`, {
-        websocketExists: !!this.websocket,
-        websocketState: this.websocket?.readyState,
-        websocketOpen: this.websocket?.readyState === WebSocket.OPEN
-      });
     }
   }
 
@@ -518,12 +480,10 @@ export class WebkitVADService {
    */
   private async initializeVoiceLevelMonitoring(): Promise<boolean> {
     try {
-      console.log("🎤 Initializing Voice Level Monitoring...");
       
       // Check if we're on Android Chrome - disable voice level monitoring to avoid microphone conflict
       const isAndroidChrome = /Android.*Chrome/.test(navigator.userAgent);
       if (isAndroidChrome) {
-        console.log("📱 Android Chrome detected - disabling voice level monitoring to prevent microphone conflict");
         return false;
       }
       
@@ -554,15 +514,9 @@ export class WebkitVADService {
       const source = this.audioContext.createMediaStreamSource(this.microphone);
       source.connect(this.analyser);
 
-      console.log("✅ Voice Level Monitoring Initialized:", {
-        sampleRate: this.audioContext.sampleRate,
-        fftSize: this.analyser.fftSize,
-        frequencyBinCount: this.analyser.frequencyBinCount
-      });
 
       return true;
     } catch (error) {
-      console.log("❌ Voice Level Monitoring Failed:", error);
       return false;
     }
   }
@@ -573,7 +527,6 @@ export class WebkitVADService {
   private startVoiceLevelMonitoring(): void {
     if (!this.analyser || !this.isListening) return;
 
-    console.log("🎤 Starting Advanced Voice Level Monitoring...");
     
     const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
     const timeDomainArray = new Uint8Array(this.analyser.frequencyBinCount);
@@ -628,19 +581,7 @@ export class WebkitVADService {
       
       // Enhanced debugging every 30 frames
       if (frameCount % 30 === 0) {
-        console.log("🎤 Advanced Voice Detection:", {
-          frame: frameCount,
-          rms: rms.toFixed(4),
-          timeRms: timeRms.toFixed(4),
-          isVoiceDetected,
-          finalVoiceLevel: finalVoiceLevel.toFixed(4),
-          noiseFloor: noiseFloor.toFixed(4),
-          voiceThreshold: voiceThreshold.toFixed(4),
-          voiceFrames,
-          silenceFrames,
-          maxValue: Math.max(...dataArray),
-          avgValue: dataArray.reduce((a, b) => a + b, 0) / dataArray.length
-        });
+        // Debug information available but not logged
       }
 
       // Update voice level via callback only if voice is detected
@@ -731,7 +672,6 @@ export class WebkitVADService {
    * Provide fallback voice level for Android Chrome
    */
   private provideFallbackVoiceLevel(): void {
-    console.log("📱 Providing fallback voice level for Android Chrome");
     
     // Simulate voice level based on speech recognition events
     let fallbackLevel = 0;
@@ -759,7 +699,6 @@ export class WebkitVADService {
    * Stop Voice Level Monitoring
    */
   private stopVoiceLevelMonitoring(): void {
-    console.log("🎤 Stopping Voice Level Monitoring...");
     
     if (this.animationFrame) {
       cancelAnimationFrame(this.animationFrame);
@@ -789,7 +728,6 @@ export class WebkitVADService {
     this.recognition = null;
     this.websocket = null;
     this.isInitialized = false;
-    console.log('WebkitVADService destroyed');
   }
 }
 
