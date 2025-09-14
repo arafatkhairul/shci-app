@@ -235,3 +235,5 @@ memdb/
 # Keep example files but ignore actual env files
 !env_example.txt
 !*.env.example
+*.onnx
+*.onnx.json
