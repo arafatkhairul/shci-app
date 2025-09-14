@@ -26,6 +26,9 @@ python-dotenv==1.1.1
 # HTTP client for API requests
 requests==2.32.5
 
+# System monitoring and optimization
+psutil==5.9.8
+
 # ===================================================================
 # TEXT-TO-SPEECH (TTS) ENGINE
 # ===================================================================

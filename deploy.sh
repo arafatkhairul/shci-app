@@ -52,6 +52,16 @@ pip install --upgrade pip wheel
 pip install -r requirements.txt
 print_success "Backend dependencies are up to date."
 
+# Apply server performance optimizations
+print_status "Applying server performance optimizations..."
+if [ -f "server-performance.env" ]; then
+    echo "Loading server performance configuration..."
+    export $(cat server-performance.env | grep -v '^#' | xargs)
+    print_success "Server performance optimizations applied."
+else
+    print_error "server-performance.env not found - using default settings"
+fi
+
 # --- Frontend Deployment ---
 print_status "Deploying Frontend (Next.js)..."
 cd "$PROJECT_DIR/web-app"
@@ -164,8 +174,18 @@ fi
 
 echo ""
 print_success "Deployment completed successfully!"
+
+# --- Beautiful Startup Banner ---
+echo ""
+echo "=================================================================================="
+echo "🚀 SHCI VOICE ASSISTANT - STARTING UP"
+echo "=================================================================================="
 echo ""
 print_status "🎉 SHCI Voice Assistant is now running!"
 print_status "📊 Check TTS status above to see if GPU/CPU is being used"
 print_status "🔍 Monitor logs with: journalctl -u $BACKEND_SERVICE -f"
 print_status "🌐 Access your application at: http://your-server-ip:3000"
+echo ""
+echo "=================================================================================="
+echo "🎯 DEPLOYMENT COMPLETE - SYSTEM READY!"
+echo "=================================================================================="

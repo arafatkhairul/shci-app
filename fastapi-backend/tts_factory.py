@@ -127,10 +127,13 @@ class PiperTTSProvider(TTSInterface):
         self.use_cuda = self.device_config['use_cuda']
         self.device_info = self.device_config['device_info']
         
-        # Synthesis parameters
-        self.length_scale = float(os.getenv("PIPER_LENGTH_SCALE", "0.8"))
-        self.noise_scale = float(os.getenv("PIPER_NOISE_SCALE", "0.667"))
-        self.noise_w = float(os.getenv("PIPER_NOISE_W", "0.8"))
+        # Synthesis parameters - Optimized for server performance
+        self.length_scale = float(os.getenv("PIPER_LENGTH_SCALE", "0.5"))  # Even faster speech
+        self.noise_scale = float(os.getenv("PIPER_NOISE_SCALE", "0.4"))    # Reduced processing
+        self.noise_w = float(os.getenv("PIPER_NOISE_W", "0.5"))             # Optimized for CPU
+        
+        # Server performance optimizations (after attributes are initialized)
+        self._apply_server_optimizations()
         
         # Supported languages
         self.supported_languages = {
@@ -158,76 +161,64 @@ class PiperTTSProvider(TTSInterface):
             log.warning("❌ Piper TTS provider not available")
     
     def _detect_device_config(self):
-        """Detect and configure device (GPU/CPU) based on environment."""
+        """Force CPU usage for Piper TTS - GPU completely disabled."""
+        log.info("🔧 FORCING CPU USAGE - GPU completely disabled for Piper TTS")
+        
+        # Disable CUDA completely
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        os.environ["PIPER_FORCE_CPU"] = "true"
+        os.environ["PIPER_DEVICE"] = "cpu"
+        
         device_config = {
             'use_cuda': False,
             'device_info': {
                 'device_type': 'CPU',
-                'device_name': 'CPU',
+                'device_name': 'CPU (Forced)',
                 'cuda_available': False,
                 'cuda_device_count': 0,
-                'gpu_id': 0  # Default to GPU 0, will be set to 1 if available
+                'gpu_id': 0
             }
         }
         
-        # Check environment variables first
-        env_device = os.getenv("PIPER_DEVICE", "").lower()
-        force_cpu = os.getenv("PIPER_FORCE_CPU", "false").lower() == "true"
-        force_cuda = os.getenv("PIPER_FORCE_CUDA", "false").lower() == "true"
-        
-        # Detect environment
-        environment = os.getenv("TTS_ENVIRONMENT", "local").lower()
-        is_production = environment in ["production", "live", "prod"]
-        
-        # Check CUDA availability
-        try:
-            import torch
-            cuda_available = torch.cuda.is_available()
-            cuda_device_count = torch.cuda.device_count()
-            
-            device_config['device_info']['cuda_available'] = cuda_available
-            device_config['device_info']['cuda_device_count'] = cuda_device_count
-            
-            if cuda_available and cuda_device_count > 0:
-                # Set GPU ID to 1 if available (since GPU 0 is used by Ollama)
-                if cuda_device_count > 1:
-                    device_config['device_info']['gpu_id'] = 1
-                    device_config['device_info']['device_name'] = torch.cuda.get_device_name(1)
-                    log.info(f"🎯 Using GPU 1 (GPU 0 is used by Ollama): {torch.cuda.get_device_name(1)}")
-                else:
-                    device_config['device_info']['gpu_id'] = 0
-                    device_config['device_info']['device_name'] = torch.cuda.get_device_name(0)
-                    log.info(f"🎯 Using GPU 0: {torch.cuda.get_device_name(0)}")
-                
-                device_config['device_info']['device_type'] = 'GPU'
-                
-                # FORCE GPU USAGE if CUDA is available (regardless of environment)
-                if not force_cpu:
-                    device_config['use_cuda'] = True
-                    if is_production:
-                        log.info("🚀 Production environment + CUDA available - using GPU")
-                    else:
-                        log.info("💻 Local environment but CUDA available - using GPU anyway")
-                else:
-                    device_config['use_cuda'] = False
-                    log.info("🔧 Force CPU enabled - ignoring CUDA availability")
-            else:
-                log.info("⚠️ CUDA not available - using CPU")
-                
-        except ImportError:
-            log.warning("⚠️ PyTorch not available - CUDA detection skipped")
-        except Exception as e:
-            log.warning(f"⚠️ CUDA detection failed: {e}")
-        
-        # Manual device selection override
-        if env_device == "cuda" and device_config['device_info']['cuda_available']:
-            device_config['use_cuda'] = True
-            log.info("🔧 Manual CUDA selection")
-        elif env_device == "cpu":
-            device_config['use_cuda'] = False
-            log.info("🔧 Manual CPU selection")
-        
+        log.info("✅ Piper TTS will run ONLY on CPU")
         return device_config
+    
+    def _apply_server_optimizations(self):
+        """Apply server-specific performance optimizations."""
+        import platform
+        import psutil
+        
+        # Detect server environment
+        cpu_count = psutil.cpu_count()
+        cpu_freq = psutil.cpu_freq()
+        memory = psutil.virtual_memory()
+        
+        log.info(f"🖥️  Server Environment Detection:")
+        log.info(f"   CPU Cores: {cpu_count}")
+        log.info(f"   CPU Frequency: {cpu_freq.max if cpu_freq else 'Unknown'} MHz")
+        log.info(f"   Total Memory: {memory.total / (1024**3):.1f} GB")
+        log.info(f"   Available Memory: {memory.available / (1024**3):.1f} GB")
+        
+        # Optimize for older Intel CPUs (like E5-2697v2)
+        if "Intel" in platform.processor() or "x86_64" in platform.machine():
+            log.info("🔧 Detected Intel CPU - Applying optimizations")
+            
+            log.info("🚀 Using CPU optimization for Intel Xeon")
+            # Set environment variables for better CPU performance
+            os.environ["OMP_NUM_THREADS"] = str(min(cpu_count, 8))  # Limit threads
+            os.environ["MKL_NUM_THREADS"] = str(min(cpu_count, 8))
+            os.environ["NUMEXPR_NUM_THREADS"] = str(min(cpu_count, 8))
+            
+            # Optimize for older CPU architecture
+            self.length_scale = min(self.length_scale, 0.7)  # Faster processing
+            self.noise_scale = min(self.noise_scale, 0.6)    # Reduced complexity
+            self.noise_w = min(self.noise_w, 0.7)            # Optimized for CPU
+        
+        # Memory optimization
+        if memory.total < 32 * (1024**3):  # Less than 32GB RAM
+            log.info("🔧 Low memory detected - Applying memory optimizations")
+            # Reduce memory usage
+            self.length_scale = min(self.length_scale, 0.8)
     
     def _download_if_missing(self, path: str, url: str):
         """Download model files if missing."""
