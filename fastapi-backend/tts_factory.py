@@ -1,34 +1,36 @@
 #!/usr/bin/env python3
 """
 TTS Factory Pattern
-Environment-based TTS system selection (gTTS for local, Coqui TTS for production).
+Environment-based TTS system selection with Piper TTS for both local and production.
 """
 
 import os
 import logging
 import asyncio
+import wave
+import tempfile
+import inspect
 from typing import Optional, Dict, Any, Union
 from abc import ABC, abstractmethod
 from enum import Enum
 
 log = logging.getLogger("tts_factory")
 
-# Import TTS systems
+# Import Piper TTS
 try:
-    from gtts import gTTS
-    import pygame
-    #pygame.mixer.init()
-    GTTS_AVAILABLE = True
+    from piper.voice import PiperVoice
+    PIPER_TTS_AVAILABLE = True
 except ImportError:
-    GTTS_AVAILABLE = False
-    log.warning("gTTS not available - install with: pip install gtts pygame")
+    PIPER_TTS_AVAILABLE = False
+    log.warning("Piper TTS not available - install with: pip install piper-tts")
 
+# Import requests for model downloading
 try:
-    from xtts_manager import xtts_manager
-    COQUI_TTS_AVAILABLE = True
+    import requests
+    REQUESTS_AVAILABLE = True
 except ImportError:
-    COQUI_TTS_AVAILABLE = False
-    log.warning("Coqui TTS not available")
+    REQUESTS_AVAILABLE = False
+    log.warning("Requests not available - install with: pip install requests")
 
 class TTSEnvironment(Enum):
     """TTS Environment types."""
@@ -39,8 +41,7 @@ class TTSEnvironment(Enum):
 
 class TTSSystem(Enum):
     """TTS System types."""
-    GTTS = "gtts"
-    COQUI = "coqui"
+    PIPER = "piper"
     FALLBACK = "fallback"
 
 class TTSInterface(ABC):
@@ -66,13 +67,40 @@ class TTSInterface(ABC):
         """Get TTS system information."""
         pass
 
-class GTTSProvider(TTSInterface):
-    """gTTS provider for local/development environment."""
+class PiperTTSProvider(TTSInterface):
+    """Piper TTS provider for both local and production environments."""
     
     def __init__(self):
-        self.name = "Google Text-to-Speech (gTTS)"
-        self.available = GTTS_AVAILABLE
-        self.sample_rate = 22050
+        self.name = "Piper TTS"
+        self.available = PIPER_TTS_AVAILABLE and REQUESTS_AVAILABLE
+        self.voice = None
+        self.model_path = None
+        self.config_path = None
+        
+        # Default model configuration
+        self.model_full_name = os.getenv("PIPER_MODEL_NAME", "en_US-ljspeech-high")
+        self.model_path = f"{self.model_full_name}.onnx"
+        self.config_path = f"{self.model_full_name}.onnx.json"
+        
+        # Model download URLs - using correct Piper TTS model
+        self.model_url = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx"
+        self.config_url = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx.json"
+        
+        # Update model paths to match downloaded files
+        self.model_path = "en_US-libritts_r-medium.onnx"
+        self.config_path = "en_US-libritts_r-medium.onnx.json"
+        
+        # Device configuration (GPU/CPU detection)
+        self.device_config = self._detect_device_config()
+        self.use_cuda = self.device_config['use_cuda']
+        self.device_info = self.device_config['device_info']
+        
+        # Synthesis parameters
+        self.length_scale = float(os.getenv("PIPER_LENGTH_SCALE", "1.5"))
+        self.noise_scale = float(os.getenv("PIPER_NOISE_SCALE", "0.667"))
+        self.noise_w = float(os.getenv("PIPER_NOISE_W", "0.8"))
+        
+        # Supported languages
         self.supported_languages = {
             "en": "English",
             "es": "Spanish",
@@ -90,135 +118,272 @@ class GTTSProvider(TTSInterface):
         }
         
         if self.available:
-            log.info("✅ gTTS provider initialized")
+            self._initialize_voice()
+            log.info("✅ Piper TTS provider initialized")
+            log.info(f"🔧 Device: {self.device_info['device_type']} ({self.device_info['device_name']})")
+            log.info(f"🔧 CUDA: {'Enabled' if self.use_cuda else 'Disabled'}")
         else:
-            log.warning("❌ gTTS provider not available")
+            log.warning("❌ Piper TTS provider not available")
+    
+    def _detect_device_config(self):
+        """Detect and configure device (GPU/CPU) based on environment."""
+        device_config = {
+            'use_cuda': False,
+            'device_info': {
+                'device_type': 'CPU',
+                'device_name': 'CPU',
+                'cuda_available': False,
+                'cuda_device_count': 0
+            }
+        }
+        
+        # Check environment variables first
+        env_device = os.getenv("PIPER_DEVICE", "").lower()
+        force_cpu = os.getenv("PIPER_FORCE_CPU", "false").lower() == "true"
+        force_cuda = os.getenv("PIPER_FORCE_CUDA", "false").lower() == "true"
+        
+        # Detect environment
+        environment = os.getenv("TTS_ENVIRONMENT", "local").lower()
+        is_production = environment in ["production", "live", "prod"]
+        
+        # Check CUDA availability
+        try:
+            import torch
+            cuda_available = torch.cuda.is_available()
+            cuda_device_count = torch.cuda.device_count()
+            
+            device_config['device_info']['cuda_available'] = cuda_available
+            device_config['device_info']['cuda_device_count'] = cuda_device_count
+            
+            if cuda_available and cuda_device_count > 0:
+                device_config['device_info']['device_name'] = torch.cuda.get_device_name(0)
+                device_config['device_info']['device_type'] = 'GPU'
+                
+                # Auto-configure based on environment
+                if is_production and not force_cpu:
+                    device_config['use_cuda'] = True
+                    log.info("🚀 Production environment detected - using GPU")
+                elif not is_production and not force_cuda:
+                    device_config['use_cuda'] = False
+                    log.info("💻 Local environment detected - using CPU")
+                else:
+                    # Manual override
+                    if force_cuda:
+                        device_config['use_cuda'] = True
+                        log.info("🔧 Force CUDA enabled")
+                    elif force_cpu:
+                        device_config['use_cuda'] = False
+                        log.info("🔧 Force CPU enabled")
+            else:
+                log.info("⚠️ CUDA not available - using CPU")
+                
+        except ImportError:
+            log.warning("⚠️ PyTorch not available - CUDA detection skipped")
+        except Exception as e:
+            log.warning(f"⚠️ CUDA detection failed: {e}")
+        
+        # Manual device selection override
+        if env_device == "cuda" and device_config['device_info']['cuda_available']:
+            device_config['use_cuda'] = True
+            log.info("🔧 Manual CUDA selection")
+        elif env_device == "cpu":
+            device_config['use_cuda'] = False
+            log.info("🔧 Manual CPU selection")
+        
+        return device_config
+    
+    def _download_if_missing(self, path: str, url: str):
+        """Download model files if missing."""
+        if os.path.exists(path):
+            log.info(f"[SKIP] {path} already exists")
+            return
+        
+        log.info(f"[DOWNLOAD] {path} downloading...")
+        try:
+            response = requests.get(url, stream=True, timeout=60)
+            response.raise_for_status()
+            
+            with open(path, "wb") as f:
+                for chunk in response.iter_content(8192):
+                    if chunk:
+                        f.write(chunk)
+            
+            log.info(f"[OK] {path} download completed")
+        except Exception as e:
+            log.error(f"Failed to download {path}: {e}")
+            raise
+    
+    def _initialize_voice(self):
+        """Initialize Piper voice model with GPU/CPU configuration."""
+        try:
+            # Download model files if missing
+            self._download_if_missing(self.model_path, self.model_url)
+            self._download_if_missing(self.config_path, self.config_url)
+            
+            # Load voice model with device configuration
+            log.info(f"[LOAD] {self.model_path}")
+            log.info(f"[DEVICE] Using {'GPU' if self.use_cuda else 'CPU'}")
+            
+            # Load with CUDA if available and configured
+            if self.use_cuda and self.device_info['cuda_available']:
+                try:
+                    self.voice = PiperVoice.load(
+                        self.model_path, 
+                        config_path=self.config_path,
+                        use_cuda=True
+                    )
+                    log.info("[OK] Model loaded successfully with GPU acceleration")
+                except Exception as cuda_error:
+                    log.warning(f"GPU loading failed, falling back to CPU: {cuda_error}")
+                    self.voice = PiperVoice.load(
+                        self.model_path, 
+                        config_path=self.config_path,
+                        use_cuda=False
+                    )
+                    log.info("[OK] Model loaded successfully with CPU fallback")
+            else:
+                self.voice = PiperVoice.load(
+                    self.model_path, 
+                    config_path=self.config_path,
+                    use_cuda=False
+                )
+                log.info("[OK] Model loaded successfully with CPU")
+            
+        except Exception as e:
+            log.error(f"Failed to initialize Piper voice: {e}")
+            self.available = False
     
     async def synthesize_async(self, text: str, language: str = "en", **kwargs) -> bytes:
-        """Asynchronously synthesize text using gTTS."""
-        if not self.available:
-            raise RuntimeError("gTTS not available")
+        """Asynchronously synthesize text using Piper TTS."""
+        if not self.available or not self.voice:
+            raise RuntimeError("Piper TTS not available")
         
         try:
-            # gTTS doesn't support speaker_wav, so filter it out
-            gtts_kwargs = {k: v for k, v in kwargs.items() if k != 'speaker_wav'}
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, self.synthesize_sync, text, language, **gtts_kwargs)
+            # Remove unsupported parameters from kwargs as Piper TTS doesn't support them
+            piper_kwargs = {k: v for k, v in kwargs.items() if k not in ['speaker_wav', 'speed']}
+            return await loop.run_in_executor(None, self.synthesize_sync, text, language, **piper_kwargs)
         except Exception as e:
-            log.error(f"gTTS async synthesis failed: {e}")
+            log.error(f"Piper TTS async synthesis failed: {e}")
             return b""
     
     def synthesize_sync(self, text: str, language: str = "en", **kwargs) -> bytes:
-        """Synchronously synthesize text using gTTS."""
-        if not self.available:
-            raise RuntimeError("gTTS not available")
+        """Synchronously synthesize text using Piper TTS."""
+        if not self.available or not self.voice:
+            raise RuntimeError("Piper TTS not available")
         
         try:
-            import io
-            import tempfile
+            # Create temporary WAV file
+            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
+                temp_path = tmp_file.name
             
-            # gTTS doesn't support speaker_wav, so filter it out
-            gtts_kwargs = {k: v for k, v in kwargs.items() if k != 'speaker_wav'}
-            
-            # Create gTTS object
-            tts = gTTS(text=text, lang=language, slow=False)
-            
-            # Save to temporary file
-            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as tmp_file:
-                tts.save(tmp_file.name)
+            try:
+                # Configure WAV file
+                with wave.open(temp_path, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)  # 16-bit
+                    wf.setframerate(self.voice.config.sample_rate)
+                    
+                    # Get synthesis parameters
+                    length_scale = kwargs.get('length_scale', self.length_scale)
+                    noise_scale = kwargs.get('noise_scale', self.noise_scale)
+                    noise_w = kwargs.get('noise_w', self.noise_w)
+                    
+                    # Detect API signature
+                    sig = inspect.signature(PiperVoice.synthesize)
+                    params = sig.parameters
+                    use_kwargs = all(k in params for k in ("length_scale", "noise_scale", "noise_w"))
+                    has_syn_config = ("syn_config" in params) or ("synthesis_config" in params)
+                    
+                    log.debug(f"Piper API signature: {sig}")
+                    log.debug(f"use_kwargs: {use_kwargs}, has_syn_config: {has_syn_config}")
+                    
+                    # Synthesize based on API version (following working code pattern)
+                    if use_kwargs:
+                        # New API: direct kwargs
+                        self.voice.synthesize(
+                            text,
+                            wf,
+                            length_scale=length_scale,
+                            noise_scale=noise_scale,
+                            noise_w=noise_w,
+                            sentence_silence=0.0,
+                        )
+                    elif has_syn_config:
+                        # Old API: SynthesisConfig object (this is what works)
+                        from piper.voice import SynthesisConfig
+                        
+                        # NOTE: কিছু রিলিজে 'noise_w' না হয়ে 'noise_w_scale' ছিল—সেই কেস কভার:
+                        try:
+                            cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w=noise_w)
+                        except TypeError:
+                            cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w_scale=noise_w)
+                        
+                        kw = {}
+                        if "syn_config" in params:
+                            kw["syn_config"] = cfg
+                        else:
+                            kw["synthesis_config"] = cfg
+                        
+                        # কিছু রিলিজে নাম 'synthesize_wav'—ফলব্যাক ট্রাই:
+                        try:
+                            self.voice.synthesize(text, wf, **kw)
+                        except TypeError:
+                            self.voice.synthesize_wav(text, wf, **kw)
+                    else:
+                        # সবশেষে: স্ট্রিমিং রো API (সব ভার্সনে থাকে)
+                        for audio in self.voice.synthesize_stream_raw(
+                            text, length_scale=length_scale, noise_scale=noise_scale, noise_w=noise_w
+                        ):
+                            wf.writeframes(audio)
                 
-                # Convert MP3 to WAV bytes
-                import pydub
-                audio = pydub.AudioSegment.from_mp3(tmp_file.name)
+                # Read the generated audio file
+                with open(temp_path, 'rb') as f:
+                    audio_data = f.read()
                 
-                # Convert to WAV bytes
-                wav_buffer = io.BytesIO()
-                audio.export(wav_buffer, format="wav")
-                audio_data = wav_buffer.getvalue()
-                
-                # Clean up temporary file
-                os.unlink(tmp_file.name)
-                
-                log.info(f"✅ gTTS synthesis completed: {len(audio_data)} bytes")
+                log.info(f"✅ Piper TTS synthesis completed: {len(audio_data)} bytes")
                 return audio_data
                 
+            finally:
+                # Clean up temporary file
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                    
         except Exception as e:
-            log.error(f"gTTS synthesis failed: {e}")
+            log.error(f"Piper TTS synthesis failed: {e}")
+            import traceback
+            log.error(f"Traceback: {traceback.format_exc()}")
             return b""
     
     def is_available(self) -> bool:
-        """Check if gTTS is available."""
-        return self.available
+        """Check if Piper TTS is available."""
+        return self.available and self.voice is not None
     
     def get_info(self) -> Dict[str, Any]:
-        """Get gTTS system information."""
-        return {
-            "name": self.name,
-            "available": self.available,
-            "sample_rate": self.sample_rate,
-            "supported_languages": self.supported_languages,
-            "system_type": "gTTS",
-            "environment": "local/development"
-        }
-
-class CoquiTTSProvider(TTSInterface):
-    """Coqui TTS provider for production/live environment."""
-    
-    def __init__(self):
-        self.name = "Coqui TTS (XTTS)"
-        self.available = COQUI_TTS_AVAILABLE
-        self.manager = xtts_manager if COQUI_TTS_AVAILABLE else None
-        
-        if self.available:
-            log.info("✅ Coqui TTS provider initialized")
-        else:
-            log.warning("❌ Coqui TTS provider not available")
-    
-    async def synthesize_async(self, text: str, language: str = "en", speaker_wav: str = None, **kwargs) -> bytes:
-        """Asynchronously synthesize text using Coqui TTS."""
-        if not self.available:
-            raise RuntimeError("Coqui TTS not available")
-        
-        try:
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(
-                None, 
-                self.manager.synthesize_text, 
-                text, 
-                language, 
-                speaker_wav
-            )
-        except Exception as e:
-            log.error(f"Coqui TTS async synthesis failed: {e}")
-            return b""
-    
-    def synthesize_sync(self, text: str, language: str = "en", speaker_wav: str = None, **kwargs) -> bytes:
-        """Synchronously synthesize text using Coqui TTS."""
-        if not self.available:
-            raise RuntimeError("Coqui TTS not available")
-        
-        try:
-            return self.manager.synthesize_text(text, language, speaker_wav)
-        except Exception as e:
-            log.error(f"Coqui TTS synthesis failed: {e}")
-            return b""
-    
-    def is_available(self) -> bool:
-        """Check if Coqui TTS is available."""
-        return self.available
-    
-    def get_info(self) -> Dict[str, Any]:
-        """Get Coqui TTS system information."""
+        """Get Piper TTS system information."""
         info = {
             "name": self.name,
-            "available": self.available,
-            "system_type": "Coqui TTS",
-            "environment": "production/live"
+            "available": self.is_available(),
+            "system_type": "Piper TTS",
+            "environment": "local + production",
+            "model_name": self.model_full_name,
+            "model_path": self.model_path,
+            "config_path": self.config_path,
+            "supported_languages": self.supported_languages,
+            "sample_rate": self.voice.config.sample_rate if self.voice else 22050,
+            "device_config": {
+                "use_cuda": self.use_cuda,
+                "device_type": self.device_info['device_type'],
+                "device_name": self.device_info['device_name'],
+                "cuda_available": self.device_info['cuda_available'],
+                "cuda_device_count": self.device_info['cuda_device_count']
+            },
+            "synthesis_params": {
+                "length_scale": self.length_scale,
+                "noise_scale": self.noise_scale,
+                "noise_w": self.noise_w
+            }
         }
-        
-        if self.available and self.manager:
-            manager_info = self.manager.get_model_info()
-            info.update(manager_info)
         
         return info
 
@@ -299,8 +464,7 @@ class TTSFactory:
     
     def __init__(self):
         self.providers = {
-            TTSSystem.GTTS: GTTSProvider(),
-            TTSSystem.COQUI: CoquiTTSProvider(),
+            TTSSystem.PIPER: PiperTTSProvider(),
             TTSSystem.FALLBACK: FallbackTTSProvider()
         }
         
@@ -330,24 +494,16 @@ class TTSFactory:
         # Check explicit configuration
         tts_system = os.getenv("TTS_SYSTEM", "").lower()
         
-        if tts_system == "gtts":
-            return TTSSystem.GTTS
-        elif tts_system == "coqui":
-            return TTSSystem.COQUI
+        if tts_system == "piper":
+            return TTSSystem.PIPER
         elif tts_system == "fallback":
             return TTSSystem.FALLBACK
         
-        # Auto-select based on environment
-        if self.environment == TTSEnvironment.LOCAL:
-            if self.providers[TTSSystem.GTTS].is_available():
-                return TTSSystem.GTTS
-            else:
-                return TTSSystem.FALLBACK
-        else:  # PRODUCTION/LIVE
-            if self.providers[TTSSystem.COQUI].is_available():
-                return TTSSystem.COQUI
-            else:
-                return TTSSystem.FALLBACK
+        # Auto-select: Piper TTS for both local and production
+        if self.providers[TTSSystem.PIPER].is_available():
+            return TTSSystem.PIPER
+        else:
+            return TTSSystem.FALLBACK
     
     def get_provider(self, system: Optional[TTSSystem] = None) -> TTSInterface:
         """Get TTS provider for specified system or preferred system."""
@@ -435,7 +591,7 @@ if __name__ == "__main__":
     print(f"Available Providers: {', '.join(info['available_providers'])}")
     
     # Test synthesis
-    test_text = "Hello! This is a test of the TTS factory system."
+    test_text = "Hello! This is a test of the Piper TTS factory system."
     
     print(f"\nTesting synthesis with: '{test_text}'")
     

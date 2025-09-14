@@ -35,16 +35,14 @@ print_error() {
 # Function to show usage
 show_usage() {
     echo "TTS System Switcher"
-    echo "Usage: $0 [gtts|coqui|fallback]"
+    echo "Usage: $0 [piper|fallback]"
     echo ""
     echo "Options:"
-    echo "  gtts     - Switch to Google TTS (fast, cloud-based)"
-    echo "  coqui    - Switch to Coqui XTTS (high quality, local)"
+    echo "  piper    - Switch to Piper TTS (high quality, local, fast)"
     echo "  fallback - Switch to fallback TTS system"
     echo ""
     echo "Examples:"
-    echo "  $0 gtts"
-    echo "  $0 coqui"
+    echo "  $0 piper"
     echo "  $0 fallback"
 }
 
@@ -52,7 +50,7 @@ show_usage() {
 validate_tts_system() {
     local system=$1
     case $system in
-        gtts|coqui|fallback)
+        piper|fallback)
             return 0
             ;;
         *)

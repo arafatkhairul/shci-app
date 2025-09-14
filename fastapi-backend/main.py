@@ -13,9 +13,10 @@ from dotenv import load_dotenv
 
 # faster-whisper removed - using WebkitSpeechRecognition instead
 # import webrtcvad
-from xtts_wrapper import xtts_wrapper
-from xtts_manager import xtts_manager
-from realtime_tts_streaming import streaming_manager, start_tts_stream, stop_tts_stream, get_streaming_stats
+# XTTS removed - using Piper TTS instead
+# from xtts_wrapper import xtts_wrapper
+# from xtts_manager import xtts_manager
+# from realtime_tts_streaming import streaming_manager, start_tts_stream, stop_tts_stream, get_streaming_stats
 from tts_factory import tts_factory, synthesize_text, synthesize_text_async, get_tts_info, TTSSystem
 
 # ===================== Logging =====================
@@ -26,48 +27,47 @@ def log_exception(where: str, e: Exception):
     tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
     log.error(f"[EXC] {where}: {e}\n{tb}")
 
-# ===================== Env / Config =====================
+# ===================== Environment Configuration =====================
+# Load environment variables from .env file
 load_dotenv()
 
-# ---- LLM ----
+# ---- Application Environment ----
+TTS_ENVIRONMENT = os.getenv("TTS_ENVIRONMENT", "local").lower()
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+NODE_ENV = os.getenv("NODE_ENV", "development").lower()
+
+# ---- LLM Configuration ----
 LLM_API_URL   = os.getenv("LLM_API_URL", "http://173.208.167.147:11434/v1/chat/completions").strip()
 LLM_MODEL     = os.getenv("LLM_MODEL", "qwen2.5-14b-gpu").strip()
 LLM_API_KEY   = os.getenv("LLM_API_KEY", "").strip()  # optional
 LLM_TIMEOUT   = float(os.getenv("LLM_TIMEOUT", "10.0"))  # Reduced for faster responses
 LLM_RETRIES   = int(os.getenv("LLM_RETRIES", "1"))  # Reduced retries for faster failure
-log.info(f"Using self-hosted LLM at: {LLM_API_URL} (model={LLM_MODEL}) timeout={LLM_TIMEOUT}s, retries={LLM_RETRIES}")
 
-# ---- LanguageTool ----
-# LanguageTool COMMENTED OUT for direct LLM → gTTS flow
-# LT_API_URL = os.getenv("LT_API_URL", "https://languagetool.nodecel.cloud/v2/check")
-# log.info(f"Using LanguageTool at: {LT_API_URL}")
+# ---- TTS System Configuration ----
+TTS_SYSTEM = os.getenv("TTS_SYSTEM", "piper").lower()
 
-# ---- Whisper ----
-# Whisper removed - using WebkitSpeechRecognition instead
-# WHISPER_MODEL   = os.getenv("WHISPER_MODEL", "small")
-# WHISPER_DEVICE  = os.getenv("WHISPER_DEVICE", "cpu")
-# WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE", "int8")
-# log.info(f"Loading Whisper model ({WHISPER_MODEL}) on {WHISPER_DEVICE} compute={WHISPER_COMPUTE} ...")
-# stt = WhisperModel(WHISPER_MODEL, device=WHISPER_DEVICE, compute_type=WHISPER_COMPUTE)
-# log.info("Whisper loaded with multilingual support.")
+# ---- Piper TTS Configuration ----
+PIPER_MODEL_NAME = os.getenv("PIPER_MODEL_NAME", "en_US-ljspeech-high").strip()
+PIPER_LENGTH_SCALE = float(os.getenv("PIPER_LENGTH_SCALE", "1.5"))
+PIPER_NOISE_SCALE = float(os.getenv("PIPER_NOISE_SCALE", "0.667"))
+PIPER_NOISE_W = float(os.getenv("PIPER_NOISE_W", "0.8"))
 
-# ---- TTS (XTTS - Coqui TTS) ----
-XTTS_MODEL = os.getenv("XTTS_MODEL", "tts_models/multilingual/multi-dataset/xtts_v2").strip()
-XTTS_LANGUAGE = os.getenv("XTTS_LANGUAGE", "en").strip()
-XTTS_SPEAKER_WAV = os.getenv("XTTS_SPEAKER_WAV", "").strip()
-XTTS_SPEED = float(os.getenv("XTTS_SPEED", "1.0"))
-XTTS_TEMPERATURE = float(os.getenv("XTTS_TEMPERATURE", "0.75"))
+# ---- Audio Configuration ----
 TTS_OUTPUT_FORMAT = os.getenv("TTS_OUTPUT_FORMAT", "wav").strip()
 TTS_SAMPLE_RATE = int(os.getenv("TTS_SAMPLE_RATE", "22050"))
-TTS_USE_CUDA = os.getenv("TTS_USE_CUDA", "true").lower().strip() == "true"
+DEFAULT_LANGUAGE = os.getenv("DEFAULT_LANGUAGE", "en").strip()
 
-log.info(f"XTTS Configuration:")
-log.info(f"  Model: {XTTS_MODEL}")
-log.info(f"  Language: {XTTS_LANGUAGE}")
-log.info(f"  Speaker: {XTTS_SPEAKER_WAV or 'Default'}")
-log.info(f"  Speed: {XTTS_SPEED}")
-log.info(f"  Temperature: {XTTS_TEMPERATURE}")
-log.info(f"  Device: {'CUDA' if TTS_USE_CUDA else 'CPU'}")
+# ---- Assistant Configuration ----
+ASSISTANT_NAME   = os.getenv("ASSISTANT_NAME", "Self Hosted Conversational Interface")
+ASSISTANT_AUTHOR = os.getenv("ASSISTANT_AUTHOR", "NZR DEV")
+
+# Configuration logging
+log.info(f"🔧 Environment: {TTS_ENVIRONMENT} ({ENVIRONMENT})")
+log.info(f"🤖 LLM: {LLM_API_URL} (model={LLM_MODEL}) timeout={LLM_TIMEOUT}s, retries={LLM_RETRIES}")
+log.info(f"🎵 TTS System: {TTS_SYSTEM}")
+log.info(f"🎯 Piper TTS: {PIPER_MODEL_NAME} (length={PIPER_LENGTH_SCALE}, noise={PIPER_NOISE_SCALE}, w={PIPER_NOISE_W})")
+log.info(f"🔊 Audio: {TTS_OUTPUT_FORMAT} @ {TTS_SAMPLE_RATE}Hz, language={DEFAULT_LANGUAGE}")
+log.info(f"👤 Assistant: {ASSISTANT_NAME} by {ASSISTANT_AUTHOR}")
 
 # ---- Memory store ----
 MEM_ROOT = pathlib.Path(os.getenv("MEM_DB_DIR", "memdb"))
@@ -90,74 +90,154 @@ app.add_middleware(
 # ===================== Startup Events =====================
 @app.on_event("startup")
 async def startup_event():
-    """Initialize TTS system on startup"""
+    """Initialize TTS system on startup with beautiful logs"""
     try:
+        # Beautiful startup banner
+        print("\n" + "="*80)
+        print("🚀 SHCI VOICE ASSISTANT - STARTING UP")
+        print("="*80)
+        
         log.info("🚀 Starting TTS system initialization...")
         
         # Initialize TTS factory
         tts_info = get_tts_info()
-        log.info(f"TTS Environment: {tts_info['environment']}")
-        log.info(f"Preferred TTS System: {tts_info['preferred_system']}")
-        log.info(f"Available TTS Providers: {', '.join(tts_info['available_providers'])}")
         
-        # Initialize XTTS system only if Coqui TTS is preferred
-        if tts_info['preferred_system'] == 'coqui':
-            log.info("🚀 Starting XTTS initialization...")
-            try:
-                success = await xtts_wrapper.initialize()
-                if success:
-                    log.info("✅ XTTS system initialized successfully")
-                else:
-                    log.error("❌ Failed to initialize XTTS system")
-            except Exception as xtts_error:
-                log.error(f"❌ XTTS initialization error: {xtts_error}")
-                log.info("ℹ️ Continuing with fallback TTS system")
-        else:
-            log.info("ℹ️ Using alternative TTS system (gTTS/Fallback)")
+        # Environment and System Status
+        print(f"\n📊 SYSTEM STATUS:")
+        print(f"   Environment: {tts_info['environment'].upper()}")
+        print(f"   TTS System: {tts_info['preferred_system'].upper()}")
+        print(f"   Available Providers: {', '.join(tts_info['available_providers'])}")
+        
+        # Device Information (GPU/CPU)
+        if 'piper' in tts_info['providers']:
+            piper_info = tts_info['providers']['piper']
+            device_config = piper_info['device_config']
+            
+            print(f"\n🖥️  DEVICE CONFIGURATION:")
+            print(f"   Device Type: {device_config['device_type']}")
+            print(f"   Device Name: {device_config['device_name']}")
+            print(f"   CUDA Available: {'✅ YES' if device_config['cuda_available'] else '❌ NO'}")
+            print(f"   CUDA Devices: {device_config['cuda_device_count']}")
+            print(f"   Using CUDA: {'✅ YES' if device_config['use_cuda'] else '❌ NO'}")
+            
+            # Performance indicator
+            if device_config['use_cuda']:
+                print(f"   Performance: 🚀 GPU ACCELERATED")
+            else:
+                print(f"   Performance: 💻 CPU OPTIMIZED")
+        
+        # TTS Configuration Details
+        if 'piper' in tts_info['providers']:
+            piper_info = tts_info['providers']['piper']
+            print(f"\n🎵 TTS CONFIGURATION:")
+            print(f"   Model: {piper_info['model_name']}")
+            print(f"   Sample Rate: {piper_info['sample_rate']} Hz")
+            print(f"   Length Scale: {piper_info['synthesis_params']['length_scale']}")
+            print(f"   Noise Scale: {piper_info['synthesis_params']['noise_scale']}")
+            print(f"   Noise W: {piper_info['synthesis_params']['noise_w']}")
+        
+        # Audio Configuration
+        print(f"\n🔊 AUDIO CONFIGURATION:")
+        print(f"   Format: {TTS_OUTPUT_FORMAT.upper()}")
+        print(f"   Sample Rate: {TTS_SAMPLE_RATE} Hz")
+        print(f"   Language: {DEFAULT_LANGUAGE.upper()}")
+        
+        # Concurrency Settings
+        print(f"\n⚡ CONCURRENCY SETTINGS:")
+        print(f"   STT Concurrency: {os.getenv('STT_CONCURRENCY', '1')}")
+        print(f"   TTS Concurrency: {os.getenv('TTS_CONCURRENCY', '1')}")
+        
+        # LLM Configuration
+        print(f"\n🤖 LLM CONFIGURATION:")
+        print(f"   API URL: {LLM_API_URL}")
+        print(f"   Model: {LLM_MODEL}")
+        print(f"   Timeout: {LLM_TIMEOUT}s")
+        print(f"   Retries: {LLM_RETRIES}")
+        
+        # Assistant Information
+        print(f"\n👤 ASSISTANT INFORMATION:")
+        print(f"   Name: {ASSISTANT_NAME}")
+        print(f"   Author: {ASSISTANT_AUTHOR}")
+        
+        # Database Status
+        print(f"\n💾 DATABASE STATUS:")
+        print(f"   Memory DB: {MEM_ROOT.absolute()}")
+        print(f"   Roleplay DB: {DB_PATH.absolute()}")
+        
+        # VAD Configuration
+        print(f"\n🎤 VOICE ACTIVITY DETECTION:")
+        print(f"   Trigger Frames: {TRIGGER_VOICED_FRAMES}")
+        print(f"   End Silence: {END_SILENCE_MS}ms")
+        print(f"   Max Utterance: {MAX_UTTER_MS}ms")
+        print(f"   Min Utterance: {MIN_UTTER_SEC}s")
+        
+        # Performance Summary
+        print(f"\n📈 PERFORMANCE SUMMARY:")
+        if 'piper' in tts_info['providers']:
+            device_config = tts_info['providers']['piper']['device_config']
+            if device_config['use_cuda']:
+                print(f"   🚀 GPU ACCELERATION: ENABLED")
+                print(f"   ⚡ Performance: HIGH")
+                print(f"   🎯 Optimization: PRODUCTION")
+            else:
+                print(f"   💻 CPU PROCESSING: ENABLED")
+                print(f"   ⚡ Performance: OPTIMIZED")
+                print(f"   🎯 Optimization: DEVELOPMENT")
+        
+        print(f"\n✅ TTS SYSTEM INITIALIZATION COMPLETE")
+        print("="*80)
+        print("🎉 SERVER READY TO ACCEPT CONNECTIONS!")
+        print("="*80 + "\n")
         
         log.info("✅ TTS system initialization complete")
+        
     except Exception as e:
+        print(f"\n❌ STARTUP ERROR: {e}")
+        print("="*80 + "\n")
         log.error(f"❌ TTS startup error: {e}")
         import traceback
         log.error(f"Traceback: {traceback.format_exc()}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Cleanup XTTS resources on shutdown"""
+    """Cleanup TTS resources on shutdown"""
     try:
-        log.info("🔄 Shutting down XTTS system...")
-        await xtts_wrapper.cleanup_async()
-        
         # Cleanup streaming resources
         log.info("🔄 Cleaning up TTS streaming resources...")
         from realtime_tts_streaming import cleanup_streaming
         cleanup_streaming()
         
-        log.info("✅ XTTS system shutdown complete")
+        log.info("✅ TTS system shutdown complete")
     except Exception as e:
-        log.error(f"❌ XTTS shutdown error: {e}")
+        log.error(f"❌ TTS shutdown error: {e}")
 
-# ===================== Audio / VAD =====================
+# ===================== Audio / VAD Configuration =====================
+# Audio processing parameters
 SR = 16000
 FRAME_MS = 30
 SAMPLES_PER_FRAME = SR * FRAME_MS // 1000
 BYTES_PER_FRAME   = SAMPLES_PER_FRAME * 2
 
-# Tuned endpointing
-# VAD_AGGR              = int(os.getenv("VAD_AGGR", "2"))  # Removed - using WebkitSpeechRecognition instead
+# Voice Activity Detection (VAD) Configuration
 TRIGGER_VOICED_FRAMES = int(os.getenv("TRIGGER_VOICED_FRAMES", "2"))
 END_SILENCE_MS        = int(os.getenv("END_SILENCE_MS", "250"))
 MAX_UTTER_MS          = int(os.getenv("MAX_UTTER_MS", "7000"))
 
+# Audio Quality Thresholds
 MIN_UTTER_SEC = float(os.getenv("MIN_UTTER_SEC", "0.25"))
 MIN_RMS       = float(os.getenv("MIN_RMS", "0.006"))
 
+# Concurrency Limits
 STT_SEM = asyncio.Semaphore(int(os.getenv("STT_CONCURRENCY", "1")))
 TTS_SEM = asyncio.Semaphore(int(os.getenv("TTS_CONCURRENCY", "1")))
 
+# VAD Configuration logging
+log.info(f"🎤 VAD: trigger={TRIGGER_VOICED_FRAMES}, silence={END_SILENCE_MS}ms, max={MAX_UTTER_MS}ms")
+log.info(f"🔊 Audio: min_utter={MIN_UTTER_SEC}s, min_rms={MIN_RMS}")
+log.info(f"⚡ Concurrency: STT={os.getenv('STT_CONCURRENCY', '1')}, TTS={os.getenv('TTS_CONCURRENCY', '1')}")
+
 # ===================== Identity / Persona =====================
-ASSISTANT_NAME   = os.getenv("ASSISTANT_NAME", "Self Hosted Conversational Interface")
-ASSISTANT_AUTHOR = os.getenv("ASSISTANT_AUTHOR", "NZR DEV")
+# Assistant identity (already configured above)
 
 AGENT_PERSONA_EN = f"""
 You are {ASSISTANT_NAME}, a warm, friendly, slightly witty voice companion developed by {ASSISTANT_AUTHOR}.
@@ -289,7 +369,7 @@ LANGUAGES = {
         # "languagetool_code": "it",  # COMMENTED OUT
     },
 }
-DEFAULT_LANGUAGE = os.getenv("DEFAULT_LANGUAGE", "en")
+# DEFAULT_LANGUAGE already configured above
 
 # ===================== Database Manager =====================
 from roleplay_database import RolePlayDatabase
@@ -834,7 +914,8 @@ async def tts_bytes_async(text: str, language: str = "en", speaker_wav: str = No
         log.info(f"Using TTS system: {tts_info['preferred_system']}")
         
         # Synthesize using TTS factory with ultra-fast mode
-        audio_bytes = await synthesize_text_async(text, language, speaker_wav=speaker_wav, speed=2.0)
+        # Note: speaker_wav parameter is ignored by Piper TTS
+        audio_bytes = await synthesize_text_async(text, language, speed=2.0)
         
         if audio_bytes:
             log.info(f"✅ TTS synthesis successful: {len(audio_bytes)} bytes")
@@ -857,7 +938,8 @@ def tts_bytes(text: str, language: str = "en", speaker_wav: str = None) -> bytes
         log.info(f"Using TTS system: {tts_info['preferred_system']}")
         
         # Synthesize using TTS factory with ultra-fast mode
-        audio_bytes = synthesize_text(text, language, speaker_wav=speaker_wav, speed=2.0)
+        # Note: speaker_wav parameter is ignored by Piper TTS
+        audio_bytes = synthesize_text(text, language, speed=2.0)
         
         if audio_bytes:
             log.info(f"✅ TTS synthesis successful: {len(audio_bytes)} bytes")
@@ -910,17 +992,17 @@ async def root():
     return {"message": "Voice Agent Backend is running."}
 
 @app.get("/test-tts")
-async def test_tts(text: str = "Hello, this is a test of the XTTS system.", lang: str = "en"):
+async def test_tts(text: str = "Hello, this is a test of the Piper TTS system.", lang: str = "en"):
     try:
-        log.info(f"Test XTTS called with text: '{text[:50]}...' and language: {lang}")
+        log.info(f"Test TTS called with text: '{text[:50]}...' and language: {lang}")
         audio_bytes = await tts_bytes_async(text, lang)
         
         if audio_bytes:
-            # XTTS uses WAV format
+            # Piper TTS uses WAV format
             media_type = "audio/wav"
             return Response(content=audio_bytes, media_type=media_type)
         else:
-            return JSONResponse({"error": "XTTS synthesis failed"}, status_code=500)
+            return JSONResponse({"error": "TTS synthesis failed"}, status_code=500)
             
     except Exception as e:
         log_exception("test_tts", e)
@@ -1029,11 +1111,12 @@ async def test_tts_endpoint(
             except ValueError:
                 return JSONResponse({
                     "status": "error",
-                    "message": f"Invalid TTS system: {tts_system}. Available: gtts, coqui, fallback"
+                    "message": f"Invalid TTS system: {tts_system}. Available: piper, fallback"
                 }, status_code=400)
         
         # Test synthesis with ultra-fast mode
-        audio_data = await synthesize_text_async(text, language, system, speaker_wav=speaker_wav, speed=2.0)
+        # Note: speaker_wav parameter is ignored by Piper TTS
+        audio_data = await synthesize_text_async(text, language, system, speed=2.0)
         
         if audio_data:
             audio_b64 = base64.b64encode(audio_data).decode("utf-8")
@@ -1071,18 +1154,12 @@ async def test_tts_streaming(
     try:
         log.info(f"Testing TTS streaming: '{text[:50]}...'")
         
-        # Test synthesis with ultra-fast mode
-        audio_data = await asyncio.get_event_loop().run_in_executor(
-            None, 
-            xtts_manager.synthesize_text, 
-            text, 
-            language, 
-            speaker_wav,
-            2.0  # ultra-fast speed parameter
-        )
+        # Test synthesis using TTS factory
+        audio_data = await synthesize_text_async(text, language, speed=2.0)
         
         if audio_data:
             audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+            tts_info = get_tts_info()
             return {
                 "status": "success",
                 "message": "TTS synthesis successful",
@@ -1092,7 +1169,8 @@ async def test_tts_streaming(
                 "audio_size": len(audio_data),
                 "audio_base64": audio_b64,
                 "audio_format": "wav",
-                "sample_rate": xtts_manager.sample_rate
+                "sample_rate": 22050,  # Piper TTS sample rate
+                "tts_system": tts_info['preferred_system']
             }
         else:
             return JSONResponse({
@@ -1384,127 +1462,21 @@ async def test_roleplay_detailed(
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get("/tts/info")
-async def get_xtts_info():
-    """Get XTTS system information"""
+async def get_tts_info_endpoint():
+    """Get TTS system information"""
     try:
-        info = await xtts_wrapper.get_info_async()
+        info = get_tts_info()
         return {
-            "tts_system": "XTTS (Coqui TTS)",
+            "tts_system": "Piper TTS",
             "info": info,
             "status": "success"
         }
     except Exception as e:
-        log_exception("get_xtts_info", e)
+        log_exception("get_tts_info", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
-# ===================== XTTS API Endpoints =====================
-@app.get("/tts/models")
-async def list_xtts_models():
-    """List available XTTS models"""
-    try:
-        models = xtts_wrapper.manager.list_available_models()
-        return {
-            "available_models": models,
-            "total_count": len(models),
-            "status": "success"
-        }
-    except Exception as e:
-        log_exception("list_xtts_models", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.post("/tts/load-model")
-async def load_xtts_model(model_name: str):
-    """Load a specific XTTS model"""
-    try:
-        success = await xtts_wrapper.initialize()
-        if success:
-            return {
-                "message": f"XTTS model loaded successfully: {model_name}",
-                "model_name": model_name,
-                "status": "success"
-            }
-        else:
-            return JSONResponse({"error": f"Failed to load XTTS model: {model_name}"}, status_code=500)
-    except Exception as e:
-        log_exception("load_xtts_model", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.post("/tts/set-language")
-async def set_xtts_language(language: str):
-    """Set XTTS synthesis language"""
-    try:
-        success = await xtts_wrapper.set_language_async(language)
-        if success:
-            return {
-                "message": f"Language set to: {language}",
-                "language": language,
-                "status": "success"
-            }
-        else:
-            return JSONResponse({"error": f"Unsupported language: {language}"}, status_code=400)
-    except Exception as e:
-        log_exception("set_xtts_language", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.post("/tts/set-speaker")
-async def set_xtts_speaker(speaker_wav_path: str):
-    """Set XTTS speaker reference file"""
-    try:
-        success = await xtts_wrapper.set_speaker_async(speaker_wav_path)
-        if success:
-            return {
-                "message": f"Speaker set to: {speaker_wav_path}",
-                "speaker_wav": speaker_wav_path,
-                "status": "success"
-            }
-        else:
-            return JSONResponse({"error": f"Invalid speaker file: {speaker_wav_path}"}, status_code=400)
-    except Exception as e:
-        log_exception("set_xtts_speaker", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.post("/tts/set-params")
-async def set_xtts_params(params: dict):
-    """Set XTTS synthesis parameters"""
-    try:
-        success = await xtts_wrapper.update_params_async(**params)
-        if success:
-            return {
-                "message": "Synthesis parameters updated",
-                "parameters": params,
-                "status": "success"
-            }
-        else:
-            return JSONResponse({"error": "Invalid parameters"}, status_code=400)
-    except Exception as e:
-        log_exception("set_xtts_params", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-@app.post("/tts/synthesize")
-async def synthesize_text_xtts(request: dict):
-    """Synthesize text to speech using XTTS"""
-    try:
-        text = request.get("text", "")
-        language = request.get("language", "en")
-        speaker_wav = request.get("speaker_wav", None)
-        
-        if not text:
-            return JSONResponse({"error": "Text is required"}, status_code=400)
-        
-        audio_bytes = await xtts_wrapper.synthesize_async(text, language, speaker_wav)
-        
-        if not audio_bytes:
-            return JSONResponse({"error": "Failed to synthesize audio"}, status_code=500)
-        
-        return Response(
-            content=audio_bytes,
-            media_type="audio/wav",
-            headers={"Content-Disposition": f"attachment; filename=synthesized.wav"}
-        )
-        
-    except Exception as e:
-        log_exception("synthesize_text_xtts", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
+# ===================== TTS API Endpoints =====================
+# Note: XTTS endpoints removed - using Piper TTS instead
 
 @app.get("/health")
 async def health_check():
@@ -1521,13 +1493,18 @@ async def health_check():
         return JSONResponse({"error": str(e)}, status_code=500)
 
 @app.get("/tts/health")
-async def xtts_health_check():
-    """XTTS system health check"""
+async def tts_health_check():
+    """TTS system health check"""
     try:
-        health = await xtts_wrapper.health_check_async()
-        return health
+        info = get_tts_info()
+        return {
+            "status": "healthy",
+            "tts_system": info['preferred_system'],
+            "available_providers": info['available_providers'],
+            "environment": info['environment']
+        }
     except Exception as e:
-        log_exception("xtts_health_check", e)
+        log_exception("tts_health_check", e)
         return JSONResponse({"error": str(e)}, status_code=500)
 
 # ===================== Organization Management =====================
@@ -1789,46 +1766,47 @@ async def ws_endpoint(ws: WebSocket):
                                 log.info(f"[{conn_id}] 🔍 STEP 15: Organization name updated to: '{org_name}'")
                                 changed = True
                         
-                        # Real-time TTS streaming commands
-                        elif typ == "start_tts_stream":
-                            text = data.get("text", "")
-                            language = data.get("language", mem.language)
-                            speaker_wav = data.get("speaker_wav", None)
-                            stream_id = data.get("stream_id", str(uuid.uuid4()))
-                            
-                            if text.strip():
-                                success = await start_tts_stream(ws, stream_id, text, language, speaker_wav, conn_id)
-                                await send_json(ws, {
-                                    "type": "tts_stream_response",
-                                    "stream_id": stream_id,
-                                    "success": success,
-                                    "message": "TTS stream started" if success else "Failed to start TTS stream"
-                                })
-                            else:
-                                await send_json(ws, {
-                                    "type": "tts_stream_response",
-                                    "stream_id": stream_id,
-                                    "success": False,
-                                    "message": "Empty text provided"
-                                })
-                        
-                        elif typ == "stop_tts_stream":
-                            stream_id = data.get("stream_id")
-                            if stream_id:
-                                success = await stop_tts_stream(stream_id, conn_id)
-                                await send_json(ws, {
-                                    "type": "tts_stream_response",
-                                    "stream_id": stream_id,
-                                    "success": success,
-                                    "message": "TTS stream stopped" if success else "Failed to stop TTS stream"
-                                })
-                        
-                        elif typ == "get_streaming_stats":
-                            stats = get_streaming_stats()
-                            await send_json(ws, {
-                                "type": "streaming_stats",
-                                "stats": stats
-                            })
+                        # Real-time TTS streaming commands (DISABLED - realtime_tts_streaming removed)
+                        # elif typ == "start_tts_stream":
+                        #     text = data.get("text", "")
+                        #     language = data.get("language", mem.language)
+                        #     speaker_wav = data.get("speaker_wav", None)
+                        #     stream_id = data.get("stream_id", str(uuid.uuid4()))
+                        #     
+                        #     if text.strip():
+                        #         # Note: speaker_wav parameter is ignored by Piper TTS
+                        #         success = await start_tts_stream(ws, stream_id, text, language, speaker_wav, conn_id)
+                        #         await send_json(ws, {
+                        #             "type": "tts_stream_response",
+                        #             "stream_id": stream_id,
+                        #             "success": success,
+                        #             "message": "TTS stream started" if success else "Failed to start TTS stream"
+                        #         })
+                        #     else:
+                        #         await send_json(ws, {
+                        #             "type": "tts_stream_response",
+                        #             "stream_id": stream_id,
+                        #             "success": False,
+                        #             "message": "Empty text provided"
+                        #         })
+                        # 
+                        # elif typ == "stop_tts_stream":
+                        #     stream_id = data.get("stream_id")
+                        #     if stream_id:
+                        #         success = await stop_tts_stream(stream_id, conn_id)
+                        #         await send_json(ws, {
+                        #             "type": "tts_stream_response",
+                        #             "stream_id": stream_id,
+                        #             "success": success,
+                        #             "message": "TTS stream stopped" if success else "Failed to stop TTS stream"
+                        #         })
+                        # 
+                        # elif typ == "get_streaming_stats":
+                        #     stats = get_streaming_stats()
+                        #     await send_json(ws, {
+                        #         "type": "streaming_stats",
+                        #         "stats": stats
+                        #     })
 
                         # Send role play status updates AFTER processing all role play fields
                         if any(key in data for key in ["role_play_enabled", "role_play_template", "organization_name", "organization_details", "role_title"]):
@@ -1899,11 +1877,11 @@ async def ws_endpoint(ws: WebSocket):
                         try:
                             text = data.get("text", "")
                             if text:
-                                log.info(f"[{conn_id}] XTTS request: {text[:60]}...")
+                                log.info(f"[{conn_id}] TTS request: {text[:60]}...")
                                 async with TTS_SEM:
                                     audio = await tts_bytes_async(text, mem.language)
                                 b64 = base64.b64encode(audio).decode("utf-8")
-                                # XTTS uses WAV format
+                                # Piper TTS uses WAV format
                                 audio_format = "wav"
                                 
                                 await send_json(ws, {
