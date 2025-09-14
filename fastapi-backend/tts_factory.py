@@ -127,10 +127,10 @@ class PiperTTSProvider(TTSInterface):
         self.use_cuda = self.device_config['use_cuda']
         self.device_info = self.device_config['device_info']
         
-        # Synthesis parameters - Optimized for server performance
-        self.length_scale = float(os.getenv("PIPER_LENGTH_SCALE", "0.5"))  # Even faster speech
-        self.noise_scale = float(os.getenv("PIPER_NOISE_SCALE", "0.4"))    # Reduced processing
-        self.noise_w = float(os.getenv("PIPER_NOISE_W", "0.5"))             # Optimized for CPU
+        # Synthesis parameters - ULTRA-FAST for old Intel Xeon
+        self.length_scale = float(os.getenv("PIPER_LENGTH_SCALE", "0.4"))  # Ultra-fast speech
+        self.noise_scale = float(os.getenv("PIPER_NOISE_SCALE", "0.3"))    # Minimal processing
+        self.noise_w = float(os.getenv("PIPER_NOISE_W", "0.4"))             # Ultra-optimized for CPU
         
         # Server performance optimizations (after attributes are initialized)
         self._apply_server_optimizations()
@@ -203,16 +203,19 @@ class PiperTTSProvider(TTSInterface):
         if "Intel" in platform.processor() or "x86_64" in platform.machine():
             log.info("🔧 Detected Intel CPU - Applying optimizations")
             
-            log.info("🚀 Using CPU optimization for Intel Xeon")
-            # Set environment variables for better CPU performance
-            os.environ["OMP_NUM_THREADS"] = str(min(cpu_count, 8))  # Limit threads
-            os.environ["MKL_NUM_THREADS"] = str(min(cpu_count, 8))
-            os.environ["NUMEXPR_NUM_THREADS"] = str(min(cpu_count, 8))
+            log.info("🚀 Using ULTRA-FAST CPU optimization for old Intel Xeon")
+            # Set environment variables for aggressive CPU performance
+            os.environ["OMP_NUM_THREADS"] = str(min(cpu_count, 6))  # Limit threads aggressively
+            os.environ["MKL_NUM_THREADS"] = str(min(cpu_count, 6))
+            os.environ["NUMEXPR_NUM_THREADS"] = str(min(cpu_count, 6))
+            os.environ["OPENBLAS_NUM_THREADS"] = str(min(cpu_count, 6))
+            os.environ["MKL_DYNAMIC"] = "false"
+            os.environ["OMP_DYNAMIC"] = "false"
             
-            # Optimize for older CPU architecture
-            self.length_scale = min(self.length_scale, 0.7)  # Faster processing
-            self.noise_scale = min(self.noise_scale, 0.6)    # Reduced complexity
-            self.noise_w = min(self.noise_w, 0.7)            # Optimized for CPU
+            # Ultra-optimize for older CPU architecture
+            self.length_scale = min(self.length_scale, 0.4)  # Ultra-fast processing
+            self.noise_scale = min(self.noise_scale, 0.3)    # Minimal complexity
+            self.noise_w = min(self.noise_w, 0.4)            # Ultra-optimized for CPU
         
         # Memory optimization
         if memory.total < 32 * (1024**3):  # Less than 32GB RAM
