@@ -355,7 +355,8 @@ class PiperTTSProvider(TTSInterface):
             loop = asyncio.get_event_loop()
             # Remove unsupported parameters from kwargs as Piper TTS doesn't support them
             piper_kwargs = {k: v for k, v in kwargs.items() if k not in ['speaker_wav', 'speed']}
-            return await loop.run_in_executor(None, self.synthesize_sync, text, language, **piper_kwargs)
+            # Use optimized streaming for better performance
+            return await loop.run_in_executor(None, self.synthesize_stream_optimized, text, language, **piper_kwargs)
         except Exception as e:
             log.error(f"Piper TTS async synthesis failed: {e}")
             return b""
@@ -382,61 +383,82 @@ class PiperTTSProvider(TTSInterface):
             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp_file:
                 temp_path = tmp_file.name
             
-            try:
-                # Configure WAV file
-                with wave.open(temp_path, "wb") as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)  # 16-bit
-                    wf.setframerate(self.voice.config.sample_rate)
+            # Configure WAV file
+            with wave.open(temp_path, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(self.voice.config.sample_rate)
+                
+                # Get synthesis parameters
+                length_scale = kwargs.get('length_scale', self.length_scale)
+                noise_scale = kwargs.get('noise_scale', self.noise_scale)
+                noise_w = kwargs.get('noise_w', self.noise_w)
+                
+                # Detect API signature
+                sig = inspect.signature(PiperVoice.synthesize)
+                params = sig.parameters
+                use_kwargs = all(k in params for k in ("length_scale", "noise_scale", "noise_w"))
+                has_syn_config = ("syn_config" in params) or ("synthesis_config" in params)
+                
+                log.debug(f"Piper API signature: {sig}")
+                log.debug(f"use_kwargs: {use_kwargs}, has_syn_config: {has_syn_config}")
+                
+                # Synthesize based on API version (following working code pattern)
+                if use_kwargs:
+                    # New API: direct kwargs
+                    self.voice.synthesize(
+                        text,
+                        wf,
+                        length_scale=length_scale,
+                        noise_scale=noise_scale,
+                        noise_w=noise_w,
+                        sentence_silence=0.0,
+                    )
+                elif has_syn_config:
+                    # Old API: SynthesisConfig object (this is what works)
+                    from piper.voice import SynthesisConfig
                     
-                    # Get synthesis parameters
-                    length_scale = kwargs.get('length_scale', self.length_scale)
-                    noise_scale = kwargs.get('noise_scale', self.noise_scale)
-                    noise_w = kwargs.get('noise_w', self.noise_w)
+                    # NOTE: কিছু রিলিজে 'noise_w' না হয়ে 'noise_w_scale' ছিল—সেই কেস কভার:
+                    try:
+                        cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w=noise_w)
+                    except TypeError:
+                        cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w_scale=noise_w)
                     
-                    # Detect API signature
-                    sig = inspect.signature(PiperVoice.synthesize)
-                    params = sig.parameters
-                    use_kwargs = all(k in params for k in ("length_scale", "noise_scale", "noise_w"))
-                    has_syn_config = ("syn_config" in params) or ("synthesis_config" in params)
-                    
-                    log.debug(f"Piper API signature: {sig}")
-                    log.debug(f"use_kwargs: {use_kwargs}, has_syn_config: {has_syn_config}")
-                    
-                    # Synthesize based on API version (following working code pattern)
-                    if use_kwargs:
-                        # New API: direct kwargs
-                        self.voice.synthesize(
-                            text,
-                            wf,
-                            length_scale=length_scale,
-                            noise_scale=noise_scale,
-                            noise_w=noise_w,
-                            sentence_silence=0.0,
-                        )
-                    elif has_syn_config:
-                        # Old API: SynthesisConfig object (this is what works)
-                        from piper.voice import SynthesisConfig
-                        
-                        # NOTE: কিছু রিলিজে 'noise_w' না হয়ে 'noise_w_scale' ছিল—সেই কেস কভার:
-                        try:
-                            cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w=noise_w)
-                        except TypeError:
-                            cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w_scale=noise_w)
-                        
-                        kw = {}
-                        if "syn_config" in params:
-                            kw["syn_config"] = cfg
-                        else:
-                            kw["synthesis_config"] = cfg
-                        
-                        # কিছু রিলিজে নাম 'synthesize_wav'—ফলব্যাক ট্রাই:
-                        try:
-                            self.voice.synthesize(text, wf, **kw)
-                        except TypeError:
-                            self.voice.synthesize_wav(text, wf, **kw)
+                    kw = {}
+                    if "syn_config" in params:
+                        kw["syn_config"] = cfg
                     else:
-                        # সবশেষে: স্ট্রিমিং রো API (সব ভার্সনে থাকে)
+                        kw["synthesis_config"] = cfg
+                    
+                    # কিছু রিলিজে নাম 'synthesize_wav'—ফলব্যাক ট্রাই:
+                    try:
+                        self.voice.synthesize(text, wf, **kw)
+                    except TypeError:
+                        self.voice.synthesize_wav(text, wf, **kw)
+                else:
+                    # Optimized streaming for real-time response
+                    log.info("🎤 Using optimized streaming synthesis for real-time response")
+                    
+                    # Try the new streaming API first
+                    try:
+                        # Use synthesize_stream for better performance
+                        for chunk in self.voice.synthesize_stream(
+                            text, 
+                            length_scale=length_scale, 
+                            noise_scale=noise_scale, 
+                            noise_w=noise_w
+                        ):
+                            # Set audio format from chunk
+                            wf.setnchannels(chunk.sample_channels)
+                            wf.setsampwidth(chunk.sample_width)
+                            wf.setframerate(chunk.sample_rate)
+                            
+                            # Write chunk data directly
+                            wf.writeframes(chunk.audio_int16_bytes)
+                            
+                    except AttributeError:
+                        # Fallback to raw streaming if new API not available
+                        log.info("🔄 Falling back to raw streaming API")
                         for audio in self.voice.synthesize_stream_raw(
                             text, length_scale=length_scale, noise_scale=noise_scale, noise_w=noise_w
                         ):
@@ -446,18 +468,98 @@ class PiperTTSProvider(TTSInterface):
                 with open(temp_path, 'rb') as f:
                     audio_data = f.read()
                 
-                log.info(f"✅ Piper TTS synthesis completed: {len(audio_data)} bytes")
-                return audio_data
-                
-            finally:
-                # Clean up temporary file
-                if os.path.exists(temp_path):
-                    os.unlink(temp_path)
+            log.info(f"✅ Piper TTS synthesis completed: {len(audio_data)} bytes")
+            return audio_data
                     
         except Exception as e:
             log.error(f"Piper TTS synthesis failed: {e}")
             import traceback
             log.error(f"Traceback: {traceback.format_exc()}")
+            return b""
+    
+    def synthesize_stream_optimized(self, text: str, language: str = "en", voice: str = None, **kwargs) -> bytes:
+        """Optimized synthesis for real-time response using memory buffer."""
+        if not self.available:
+            raise RuntimeError("Piper TTS not available")
+        
+        if voice and voice != self.current_voice:
+            self.set_voice(voice)
+        
+        if not self.voice:
+            self._initialize_voice()
+        
+        log.info(f"🎤 Starting optimized synthesis for voice: {self.current_voice}")
+        
+        # Use memory buffer instead of file for faster processing
+        import io
+        
+        # Create in-memory WAV buffer
+        wav_buffer = io.BytesIO()
+        
+        try:
+            with wave.open(wav_buffer, 'wb') as wf:
+                # Set audio format
+                wf.setnchannels(1)
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(self.voice.config.sample_rate)
+                
+                # Get synthesis parameters
+                length_scale = kwargs.get('length_scale', self.length_scale)
+                noise_scale = kwargs.get('noise_scale', self.noise_scale)
+                noise_w = kwargs.get('noise_w', self.noise_w)
+                
+                # Detect API signature
+                sig = inspect.signature(PiperVoice.synthesize)
+                params = sig.parameters
+                use_kwargs = all(k in params for k in ("length_scale", "noise_scale", "noise_w"))
+                has_syn_config = ("syn_config" in params) or ("synthesis_config" in params)
+                
+                log.info("🚀 Using optimized memory-based synthesis")
+                
+                # Use the most efficient synthesis method
+                if use_kwargs:
+                    # New API: direct kwargs (fastest)
+                    self.voice.synthesize(
+                        text,
+                        wf,
+                        length_scale=length_scale,
+                        noise_scale=noise_scale,
+                        noise_w=noise_w,
+                        sentence_silence=0.0,
+                    )
+                elif has_syn_config:
+                    # Old API: SynthesisConfig object
+                    from piper.voice import SynthesisConfig
+                    
+                    try:
+                        cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w=noise_w)
+                    except TypeError:
+                        cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w_scale=noise_w)
+                    
+                    kw = {}
+                    if "syn_config" in params:
+                        kw["syn_config"] = cfg
+                    else:
+                        kw["synthesis_config"] = cfg
+                    
+                    try:
+                        self.voice.synthesize(text, wf, **kw)
+                    except TypeError:
+                        self.voice.synthesize_wav(text, wf, **kw)
+                else:
+                    # Fallback to basic synthesis
+                    self.voice.synthesize_wav(text, wf)
+            
+            # Get audio data from buffer
+            audio_data = wav_buffer.getvalue()
+            wav_buffer.close()
+            
+            log.info(f"✅ Optimized synthesis completed: {len(audio_data)} bytes")
+            return audio_data
+            
+        except Exception as e:
+            log.error(f"Optimized synthesis failed: {e}")
+            wav_buffer.close()
             return b""
     
     def is_available(self) -> bool:
