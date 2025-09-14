@@ -8,12 +8,12 @@ import {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://nodecel.com';
 const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_BASE_URL || 'ws://nodecel.com';
 const WS_PRODUCTION_URL = process.env.NEXT_PUBLIC_WS_PRODUCTION_URL || 'wss://nodecel.com';
-import { 
-    FaGraduationCap, 
-    FaUserTie, 
-    FaCog, 
-    FaPlay, 
-    FaPause, 
+import {
+    FaGraduationCap,
+    FaUserTie,
+    FaCog,
+    FaPlay,
+    FaPause,
     FaMicrophone,
     FaBuilding,
     FaClock,
@@ -46,7 +46,7 @@ export default function VoiceAgent() {
     const [vadConfidence, setVadConfidence] = useState(0);
     const [useFallbackVAD, setUseFallbackVAD] = useState(false);
     const [fallbackVADInitialized, setFallbackVADInitialized] = useState(false);
-    
+
     // Real-time Transcription State
     const [interimTranscript, setInterimTranscript] = useState("");
     const [finalTranscript, setFinalTranscript] = useState("");
@@ -61,7 +61,7 @@ export default function VoiceAgent() {
     // Difficulty level state
     const [level, setLevel] = useState<"easy" | "medium" | "fast">("medium");
     const [levelChangeNotification, setLevelChangeNotification] = useState(false);
-    
+
     // Role play state
     const [rolePlayEnabled, setRolePlayEnabled] = useState(false);
     const [rolePlayTemplate, setRolePlayTemplate] = useState<"school" | "company" | "restaurant" | "hospital" | "custom">("school");
@@ -83,10 +83,10 @@ export default function VoiceAgent() {
         source: 'none',
         timestamp: 0
     });
-    
+
     // Audio wave animation state
     const [waveAnimationFrame, setWaveAnimationFrame] = useState(0);
-    
+
     // TTS Audio wave animation state
     const [ttsWaveAnimationFrame, setTtsWaveAnimationFrame] = useState(0);
     const [ttsAudioLevel, setTtsAudioLevel] = useState(0);
@@ -95,7 +95,7 @@ export default function VoiceAgent() {
     const updateMicLevel = useCallback((rawValue: number, source: string) => {
         // Advanced filtering to prevent false positives
         let filteredValue = rawValue;
-        
+
         // Apply source-specific filtering
         if (source === 'vad-analyser' || source === 'fallback-analyser') {
             // These sources already have advanced voice detection
@@ -104,13 +104,13 @@ export default function VoiceAgent() {
             // For other sources, apply basic filtering
             filteredValue = rawValue > 0.01 ? rawValue : 0;
         }
-        
+
         // Apply smoothing to prevent rapid fluctuations
         const currentLevel = micLevel;
         const smoothedValue = currentLevel * 0.8 + filteredValue * 0.2;
-        
+
         const normalizedValue = Math.min(smoothedValue / 0.05, 1.0);
-        
+
         setMicLevel(normalizedValue);
         setMicLevelDebug({
             rawValue: filteredValue,
@@ -118,7 +118,7 @@ export default function VoiceAgent() {
             source,
             timestamp: Date.now()
         });
-        
+
         // Enhanced console logging with different levels
         if (filteredValue > 0.001) {
         } else if (source === 'vad-analyser' && Math.random() < 0.01) { // Log 1% of silence frames
@@ -129,20 +129,20 @@ export default function VoiceAgent() {
             });
         }
     }, [micLevel]);
-    
+
     // Wave animation update effect
     useEffect(() => {
         if (listening) {
             const interval = setInterval(() => {
                 setWaveAnimationFrame(prev => prev + 1);
             }, 100); // Update every 100ms for smooth animation
-            
+
             return () => clearInterval(interval);
         } else {
             setWaveAnimationFrame(0);
         }
     }, [listening]);
-    
+
     const [aiSpeaking, setAiSpeaking] = useState(false);
     const [selectedLanguage, setSelectedLanguage] = useState<"en" | "it">("en");
     const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
@@ -150,7 +150,7 @@ export default function VoiceAgent() {
     const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
-    
+
     // TTS Audio wave animation effect
     useEffect(() => {
         if (aiSpeaking) {
@@ -162,7 +162,7 @@ export default function VoiceAgent() {
                     return Math.max(0.3, Math.min(1.0, variation));
                 });
             }, 100); // Update every 100ms for smooth animation
-            
+
             return () => clearInterval(interval);
         } else {
             setTtsWaveAnimationFrame(0);
@@ -187,18 +187,18 @@ export default function VoiceAgent() {
     const [orgName, setOrgName] = useState("");
     const [orgNameError, setOrgNameError] = useState("");
     const [isSubmittingOrg, setIsSubmittingOrg] = useState(false);
-    
+
     // Organization details modal state
     const [showOrgDetailsModal, setShowOrgDetailsModal] = useState(false);
     const [orgDetails, setOrgDetails] = useState("");
     const [isUpdatingDetails, setIsUpdatingDetails] = useState(false);
-    
+
     // Customer organization selection state
     const [showOrgSelectionModal, setShowOrgSelectionModal] = useState(false);
     const [availableOrganizations, setAvailableOrganizations] = useState<Array<{ id: number, name: string, details: string }>>([]);
     const [selectedOrgForCustomer, setSelectedOrgForCustomer] = useState<{ id: number, name: string } | null>(null);
     const [isLoadingOrgs, setIsLoadingOrgs] = useState(false);
-    
+
     // RAG system state - organization context for LLM
     const [organizationContext, setOrganizationContext] = useState<string>("");
 
@@ -384,7 +384,7 @@ export default function VoiceAgent() {
         },
         company: {
             name: "Software Company",
-            description: "Business/tech company role play", 
+            description: "Business/tech company role play",
             defaultRole: "Software Developer",
             icon: "🏢",
             placeholder: "e.g., TechCorp Solutions, 50 employees, web development..."
@@ -393,7 +393,7 @@ export default function VoiceAgent() {
             name: "Restaurant",
             description: "Food service role play",
             defaultRole: "Waiter",
-            icon: "🍽️", 
+            icon: "🍽️",
             placeholder: "e.g., Golden Dragon Restaurant, Chinese cuisine, family-owned..."
         },
         hospital: {
@@ -494,7 +494,7 @@ export default function VoiceAgent() {
         onSpeechResult: (transcript: string, isFinal: boolean, confidence: number) => {
             setVadTranscript(transcript);
             setVadConfidence(confidence);
-            
+
             if (isFinal && transcript.trim()) {
                 setTranscript(transcript);
                 setFinalTranscript(transcript);
@@ -548,7 +548,7 @@ export default function VoiceAgent() {
         onSpeechResult: (transcript: string, isFinal: boolean, confidence: number) => {
             setVadTranscript(transcript);
             setVadConfidence(confidence);
-            
+
             if (isFinal && transcript.trim()) {
                 setTranscript(transcript);
                 setFinalTranscript(transcript);
@@ -594,16 +594,16 @@ export default function VoiceAgent() {
     const sendPrefs = useCallback(() => {
         if (ws.current?.readyState === WebSocket.OPEN) {
             // For customers, use RAG context; for org owners, use their organization details
-            const currentOrgName = userType === 'customer' && selectedOrgForCustomer 
-                ? selectedOrgForCustomer.name 
-                : userType === 'org_owner' && orgName 
-                ? orgName 
-                : organizationName;
-            
+            const currentOrgName = userType === 'customer' && selectedOrgForCustomer
+                ? selectedOrgForCustomer.name
+                : userType === 'org_owner' && orgName
+                    ? orgName
+                    : organizationName;
+
             const orgDetails = userType === 'customer' && organizationContext
                 ? organizationContext
                 : organizationDetails;
-            
+
             const prefs = {
                 type: "client_prefs",
                 client_id: clientIdRef.current,
@@ -620,7 +620,7 @@ export default function VoiceAgent() {
                 // RAG context for customers
                 rag_context: userType === 'customer' ? organizationContext : "",
             };
-            
+
             // Debug voice selection
             ws.current.send(JSON.stringify(prefs));
         }
@@ -655,11 +655,11 @@ export default function VoiceAgent() {
         if (!vadService.current) {
             vadService.current = new WebkitVADService(vadConfig, vadCallbacks);
         }
-        
+
         const success = await vadService.current.initialize();
         setVadSupported(success);
         setVadInitialized(success);
-        
+
         if (success) {
             console.log('VAD Service initialized successfully');
             // Set WebSocket connection when available
@@ -669,7 +669,7 @@ export default function VoiceAgent() {
         } else {
             console.log('VAD Service not supported or failed to initialize');
         }
-        
+
         return success;
     }, [vadConfig, vadCallbacks]);
 
@@ -677,16 +677,16 @@ export default function VoiceAgent() {
         if (!fallbackVADService.current) {
             fallbackVADService.current = new FallbackVADService(fallbackVADConfig, fallbackVADCallbacks);
         }
-        
+
         const success = await fallbackVADService.current.initialize();
         setFallbackVADInitialized(success);
-        
+
         if (success) {
             console.log('Fallback VAD Service initialized successfully');
         } else {
             console.log('Fallback VAD Service failed to initialize');
         }
-        
+
         return success;
     }, [fallbackVADConfig, fallbackVADCallbacks]);
 
@@ -697,7 +697,7 @@ export default function VoiceAgent() {
             fallbackVADAvailable: !!fallbackVADService.current,
             fallbackVADInitialized: fallbackVADInitialized
         });
-        
+
         if (vadService.current && vadInitialized) {
             const success = vadService.current.start();
             if (success) {
@@ -780,7 +780,7 @@ export default function VoiceAgent() {
             // Restart VAD services after audio playback to ensure speech recognition continues
             setTimeout(() => {
                 if (listening && !aiSpeaking) {
-                    
+
                     if (useWebkitVAD && vadService.current && vadInitialized) {
                         try {
                             // Ensure WebSocket is still connected for VAD service
@@ -799,7 +799,7 @@ export default function VoiceAgent() {
                             }, 2000);
                         }
                     }
-                    
+
                     if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized) {
                         try {
                             fallbackVADService.current.start();
@@ -828,7 +828,7 @@ export default function VoiceAgent() {
                 // Check if VAD services are still active
                 const webkitVADStatus = vadService.current?.getStatus();
                 const fallbackVADStatus = fallbackVADService.current?.getStatus();
-                
+
                 console.log('🔍 VAD Health Check:', {
                     webkitVADActive: webkitVADStatus?.isListening,
                     fallbackVADActive: fallbackVADStatus?.isListening,
@@ -883,11 +883,11 @@ export default function VoiceAgent() {
     // Reset voice selection when language changes (only if current voice is not available)
     useEffect(() => {
         const availableVoices = voiceConfig[selectedLanguage];
-        
+
         if (availableVoices && availableVoices.length > 0) {
             // Check if current voice is available in the new language
             const currentVoiceAvailable = availableVoices.some(voice => voice.id === selectedVoice);
-            
+
             if (!currentVoiceAvailable) {
                 const newVoice = availableVoices[0].id;
                 setSelectedVoice(newVoice);
@@ -903,14 +903,14 @@ export default function VoiceAgent() {
         const savedOrgName = localStorage.getItem('orgName');
         const savedSelectedOrgId = localStorage.getItem('selectedOrgId');
         const savedSelectedOrgName = localStorage.getItem('selectedOrgName');
-        
+
         console.log('Loading from localStorage:', {
             userType: savedUserType,
             orgName: savedOrgName,
             selectedOrgId: savedSelectedOrgId,
             selectedOrgName: savedSelectedOrgName
         });
-        
+
         if (savedUserType && (savedUserType === 'customer' || savedUserType === 'org_owner')) {
             setUserType(savedUserType as "customer" | "org_owner");
             if (savedUserType === 'org_owner' && savedOrgName) {
@@ -978,13 +978,13 @@ export default function VoiceAgent() {
         try {
             const response = await fetch(`${API_BASE_URL}/api/organizations/by-id/${orgId}`);
             const data = await response.json();
-            
+
             if (data.success && data.organization) {
                 const org = data.organization;
-                
+
                 // Create RAG context for LLM
                 const context = `You are representing ${org.name}. ${org.details ? `Organization details: ${org.details}` : 'No additional details provided.'} Always respond as if you are a staff member of ${org.name} and provide helpful, professional assistance.`;
-                
+
                 setOrganizationContext(context);
             } else {
                 console.error('Failed to load organization:', data);
@@ -1000,10 +1000,10 @@ export default function VoiceAgent() {
         localStorage.setItem('selectedOrgId', org.id.toString());
         localStorage.setItem('selectedOrgName', org.name);
         setShowOrgSelectionModal(false);
-        
+
         // Load organization context for RAG
         await loadOrganizationContext(org.id);
-        
+
         // Send updated preferences to backend immediately
         setTimeout(() => {
             sendPrefs();
@@ -1013,9 +1013,9 @@ export default function VoiceAgent() {
     // Handle organization details update
     const handleUpdateOrgDetails = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         setIsUpdatingDetails(true);
-        
+
         try {
             const orgId = localStorage.getItem('orgId');
             if (!orgId) {
@@ -1067,7 +1067,7 @@ export default function VoiceAgent() {
         setLevel(newLevel);
         setLevelChangeNotification(true);
         setTimeout(() => setLevelChangeNotification(false), 3000);
-        
+
         // Send combined level and speech speed update to prevent conflicts
         if (ws.current?.readyState === WebSocket.OPEN) {
             const speedToLengthScale = {
@@ -1076,7 +1076,7 @@ export default function VoiceAgent() {
                 fast: 0.6     // Fast audio (lower length_scale = faster)
             };
             const lengthScale = speedToLengthScale[newLevel];
-            
+
             // Send both level and speech speed in one message to prevent conflicts
             ws.current.send(JSON.stringify({
                 type: "client_prefs",
@@ -1114,26 +1114,26 @@ export default function VoiceAgent() {
         // organizationDetails,
         // roleTitle
     ]); // Removed role play dependencies to prevent re-renders
-    
+
     // Initialize VAD services on component mount (only once)
     useEffect(() => {
         let isInitialized = false;
-        
+
         const initializeServices = async () => {
             if (isInitialized) return;
             isInitialized = true;
-            
+
             // Try Webkit VAD first
             const webkitSuccess = await initializeVAD();
-            
+
             // If Webkit VAD fails, initialize fallback VAD
             if (!webkitSuccess) {
                 await initializeFallbackVAD();
             }
         };
-        
+
         initializeServices();
-        
+
         // Cleanup on unmount
         return () => {
             if (vadService.current) {
@@ -1146,7 +1146,7 @@ export default function VoiceAgent() {
             }
         };
     }, []); // Empty dependency array to run only once
-    
+
     // Auto-refresh role play state when connected
     useEffect(() => {
         if (connected && ws.current?.readyState === WebSocket.OPEN) {
@@ -1161,7 +1161,7 @@ export default function VoiceAgent() {
             }, 1000); // Increased delay to ensure backend is ready
         }
     }, [connected]);
-    
+
     // Also refresh when WebSocket reconnects
     useEffect(() => {
         if (ws.current?.readyState === WebSocket.OPEN) {
@@ -1173,17 +1173,91 @@ export default function VoiceAgent() {
                     }));
                 }
             };
-            
+
             // Refresh after connection
             setTimeout(refreshRolePlay, 1500);
-            
+
             // Set up periodic refresh
             const interval = setInterval(refreshRolePlay, 30000); // Every 30 seconds
-            
+
             return () => clearInterval(interval);
         }
     }, [ws.current?.readyState]);
 
+
+    // ---------- Helpers: Grammar Correction Parsing ----------
+    const parseGrammarCorrection = (text: string) => {
+        const startMarker = '🔴 GRAMMAR_CORRECTION_START 🔴';
+        const endMarker = '🔴 GRAMMAR_CORRECTION_END 🔴';
+        
+        const startIndex = text.indexOf(startMarker);
+        const endIndex = text.indexOf(endMarker);
+        
+        if (startIndex === -1 || endIndex === -1) {
+            return { hasGrammarCorrection: false, grammarText: '', aiResponse: text };
+        }
+        
+        const grammarText = text.substring(startIndex + startMarker.length, endIndex).trim();
+        const aiResponse = text.substring(endIndex + endMarker.length).trim();
+        
+        // Parse incorrect and correct text
+        let incorrectText = '';
+        let correctText = '';
+        
+        const cleanGrammarText = grammarText.replace(/^\s*[-•]\s*/gm, '').trim();
+        
+        const patterns = [
+            /INCORRECT:\s*([^\n]+)\s*\n\s*CORRECT:\s*([^\n]+)/i,
+            /❌\s*([^✅]+?)\s*✅\s*(.+)/,
+            /Wrong:\s*([^C]+?)\s*Correct:\s*(.+)/i,
+            /Error:\s*([^F]+?)\s*Fixed:\s*(.+)/i
+        ];
+        
+        for (const pattern of patterns) {
+            const match = cleanGrammarText.match(pattern);
+            if (match) {
+                incorrectText = match[1].trim();
+                correctText = match[2].trim();
+                break;
+            }
+        }
+        
+        // If no pattern matched, try line-by-line parsing
+        if (!incorrectText && !correctText) {
+            const lines = cleanGrammarText.split('\n').map(line => line.trim()).filter(line => line);
+            
+            for (const line of lines) {
+                if (line.match(/^(INCORRECT|❌|Wrong|Error):/i)) {
+                    incorrectText = line.replace(/^(INCORRECT|❌|Wrong|Error):\s*/i, '').trim();
+                } else if (line.match(/^(CORRECT|✅|Correct|Fixed):/i)) {
+                    correctText = line.replace(/^(CORRECT|✅|Correct|Fixed):\s*/i, '').trim();
+                }
+            }
+        }
+        
+        return {
+            hasGrammarCorrection: !!(incorrectText && correctText),
+            incorrectText,
+            correctText,
+            grammarText,
+            aiResponse
+        };
+    };
+
+    // ---------- Helpers: Structured Speech with Grammar Correction ----------
+    const speakWithGrammarCorrection = (text: string) => {
+        const { hasGrammarCorrection, incorrectText, correctText, aiResponse } = parseGrammarCorrection(text);
+        
+        if (!hasGrammarCorrection) {
+            // No grammar correction, just speak the AI response
+            speakTextLocal(aiResponse);
+            return;
+        }
+        
+        // Create structured speech text
+        const speechText = `Grammar correction. You said: ${incorrectText}. The correct way is: ${correctText}. ${aiResponse}`;
+        speakTextLocal(speechText);
+    };
 
     // ---------- Helpers: Local TTS ----------
     const speakTextLocal = (text: string) => {
@@ -1269,7 +1343,7 @@ export default function VoiceAgent() {
     const buildWsUrl = () => {
         // Use environment variables for WebSocket URL configuration
         const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-        
+
         if (isLocalhost) {
             // Development: Use local WebSocket server
             return `${WS_BASE_URL}/ws`;
@@ -1306,7 +1380,7 @@ export default function VoiceAgent() {
                             fast: 0.30     // Fast audio 
                         };
                         const lengthScale = speedToLengthScale[level];
-                        
+
                         ws.current?.send(JSON.stringify({
                             type: "client_prefs",
                             client_id: clientIdRef.current,
@@ -1314,9 +1388,9 @@ export default function VoiceAgent() {
                             use_local_tts: useLocalTTS,
                             language: selectedLanguage,
                             speech_speed: level,
-                            noise_scale: noiseScale
+                            length_scale: lengthScale
                         }));
-                        
+
                         // Also send initial speech speed setting
                         ws.current?.send(JSON.stringify({
                             type: "set_speech_speed",
@@ -1340,7 +1414,7 @@ export default function VoiceAgent() {
                                 setAiText(data.text || "");
                                 setIsProcessing(false);
                                 // Don't clear waiting state here - keep "AI Thinking" until audio starts
-                                if (useLocalTTS && data.text) speakTextLocal(data.text);
+                                if (useLocalTTS && data.text) speakWithGrammarCorrection(data.text);
                                 break;
 
                             case "ai_audio":
@@ -1388,7 +1462,7 @@ export default function VoiceAgent() {
                                 setRolePlayTemplate(data.template);
                                 setOrganizationName(data.organization_name || "");
                                 setRoleTitle(data.role_title || "");
-                                
+
                                 // Save role play state to localStorage for persistence
                                 localStorage.setItem('rolePlayState', JSON.stringify({
                                     enabled: data.enabled,
@@ -1398,7 +1472,7 @@ export default function VoiceAgent() {
                                     roleTitle: data.role_title || ""
                                 }));
                                 break;
-                            
+
                             case "role_play_cleared":
                                 console.log("Backend: Role play cleared:", data);
                                 if (data.success) {
@@ -1407,10 +1481,10 @@ export default function VoiceAgent() {
                                     setOrganizationName("");
                                     setOrganizationDetails("");
                                     setRoleTitle("");
-                                    
+
                                     // Clear localStorage
                                     localStorage.removeItem('rolePlayState');
-                                    
+
                                     // Show success message
                                     console.log("Role play cleared successfully");
                                 } else {
@@ -1546,7 +1620,7 @@ export default function VoiceAgent() {
                 },
             });
             streamRef.current = stream;
-            
+
             console.log("🎤 Microphone Access Granted:", {
                 tracks: stream.getTracks().length,
                 audioTracks: stream.getAudioTracks().length,
@@ -1562,7 +1636,7 @@ export default function VoiceAgent() {
                     baseLatency: audioCtx.current.baseLatency
                 });
             }
-            
+
             if (audioCtx.current.state === 'suspended') {
                 await audioCtx.current.resume();
                 console.log("🎵 Audio Context Resumed:", {
@@ -1578,14 +1652,14 @@ export default function VoiceAgent() {
             analyser.current.fftSize = 256;
             analyser.current.smoothingTimeConstant = 0.2;
             src.connect(analyser.current);
-            
+
             console.log("🔊 Analyser Setup:", {
                 fftSize: analyser.current.fftSize,
                 frequencyBinCount: analyser.current.frequencyBinCount,
                 smoothingTimeConstant: analyser.current.smoothingTimeConstant,
                 connected: true
             });
-            
+
             // Start mic level monitoring with analyser
             const micDataArray = new Uint8Array(analyser.current.frequencyBinCount);
             let frameCount = 0;
@@ -1593,7 +1667,7 @@ export default function VoiceAgent() {
                 if (analyser.current && listeningRef.current) {
                     analyser.current.getByteFrequencyData(micDataArray);
                     const rms = Math.sqrt(micDataArray.reduce((sum, value) => sum + (value * value), 0) / micDataArray.length) / 255;
-                    
+
                     // Enhanced debugging every 30 frames (about 0.5 seconds at 60fps)
                     if (frameCount % 30 === 0) {
                         console.log("🎤 Analyser Monitoring:", {
@@ -1604,7 +1678,7 @@ export default function VoiceAgent() {
                             nonZeroValues: micDataArray.filter(v => v > 0).length
                         });
                     }
-                    
+
                     updateMicLevel(rms, 'analyser');
                     frameCount++;
                     requestAnimationFrame(monitorMicLevel);
@@ -1664,7 +1738,7 @@ export default function VoiceAgent() {
                 src.connect(workletNode.current);
                 workletNode.current.connect(muteGain.current);
                 muteGain.current.connect(audioCtx.current.destination);
-                
+
                 console.log("🔗 Audio Worklet Connected:", {
                     sourceToWorklet: true,
                     workletToGain: true,
@@ -1679,7 +1753,7 @@ export default function VoiceAgent() {
                 const ratio = inputRate / targetRate;
                 let floatBuf: number[] = [];
                 let readIndex = 0;
-                
+
                 console.log("🔧 Script Processor Setup:", {
                     bufferSize: 4096,
                     inputRate: inputRate,
@@ -1739,7 +1813,7 @@ export default function VoiceAgent() {
                 src.connect(processorNode.current);
                 processorNode.current.connect(muteGain.current);
                 muteGain.current.connect(audioCtx.current.destination);
-                
+
                 console.log("🔗 Script Processor Connected:", {
                     sourceToProcessor: true,
                     processorToGain: true,
@@ -1793,7 +1867,7 @@ export default function VoiceAgent() {
                 stack: error.stack,
                 timestamp: new Date().toLocaleTimeString()
             });
-            
+
             if (error?.name === "NotAllowedError") {
                 setStatus("❌ Microphone access denied - please allow microphone permissions");
                 console.log("🔒 Permission denied - user needs to allow microphone access");
@@ -1844,7 +1918,7 @@ export default function VoiceAgent() {
     // Handle user type selection
     const handleUserTypeSelection = (type: "customer" | "org_owner") => {
         setUserType(type);
-        
+
         if (type === "customer") {
             localStorage.setItem('userType', type);
             setShowUserTypeModal(false);
@@ -1882,10 +1956,10 @@ export default function VoiceAgent() {
     // Handle organization form submission
     const handleOrgFormSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         const trimmedName = orgName.trim();
         const validationError = validateOrgName(trimmedName);
-        
+
         if (validationError) {
             setOrgNameError(validationError);
             return;
@@ -1922,11 +1996,11 @@ export default function VoiceAgent() {
                 localStorage.setItem('userType', 'org_owner');
                 localStorage.setItem('orgName', trimmedName);
                 localStorage.setItem('orgId', data.organization.id.toString());
-                
+
                 // Close modals
                 setShowOrgForm(false);
                 setShowUserTypeModal(false);
-                
+
                 console.log('Organization created successfully:', data.organization);
             } else {
                 setOrgNameError(data.error || 'Failed to create organization');
@@ -1961,7 +2035,7 @@ export default function VoiceAgent() {
                     : "Ciao! Sono il tuo assistente AI. Come posso aiutarti oggi?";
             setAiText(msg);
             setIsProcessing(false);
-            if (useLocalTTS) speakTextLocal(msg);
+            if (useLocalTTS) speakWithGrammarCorrection(msg);
         }, 700);
     };
 
@@ -1970,789 +2044,792 @@ export default function VoiceAgent() {
     // ---------------- UI ----------------
     return (
         <>
-        <div className="min-h-screen text-zinc-100 bg-black">
-            {/* User Type Selection Modal */}
-            {showUserTypeModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                    <div className="relative w-full max-w-md mx-4">
-                        <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl overflow-hidden">
-                            {/* Modal Header */}
-                            <div className="p-6 pb-4">
-                                <div className="flex items-center justify-center mb-4">
-                                    <div className="p-3 rounded-full bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30">
-                                        <Bot className="h-8 w-8 text-indigo-400" />
-                                    </div>
-                                </div>
-                                <h2 className="text-2xl font-bold text-white text-center mb-2">
-                                    Welcome to SHCI
-                                </h2>
-                                <p className="text-zinc-400 text-center text-sm">
-                                    Select your role to get started
-                                </p>
-                            </div>
-
-                            {/* Modal Body */}
-                            <div className="px-6 pb-6">
-                                <div className="space-y-3">
-                                    {/* Customer Option */}
-                                    <button
-                                        onClick={() => handleUserTypeSelection('customer')}
-                                        className="w-full group relative p-4 rounded-xl bg-white/[0.05] border border-white/10 hover:border-emerald-400/50 hover:bg-emerald-500/10 transition-all duration-300 text-left"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className="p-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30 group-hover:bg-emerald-500/30 transition-colors duration-300">
-                                                <User className="h-5 w-5 text-emerald-400" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <h3 className="text-lg font-semibold text-white mb-1">
-                                                    Customer
-                                                </h3>
-                                                <p className="text-sm text-zinc-400 group-hover:text-zinc-300 transition-colors duration-300">
-                                                    I want to interact with the AI agent as a customer
-                                                </p>
-                                            </div>
-                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                                <FaChevronDown className="h-4 w-4 text-emerald-400 rotate-90" />
-                                            </div>
-                                        </div>
-                                    </button>
-
-                                    {/* Organization Owner Option */}
-                                    <button
-                                        onClick={() => handleUserTypeSelection('org_owner')}
-                                        className="w-full group relative p-4 rounded-xl bg-white/[0.05] border border-white/10 hover:border-blue-400/50 hover:bg-blue-500/10 transition-all duration-300 text-left"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30 group-hover:bg-blue-500/30 transition-colors duration-300">
-                                                <FaBuilding className="h-5 w-5 text-blue-400" />
-                                            </div>
-                                            <div className="flex-1">
-                                                <h3 className="text-lg font-semibold text-white mb-1">
-                                                    Organization Owner
-                                                </h3>
-                                                <p className="text-sm text-zinc-400 group-hover:text-zinc-300 transition-colors duration-300">
-                                                    I want to manage and configure the AI agent for my organization
-                                                </p>
-                                            </div>
-                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                                <FaChevronDown className="h-4 w-4 text-blue-400 rotate-90" />
-                                            </div>
-                                        </div>
-                                    </button>
-                                </div>
-
-                                {/* Modal Footer */}
-                                <div className="mt-6 pt-4 border-t border-white/10">
-                                    <p className="text-xs text-zinc-500 text-center">
-                                        You can change this preference later in settings
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Organization Name Form Modal */}
-            {showOrgForm && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                    <div className="relative w-full max-w-md mx-4">
-                        <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl overflow-hidden">
-                            {/* Modal Header */}
-                            <div className="p-6 pb-4">
-                                <div className="flex items-center justify-center mb-4">
-                                    <div className="p-3 rounded-full bg-gradient-to-r from-blue-500/20 to-indigo-500/20 border border-blue-500/30">
-                                        <FaBuilding className="h-8 w-8 text-blue-400" />
-                                    </div>
-                                </div>
-                                <h2 className="text-2xl font-bold text-white text-center mb-2">
-                                    Organization Setup
-                                </h2>
-                                <p className="text-zinc-400 text-center text-sm">
-                                    Enter your organization name
-                                </p>
-                            </div>
-
-                            {/* Modal Body */}
-                            <div className="px-6 pb-6">
-                                <form onSubmit={handleOrgFormSubmit} className="space-y-4">
-                                    <div>
-                                        <label htmlFor="orgName" className="block text-sm font-medium text-zinc-300 mb-2">
-                                            Organization Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            id="orgName"
-                                            value={orgName}
-                                            onChange={(e) => {
-                                                setOrgName(e.target.value);
-                                                if (orgNameError) setOrgNameError("");
-                                            }}
-                                            placeholder="Enter your organization name"
-                                            className={`w-full px-4 py-3 rounded-lg bg-white/[0.05] border text-white placeholder-zinc-500 focus:outline-none focus:bg-white/[0.08] transition-all duration-300 ${orgNameError
-                                                    ? "border-red-400/50 focus:border-red-400/70" 
-                                                    : "border-white/10 focus:border-blue-400/50"
-                                            }`}
-                                            required
-                                            autoFocus
-                                            disabled={isSubmittingOrg}
-                                        />
-                                        {orgNameError && (
-                                            <p className="mt-2 text-sm text-red-400 flex items-center gap-2">
-                                                <span className="text-red-400">⚠</span>
-                                                {orgNameError}
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div className="flex gap-3 pt-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setShowOrgForm(false);
-                                                setUserType(null);
-                                            }}
-                                            className="flex-1 px-4 py-3 rounded-lg bg-white/[0.05] border border-white/10 text-zinc-300 hover:bg-white/[0.08] hover:text-white transition-all duration-300"
-                                        >
-                                            Back
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            disabled={!orgName.trim() || isSubmittingOrg}
-                                            className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg flex items-center justify-center gap-2"
-                                        >
-                                            {isSubmittingOrg ? (
-                                                <>
-                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                                    Creating...
-                                                </>
-                                            ) : (
-                                                "Continue"
-                                            )}
-                                        </button>
-                                    </div>
-                                </form>
-
-                                {/* Modal Footer */}
-                                <div className="mt-6 pt-4 border-t border-white/10">
-                                    <p className="text-xs text-zinc-500 text-center">
-                                        This information will be used to personalize your experience
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Organization Details Modal */}
-            {showOrgDetailsModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                    <div className="relative w-full max-w-2xl mx-4">
-                        <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl overflow-hidden">
-                            {/* Modal Header */}
-                            <div className="p-6 pb-4">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-3 rounded-full bg-gradient-to-r from-blue-500/20 to-indigo-500/20 border border-blue-500/30">
-                                            <FaBuilding className="h-8 w-8 text-blue-400" />
-                                        </div>
-                                        <div>
-                                            <h2 className="text-2xl font-bold text-white">
-                                                Add details for {orgName}
-                                            </h2>
-                                            <p className="text-zinc-400 text-sm">
-                                                Provide additional information about your organization
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => setShowOrgDetailsModal(false)}
-                                        className="text-zinc-400 hover:text-zinc-200 text-2xl transition-colors duration-300"
-                                    >
-                                        ×
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Modal Body */}
-                            <div className="px-6 pb-6">
-                                <form onSubmit={handleUpdateOrgDetails} className="space-y-4">
-                                    <div>
-                                        <label htmlFor="orgDetails" className="block text-sm font-medium text-zinc-300 mb-2">
-                                            Organization Details
-                                        </label>
-                                        <textarea
-                                            id="orgDetails"
-                                            value={orgDetails}
-                                            onChange={(e) => setOrgDetails(e.target.value)}
-                                            placeholder="Describe your organization, its services, mission, or any relevant information that will help the AI understand your business context..."
-                                            className="w-full px-4 py-3 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-400/50 focus:bg-white/[0.08] transition-all duration-300 resize-none"
-                                            rows={6}
-                                            disabled={isUpdatingDetails}
-                                        />
-                                        <p className="mt-2 text-xs text-zinc-500">
-                                            This information will help personalize the AI's responses for your organization
-                                        </p>
-                                    </div>
-
-                                    <div className="flex gap-3 pt-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowOrgDetailsModal(false)}
-                                            className="flex-1 px-4 py-3 rounded-lg bg-white/[0.05] border border-white/10 text-zinc-300 hover:bg-white/[0.08] hover:text-white transition-all duration-300"
-                                            disabled={isUpdatingDetails}
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            disabled={isUpdatingDetails}
-                                            className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg flex items-center justify-center gap-2"
-                                        >
-                                            {isUpdatingDetails ? (
-                                                <>
-                                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                                    Updating...
-                                                </>
-                                            ) : (
-                                                "Update Details"
-                                            )}
-                                        </button>
-                                    </div>
-                                </form>
-
-                                {/* Modal Footer */}
-                                <div className="mt-6 pt-4 border-t border-white/10">
-                                    <div className="flex items-center gap-2 text-xs text-zinc-500">
-                                        <FaBuilding className="h-3 w-3" />
-                                        <span>Organization: {orgName}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Organization Selection Modal for Customers */}
-            {showOrgSelectionModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                    <div className="relative w-full max-w-2xl mx-4">
-                        <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl overflow-hidden">
-                            {/* Modal Header */}
-                            <div className="p-6 pb-4">
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-3 rounded-full bg-gradient-to-r from-emerald-500/20 to-green-500/20 border border-emerald-500/30">
-                                            <User className="h-8 w-8 text-emerald-400" />
-                                        </div>
-                                        <div>
-                                            <h2 className="text-2xl font-bold text-white">
-                                                Select Organization
-                                            </h2>
-                                            <p className="text-zinc-400 text-sm">
-                                                Choose which organization you want to interact with
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        onClick={() => setShowOrgSelectionModal(false)}
-                                        className="text-zinc-400 hover:text-zinc-200 text-2xl transition-colors duration-300"
-                                    >
-                                        ×
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Modal Body */}
-                            <div className="px-6 pb-6">
-                                {isLoadingOrgs ? (
-                                    <div className="flex items-center justify-center py-8">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-6 h-6 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin"></div>
-                                            <span className="text-zinc-400">Loading organizations...</span>
-                                        </div>
-                                    </div>
-                                ) : availableOrganizations.length === 0 ? (
-                                    <div className="text-center py-8">
-                                        <div className="p-4 rounded-full bg-zinc-800/50 mx-auto w-fit mb-4">
-                                            <FaBuilding className="h-8 w-8 text-zinc-500" />
-                                        </div>
-                                        <h3 className="text-lg font-semibold text-zinc-300 mb-2">No Organizations Available</h3>
-                                        <p className="text-zinc-500 text-sm">
-                                            There are no organizations set up yet. Please contact an administrator.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3 max-h-96 overflow-y-auto">
-                                        {availableOrganizations.map((org) => {
-                                            const isSelected = selectedOrgForCustomer?.id === org.id;
-                                            return (
-                                                <button
-                                                    key={org.id}
-                                                    onClick={() => handleOrgSelection({ id: org.id, name: org.name })}
-                                                    className={`w-full group relative p-4 rounded-xl transition-all duration-300 text-left ${isSelected
-                                                            ? "bg-emerald-500/20 border border-emerald-400/50 shadow-lg"
-                                                            : "bg-white/[0.05] border border-white/10 hover:border-emerald-400/50 hover:bg-emerald-500/10"
-                                                    }`}
-                                                >
-                                                    <div className="flex items-center gap-4">
-                                                        <div className={`p-2 rounded-lg border transition-colors duration-300 ${isSelected
-                                                                ? "bg-emerald-500/30 border-emerald-400/50"
-                                                                : "bg-emerald-500/20 border-emerald-500/30 group-hover:bg-emerald-500/30"
-                                                        }`}>
-                                                            <FaBuilding className="h-5 w-5 text-emerald-400" />
-                                                        </div>
-                                                        <div className="flex-1">
-                                                            <h3 className={`text-lg font-semibold ${isSelected ? "text-emerald-300" : "text-white"
-                                                            }`}>
-                                                                {org.name}
-                                                            </h3>
-                                                        </div>
-                                                        {isSelected ? (
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-                                                                <span className="text-xs font-semibold text-emerald-300">
-                                                                    Selected
-                                                                </span>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                                                <FaChevronDown className="h-4 w-4 text-emerald-400 rotate-90" />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-
-                                {/* Modal Footer */}
-                                <div className="mt-6 pt-4 border-t border-white/10">
-                                    <div className="flex items-center gap-2 text-xs text-zinc-500">
-                                        <User className="h-3 w-3" />
-                                        <span>Customer Mode - Select an organization to start conversation</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Background */}
-            <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-indigo-500/5 animate-pulse" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.03)_0%,transparent_50%)]" />
-               
-            </div>
-
-            {/* Mobile-Optimized Layout Container */}
-            <div className="flex items-center justify-center p-2 sm:p-4 md:p-6 lg:p-8">
-                <div className="w-full max-w-7xl rounded-2xl sm:rounded-3xl shadow-2xl">
-                    <div className="max-w-6xl mx-auto px-2 sm:px-4 md:px-6 py-3 sm:py-6 md:py-8 relative">
-                {/* Minimal Professional Navbar */}
-                        <div className="bg-white/[0.01] backdrop-blur-sm rounded-lg border border-white/5 p-2 sm:p-3 mb-3 sm:mb-4 relative overflow-visible">
-                    {/* Main Header Row */}
-                            <div className="flex items-center justify-between relative overflow-visible">
-                    {/* Minimal Logo & Title */}
-                        <div className="flex items-center gap-2">
-                        <div className="relative">
-                                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                                    <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
-                            </div>
-                            {connected && (
-                                <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border border-black" />
-                            )}
-                        </div>
-                        <div>
-                            <h1 className="text-base sm:text-lg font-semibold text-white">
-                                {currentLang.labels.title}
-                            </h1>
-                            <span className="text-xs text-zinc-500">
-                                {currentLang.labels.subtitle}
-                            </span>
-                        </div>
-                    </div>
-
-                        {/* Minimal Language Dropdown */}
-                        <div className="relative" ref={languageDropdownRef}>
-                        <button
-                                onClick={() => setIsLanguageDropdownOpen(!isLanguageDropdownOpen)}
-                                className="flex items-center gap-1 px-2 py-1 rounded-md bg-white/[0.03] border border-white/10 hover:bg-white/[0.05] transition-colors"
-                        >
-                                <div className="text-sm">
-                                {selectedLanguage === "en" ? languages.en.flag : languages.it.flag}
-                            </div>
-                                <span className="text-xs font-medium text-white">
-                                    {selectedLanguage === "en" ? languages.en.name : languages.it.name}
-                                </span>
-                                        <FaChevronDown className={`h-2 w-2 text-zinc-400 ${isLanguageDropdownOpen ? 'rotate-180' : ''
-                                }`} />
-                            </button>
-
-                            {/* Dropdown Menu */}
-                            {isLanguageDropdownOpen && (
-                                <div className="absolute top-full right-0 mt-2 w-48 bg-gray-900 backdrop-blur-xl rounded-lg border border-white/20 shadow-xl z-50 overflow-hidden">
-                                    <div className="py-1">
-                                        {/* English Option */}
-                                        <button
-                                            onClick={() => {
-                                                setSelectedLanguage("en");
-                                                setIsLanguageDropdownOpen(false);
-                                            }}
-                                                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-300 ${selectedLanguage === "en"
-                                                    ? "bg-indigo-500/20 text-indigo-300"
-                                                    : "text-zinc-300 hover:bg-white/[0.05] hover:text-white"
-                                            }`}
-                                        >
-                                            <div className="text-lg">
-                                                {languages.en.flag}
-                                            </div>
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-semibold">
-                                                    {languages.en.name}
-                                </span>
-                                <span className="text-xs text-zinc-500">
-                                                    English
-                                </span>
-                            </div>
-                                            {selectedLanguage === "en" && (
-                                                <FaChevronDown className="h-3 w-3 text-indigo-300 ml-auto rotate-90" />
-                                            )}
-                        </button>
-
-                                        {/* Italian Option */}
-                                        <button
-                                            onClick={() => {
-                                                setSelectedLanguage("it");
-                                                setIsLanguageDropdownOpen(false);
-                                            }}
-                                                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-300 ${selectedLanguage === "it"
-                                                    ? "bg-indigo-500/20 text-indigo-300"
-                                                    : "text-zinc-300 hover:bg-white/[0.05] hover:text-white"
-                                            }`}
-                                        >
-                                            <div className="text-lg">
-                                                {languages.it.flag}
-                                            </div>
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-semibold">
-                                                    {languages.it.name}
-                                                </span>
-                                                <span className="text-xs text-zinc-500">
-                                                    Italiano
-                                                </span>
-                                            </div>
-                                            {selectedLanguage === "it" && (
-                                                <FaChevronDown className="h-3 w-3 text-indigo-300 ml-auto rotate-90" />
-                                            )}
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                    </div>
-
-                    {/* Minimal Controls Section */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3">
-
-                        {/* Speech Speed Control */}
-                        <div className="bg-white/[0.02] backdrop-blur-sm rounded-lg border border-white/8 p-4">
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="p-2 rounded-lg bg-indigo-500/10">
-                                    <svg className="h-4 w-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-semibold text-white">
-                                        Speech Speed
-                                    </h3>
-                                    <p className="text-xs text-zinc-400">
-                                        Adjust AI response playback speed
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-2">
-                                {(["easy", "medium", "fast"] as const).map((lvl, index) => {
-                                    const icons = [FaClock, FaPlay, FaTachometerAlt];
-                                    const IconComponent = icons[index];
-                                    const speeds = ["Slow", "Normal", "Fast"];
-                                    const labels = ["Easy", "Medium", "Fast"];
-                                    
-                                    return (
-                                        <button
-                                            key={lvl}
-                                            onClick={() => handleLevelChange(lvl)}
-                                            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 flex-1 ${
-                                                level === lvl
-                                                    ? "bg-emerald-500 text-white shadow-md"
-                                                    : "bg-white/[0.05] text-zinc-400 hover:text-zinc-300 hover:bg-white/[0.08]"
-                                            }`}
-                                        >
-                                            <IconComponent className="h-3 w-3" />
-                                            <div className="flex flex-col items-start">
-                                                <span className="text-xs font-medium">
-                                                    {labels[index]}
-                                                </span>
-                                                <span className="text-xs opacity-75">
-                                                    {speeds[index]}
-                                                </span>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Minimal Role Play Section */}
-                        <div className="bg-white/[0.02] backdrop-blur-sm rounded-lg border border-white/8 p-4">
-                            <div className="flex items-center gap-3 mb-3">
-                                <div className="p-2 rounded-lg bg-emerald-500/10">
-                                    <FaUserTie className="h-4 w-4 text-emerald-400" />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-semibold text-white">
-                                        Role Play Mode
-                                    </h3>
-                                    <p className="text-xs text-zinc-400">
-                                        AI acts as staff from your selected organization
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Show selected organization if available */}
-                            {(rolePlayEnabled && organizationName) || (userType === 'customer' && selectedOrgForCustomer) || (userType === 'org_owner' && orgName) ? (
-                                <div className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-400/20 mb-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <FaBuilding className="h-3 w-3 text-emerald-400" />
-                                            <span className="text-xs font-medium text-emerald-300">
-                                                {rolePlayEnabled && organizationName 
-                                                    ? organizationName
-                                                    : userType === 'customer' && selectedOrgForCustomer
-                                                    ? selectedOrgForCustomer.name
-                                                    : userType === 'org_owner' && orgName
-                                                    ? orgName
-                                                    : "Organization Selected"
-                                                }
-                                            </span>
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                // Clear role play and organization data
-                                                setRolePlayEnabled(false);
-                                                setOrganizationName("");
-                                                setOrganizationDetails("");
-                                                setRoleTitle("");
-                                                setSelectedOrgForCustomer(null);
-                                                
-                                                // Send WebSocket message to clear role play
-                                                if (ws.current?.readyState === WebSocket.OPEN) {
-                                                    ws.current.send(JSON.stringify({
-                                                        type: "clear_roleplay"
-                                                    }));
-                                                }
-                                            }}
-                                            className="p-1 rounded-full hover:bg-red-500/20 transition-colors duration-200 group"
-                                            title="Remove Organization"
-                                        >
-                                            <svg className="h-3 w-3 text-red-400 group-hover:text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : null}
-
-                            <button
-                                onClick={() => {
-                                    if (userType === 'org_owner' && orgName) {
-                                        handleConfigureRolePlay();
-                                    } else if (userType === 'customer') {
-                                        handleConfigureRolePlay();
-                                    } else {
-                                        setShowRolePlayModal(true);
-                                    }
-                                }}
-                                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.05] text-zinc-400 hover:text-zinc-300 hover:bg-white/[0.08] transition-all duration-200 w-full"
-                            >
-                                <FaCog className="h-3 w-3" />
-                                <span className="text-xs font-medium">
-                                    {rolePlayEnabled 
-                                        ? "Configure Role Play"
-                                        : userType === 'customer' 
-                                            ? "Select Organization"
-                                            : userType === 'org_owner'
-                                            ? "Configure Organization"
-                                            : "Configure Role Play"
-                                    }
-                                </span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                      
-
-                {/* Role Play Configuration Modal */}
-                {showRolePlayModal && (
+            <div className="min-h-screen text-zinc-100 bg-black">
+                {/* User Type Selection Modal */}
+                {showUserTypeModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                        <div className="bg-gradient-to-br from-white/[0.05] to-white/[0.02] backdrop-blur-xl rounded-3xl border border-white/20 p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-                            <div className="flex items-center justify-between mb-6">
-                                <h2 className="text-2xl font-bold text-zinc-100">Configure Role Play</h2>
-                                <button
-                                    onClick={() => setShowRolePlayModal(false)}
-                                    className="text-zinc-400 hover:text-zinc-200 text-2xl"
-                                >
-                                    ×
-                                </button>
-                            </div>
+                        <div className="relative w-full max-w-md mx-4">
+                            <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl overflow-hidden">
+                                {/* Modal Header */}
+                                <div className="p-6 pb-4">
+                                    <div className="flex items-center justify-center mb-4">
+                                        <div className="p-3 rounded-full bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30">
+                                            <Bot className="h-8 w-8 text-indigo-400" />
+                                        </div>
+                                    </div>
+                                    <h2 className="text-2xl font-bold text-white text-center mb-2">
+                                        Welcome to SHCI
+                                    </h2>
+                                    <p className="text-zinc-400 text-center text-sm">
+                                        Select your role to get started
+                                    </p>
+                                </div>
 
-                            {/* Template Selection */}
-                            <div className="mb-6">
-                                <label className="block text-sm font-semibold text-zinc-300 mb-3">
-                                    Choose Organization Type
-                                </label>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                    {Object.entries(rolePlayTemplates).map(([key, template]) => (
+                                {/* Modal Body */}
+                                <div className="px-6 pb-6">
+                                    <div className="space-y-3">
+                                        {/* Customer Option */}
                                         <button
-                                            key={key}
-                                            onClick={() => {
-                                                setRolePlayTemplate(key as any);
-                                                if (!roleTitle || roleTitle === "Teacher" || roleTitle === "Software Developer" || roleTitle === "Waiter" || roleTitle === "Nurse" || roleTitle === "Employee") {
-                                                    setRoleTitle(template.defaultRole);
-                                                }
-                                            }}
-                                                    className={`p-4 rounded-xl border transition-all duration-300 text-center ${rolePlayTemplate === key
-                                                    ? "bg-gradient-to-r from-blue-500/25 to-indigo-500/25 border-blue-400/40 text-blue-200"
-                                                    : "bg-white/[0.03] border-white/10 text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-300"
-                                            }`}
+                                            onClick={() => handleUserTypeSelection('customer')}
+                                            className="w-full group relative p-4 rounded-xl bg-white/[0.05] border border-white/10 hover:border-emerald-400/50 hover:bg-emerald-500/10 transition-all duration-300 text-left"
                                         >
-                                            <div className="text-2xl mb-2">{template.icon}</div>
-                                            <div className="font-semibold text-sm">{template.name}</div>
-                                            <div className="text-xs opacity-70 mt-1">{template.description}</div>
+                                            <div className="flex items-center gap-4">
+                                                <div className="p-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30 group-hover:bg-emerald-500/30 transition-colors duration-300">
+                                                    <User className="h-5 w-5 text-emerald-400" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <h3 className="text-lg font-semibold text-white mb-1">
+                                                        Customer
+                                                    </h3>
+                                                    <p className="text-sm text-zinc-400 group-hover:text-zinc-300 transition-colors duration-300">
+                                                        I want to interact with the AI agent as a customer
+                                                    </p>
+                                                </div>
+                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                                    <FaChevronDown className="h-4 w-4 text-emerald-400 rotate-90" />
+                                                </div>
+                                            </div>
                                         </button>
-                                    ))}
-                                </div>
-                            </div>
 
-                            {/* Organization Details Form */}
-                            <div className="space-y-4">
-                                <div key="org-name-container">
-                                    <label className="block text-sm font-semibold text-zinc-300 mb-2">
-                                        Organization Name
-                                    </label>
-                                    <input
-                                        key="org-name-input"
-                                        type="text"
-                                        value={organizationName}
-                                        onChange={(e) => setOrganizationName(e.target.value)}
-                                        placeholder="e.g., ABC International School"
-                                        className="w-full px-4 py-3 bg-white/[0.05] border border-white/10 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-400/50 transition-all duration-300"
-                                        autoComplete="off"
-                                        spellCheck="false"
-                                    />
-                                </div>
+                                        {/* Organization Owner Option */}
+                                        <button
+                                            onClick={() => handleUserTypeSelection('org_owner')}
+                                            className="w-full group relative p-4 rounded-xl bg-white/[0.05] border border-white/10 hover:border-blue-400/50 hover:bg-blue-500/10 transition-all duration-300 text-left"
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30 group-hover:bg-blue-500/30 transition-colors duration-300">
+                                                    <FaBuilding className="h-5 w-5 text-blue-400" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <h3 className="text-lg font-semibold text-white mb-1">
+                                                        Organization Owner
+                                                    </h3>
+                                                    <p className="text-sm text-zinc-400 group-hover:text-zinc-300 transition-colors duration-300">
+                                                        I want to manage and configure the AI agent for my organization
+                                                    </p>
+                                                </div>
+                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                                    <FaChevronDown className="h-4 w-4 text-blue-400 rotate-90" />
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </div>
 
-                                <div key="org-details-container">
-                                    <label className="block text-sm font-semibold text-zinc-300 mb-2">
-                                        Organization Details
-                                    </label>
-                                    <textarea
-                                        key="org-details-textarea"
-                                        value={organizationDetails}
-                                        onChange={(e) => setOrganizationDetails(e.target.value)}
-                                        placeholder={rolePlayTemplates[rolePlayTemplate].placeholder}
-                                        rows={4}
-                                        className="w-full px-4 py-3 bg-white/[0.05] border border-white/10 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-400/50 transition-all duration-300 resize-none"
-                                        autoComplete="off"
-                                        spellCheck="false"
-                                    />
+                                    {/* Modal Footer */}
+                                    <div className="mt-6 pt-4 border-t border-white/10">
+                                        <p className="text-xs text-zinc-500 text-center">
+                                            You can change this preference later in settings
+                                        </p>
+                                    </div>
                                 </div>
-
-                                <div key="role-title-container">
-                                    <label className="block text-sm font-semibold text-zinc-300 mb-2">
-                                        Your Role Title
-                                    </label>
-                                    <input
-                                        key="role-title-input"
-                                        type="text"
-                                        value={roleTitle}
-                                        onChange={(e) => setRoleTitle(e.target.value)}
-                                        placeholder={rolePlayTemplates[rolePlayTemplate].defaultRole}
-                                        className="w-full px-4 py-3 bg-white/[0.05] border border-white/10 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-400/50 transition-all duration-300"
-                                        autoComplete="off"
-                                        spellCheck="false"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="flex gap-3 mt-8">
-                                <button
-                                    onClick={() => {
-                                        setRolePlayEnabled(false);
-                                        setOrganizationName("");
-                                        setOrganizationDetails("");
-                                        setRoleTitle("");
-                                        setShowRolePlayModal(false);
-                                        sendPrefs();
-                                    }}
-                                    className="flex-1 px-4 py-3 bg-white/[0.05] border border-white/10 rounded-xl text-zinc-300 hover:bg-white/[0.08] transition-all duration-300"
-                                >
-                                    Reset
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        setRolePlayEnabled(true);
-                                        setShowRolePlayModal(false);
-                                        sendPrefs();
-                                    }}
-                                    disabled={!organizationName || !organizationDetails}
-                                    className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500/25 to-indigo-500/25 border border-blue-400/40 rounded-xl text-blue-200 hover:from-blue-500/35 hover:to-indigo-500/35 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {rolePlayEnabled ? "Update Role Play" : "Start Role Play"}
-                                </button>
                             </div>
                         </div>
                     </div>
                 )}
 
-                {/* Role Play Answers Modal */}
-                <RolePlayAnswers 
-                    clientId={clientIdRef.current}
-                    isVisible={showRolePlayAnswers}
-                    onClose={() => setShowRolePlayAnswers(false)}
-                />
+                {/* Organization Name Form Modal */}
+                {showOrgForm && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                        <div className="relative w-full max-w-md mx-4">
+                            <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl overflow-hidden">
+                                {/* Modal Header */}
+                                <div className="p-6 pb-4">
+                                    <div className="flex items-center justify-center mb-4">
+                                        <div className="p-3 rounded-full bg-gradient-to-r from-blue-500/20 to-indigo-500/20 border border-blue-500/30">
+                                            <FaBuilding className="h-8 w-8 text-blue-400" />
+                                        </div>
+                                    </div>
+                                    <h2 className="text-2xl font-bold text-white text-center mb-2">
+                                        Organization Setup
+                                    </h2>
+                                    <p className="text-zinc-400 text-center text-sm">
+                                        Enter your organization name
+                                    </p>
+                                </div>
 
-                {/* Minimal Voice Control Center */}
-                        <div className="bg-gradient-to-br from-white/[0.02] to-white/[0.01] backdrop-blur-xl rounded-xl border border-white/10 p-3 sm:p-4 md:p-6 mb-4 sm:mb-6 overflow-hidden">
-                    {/* Audio Wave Based Glowing Effects */}
-                    {(() => {
-                        const isSpeechActive = listening && micLevel > 0.01;
-                        const isTtsActive = aiSpeaking && ttsAudioLevel > 0.01;
-                        const isActive = isSpeechActive || isTtsActive;
-                        
-                        if (!isActive) return null;
-                        
-                        // Determine active source values
-                        const activeLevel = isSpeechActive ? micLevel : ttsAudioLevel;
-                        const activeFrame = isSpeechActive ? waveAnimationFrame : ttsWaveAnimationFrame;
-                        const baseHue = isSpeechActive ? 200 : 120; // Blue for speech, Green for TTS
-                        
-                        return (
-                            <>
-                                {/* Outer Glow Ring - Synced with Audio Wave */}
-                                <div 
-                                    className="absolute inset-0 rounded-3xl pointer-events-none"
-                                    style={{
-                                        background: `conic-gradient(from ${activeFrame * 2}deg, 
+                                {/* Modal Body */}
+                                <div className="px-6 pb-6">
+                                    <form onSubmit={handleOrgFormSubmit} className="space-y-4">
+                                        <div>
+                                            <label htmlFor="orgName" className="block text-sm font-medium text-zinc-300 mb-2">
+                                                Organization Name
+                                            </label>
+                                            <input
+                                                type="text"
+                                                id="orgName"
+                                                value={orgName}
+                                                onChange={(e) => {
+                                                    setOrgName(e.target.value);
+                                                    if (orgNameError) setOrgNameError("");
+                                                }}
+                                                placeholder="Enter your organization name"
+                                                className={`w-full px-4 py-3 rounded-lg bg-white/[0.05] border text-white placeholder-zinc-500 focus:outline-none focus:bg-white/[0.08] transition-all duration-300 ${orgNameError
+                                                    ? "border-red-400/50 focus:border-red-400/70"
+                                                    : "border-white/10 focus:border-blue-400/50"
+                                                    }`}
+                                                required
+                                                autoFocus
+                                                disabled={isSubmittingOrg}
+                                            />
+                                            {orgNameError && (
+                                                <p className="mt-2 text-sm text-red-400 flex items-center gap-2">
+                                                    <span className="text-red-400">⚠</span>
+                                                    {orgNameError}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowOrgForm(false);
+                                                    setUserType(null);
+                                                }}
+                                                className="flex-1 px-4 py-3 rounded-lg bg-white/[0.05] border border-white/10 text-zinc-300 hover:bg-white/[0.08] hover:text-white transition-all duration-300"
+                                            >
+                                                Back
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={!orgName.trim() || isSubmittingOrg}
+                                                className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg flex items-center justify-center gap-2"
+                                            >
+                                                {isSubmittingOrg ? (
+                                                    <>
+                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                        Creating...
+                                                    </>
+                                                ) : (
+                                                    "Continue"
+                                                )}
+                                            </button>
+                                        </div>
+                                    </form>
+
+                                    {/* Modal Footer */}
+                                    <div className="mt-6 pt-4 border-t border-white/10">
+                                        <p className="text-xs text-zinc-500 text-center">
+                                            This information will be used to personalize your experience
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Organization Details Modal */}
+                {showOrgDetailsModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                        <div className="relative w-full max-w-2xl mx-4">
+                            <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl overflow-hidden">
+                                {/* Modal Header */}
+                                <div className="p-6 pb-4">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-3 rounded-full bg-gradient-to-r from-blue-500/20 to-indigo-500/20 border border-blue-500/30">
+                                                <FaBuilding className="h-8 w-8 text-blue-400" />
+                                            </div>
+                                            <div>
+                                                <h2 className="text-2xl font-bold text-white">
+                                                    Add details for {orgName}
+                                                </h2>
+                                                <p className="text-zinc-400 text-sm">
+                                                    Provide additional information about your organization
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => setShowOrgDetailsModal(false)}
+                                            className="text-zinc-400 hover:text-zinc-200 text-2xl transition-colors duration-300"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Modal Body */}
+                                <div className="px-6 pb-6">
+                                    <form onSubmit={handleUpdateOrgDetails} className="space-y-4">
+                                        <div>
+                                            <label htmlFor="orgDetails" className="block text-sm font-medium text-zinc-300 mb-2">
+                                                Organization Details
+                                            </label>
+                                            <textarea
+                                                id="orgDetails"
+                                                value={orgDetails}
+                                                onChange={(e) => setOrgDetails(e.target.value)}
+                                                placeholder="Describe your organization, its services, mission, or any relevant information that will help the AI understand your business context..."
+                                                className="w-full px-4 py-3 rounded-lg bg-white/[0.05] border border-white/10 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-400/50 focus:bg-white/[0.08] transition-all duration-300 resize-none"
+                                                rows={6}
+                                                disabled={isUpdatingDetails}
+                                            />
+                                            <p className="mt-2 text-xs text-zinc-500">
+                                                This information will help personalize the AI's responses for your organization
+                                            </p>
+                                        </div>
+
+                                        <div className="flex gap-3 pt-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowOrgDetailsModal(false)}
+                                                className="flex-1 px-4 py-3 rounded-lg bg-white/[0.05] border border-white/10 text-zinc-300 hover:bg-white/[0.08] hover:text-white transition-all duration-300"
+                                                disabled={isUpdatingDetails}
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={isUpdatingDetails}
+                                                className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg flex items-center justify-center gap-2"
+                                            >
+                                                {isUpdatingDetails ? (
+                                                    <>
+                                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                        Updating...
+                                                    </>
+                                                ) : (
+                                                    "Update Details"
+                                                )}
+                                            </button>
+                                        </div>
+                                    </form>
+
+                                    {/* Modal Footer */}
+                                    <div className="mt-6 pt-4 border-t border-white/10">
+                                        <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                            <FaBuilding className="h-3 w-3" />
+                                            <span>Organization: {orgName}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Organization Selection Modal for Customers */}
+                {showOrgSelectionModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                        <div className="relative w-full max-w-2xl mx-4">
+                            <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl overflow-hidden">
+                                {/* Modal Header */}
+                                <div className="p-6 pb-4">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-3 rounded-full bg-gradient-to-r from-emerald-500/20 to-green-500/20 border border-emerald-500/30">
+                                                <User className="h-8 w-8 text-emerald-400" />
+                                            </div>
+                                            <div>
+                                                <h2 className="text-2xl font-bold text-white">
+                                                    Select Organization
+                                                </h2>
+                                                <p className="text-zinc-400 text-sm">
+                                                    Choose which organization you want to interact with
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => setShowOrgSelectionModal(false)}
+                                            className="text-zinc-400 hover:text-zinc-200 text-2xl transition-colors duration-300"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Modal Body */}
+                                <div className="px-6 pb-6">
+                                    {isLoadingOrgs ? (
+                                        <div className="flex items-center justify-center py-8">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-6 h-6 border-2 border-emerald-400/30 border-t-emerald-400 rounded-full animate-spin"></div>
+                                                <span className="text-zinc-400">Loading organizations...</span>
+                                            </div>
+                                        </div>
+                                    ) : availableOrganizations.length === 0 ? (
+                                        <div className="text-center py-8">
+                                            <div className="p-4 rounded-full bg-zinc-800/50 mx-auto w-fit mb-4">
+                                                <FaBuilding className="h-8 w-8 text-zinc-500" />
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-zinc-300 mb-2">No Organizations Available</h3>
+                                            <p className="text-zinc-500 text-sm">
+                                                There are no organizations set up yet. Please contact an administrator.
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                                            {availableOrganizations.map((org) => {
+                                                const isSelected = selectedOrgForCustomer?.id === org.id;
+                                                return (
+                                                    <button
+                                                        key={org.id}
+                                                        onClick={() => handleOrgSelection({ id: org.id, name: org.name })}
+                                                        className={`w-full group relative p-4 rounded-xl transition-all duration-300 text-left ${isSelected
+                                                            ? "bg-emerald-500/20 border border-emerald-400/50 shadow-lg"
+                                                            : "bg-white/[0.05] border border-white/10 hover:border-emerald-400/50 hover:bg-emerald-500/10"
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-center gap-4">
+                                                            <div className={`p-2 rounded-lg border transition-colors duration-300 ${isSelected
+                                                                ? "bg-emerald-500/30 border-emerald-400/50"
+                                                                : "bg-emerald-500/20 border-emerald-500/30 group-hover:bg-emerald-500/30"
+                                                                }`}>
+                                                                <FaBuilding className="h-5 w-5 text-emerald-400" />
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <h3 className={`text-lg font-semibold ${isSelected ? "text-emerald-300" : "text-white"
+                                                                    }`}>
+                                                                    {org.name}
+                                                                </h3>
+                                                            </div>
+                                                            {isSelected ? (
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+                                                                    <span className="text-xs font-semibold text-emerald-300">
+                                                                        Selected
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                                                    <FaChevronDown className="h-4 w-4 text-emerald-400 rotate-90" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {/* Modal Footer */}
+                                    <div className="mt-6 pt-4 border-t border-white/10">
+                                        <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                            <User className="h-3 w-3" />
+                                            <span>Customer Mode - Select an organization to start conversation</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Background */}
+                <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-indigo-500/5 animate-pulse" />
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.03)_0%,transparent_50%)]" />
+
+                </div>
+
+                {/* Mobile-Optimized Layout Container */}
+                <div className="flex items-center justify-center p-2 sm:p-4 md:p-6 lg:p-8">
+                    <div className="w-full max-w-7xl rounded-2xl sm:rounded-3xl shadow-2xl">
+                        <div className="max-w-6xl mx-auto px-2 sm:px-4 md:px-6 py-3 sm:py-6 md:py-8 relative">
+                            {/* Enhanced Professional Header */}
+                            <div className="bg-gradient-to-r from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-xl border border-white/10 p-5 sm:p-6 mb-4 sm:mb-6 relative overflow-visible shadow-lg">
+                                {/* Main Header Row */}
+                                <div className="flex items-center justify-between relative overflow-visible gap-6 mb-4">
+                                    {/* Enhanced Logo & Title */}
+                                    <div className="flex items-center gap-5">
+                                        <div className="relative">
+                                            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg border border-white/20">
+                                                <Bot className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                                            </div>
+                                            {/* Beta Badge */}
+                                            <div className="absolute -top-2 -right-2 bg-gradient-to-r from-orange-400 to-red-500 text-white text-xs font-bold px-2 py-1 rounded-full border border-white/20 shadow-md">
+                                                BETA
+                                            </div>
+                                            {connected && (
+                                                <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white shadow-md animate-pulse" />
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <h1 className="text-lg sm:text-xl font-bold text-white bg-gradient-to-r from-white to-zinc-300 bg-clip-text text-transparent">
+                                                SHCI
+                                            </h1>
+                                            <p className="text-xs text-zinc-400 font-medium">
+                                                Voice Agent
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Enhanced Language Dropdown */}
+                                    <div className="relative" ref={languageDropdownRef}>
+                                        <button
+                                            onClick={() => setIsLanguageDropdownOpen(!isLanguageDropdownOpen)}
+                                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.08] border border-white/20 hover:bg-white/[0.12] transition-all duration-300 shadow-md hover:shadow-lg"
+                                        >
+                                            <div className="text-lg">
+                                                {selectedLanguage === "en" ? languages.en.flag : languages.it.flag}
+                                            </div>
+                                            <span className="text-sm font-semibold text-white">
+                                                {selectedLanguage === "en" ? languages.en.name : languages.it.name}
+                                            </span>
+                                            <FaChevronDown className={`h-3 w-3 text-zinc-300 transition-transform duration-300 ${isLanguageDropdownOpen ? 'rotate-180' : ''
+                                                }`} />
+                                        </button>
+
+                                        {/* Enhanced Dropdown Menu */}
+                                        {isLanguageDropdownOpen && (
+                                            <div className="absolute top-full right-0 mt-2 w-52 bg-gradient-to-br from-white/[0.12] to-white/[0.06] backdrop-blur-xl rounded-xl border border-white/30 shadow-2xl z-50 overflow-hidden">
+                                                <div className="py-2">
+                                                    {/* English Option */}
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedLanguage("en");
+                                                            setIsLanguageDropdownOpen(false);
+                                                        }}
+                                                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-300 rounded-lg mx-2 ${selectedLanguage === "en"
+                                                            ? "bg-gradient-to-r from-indigo-500/30 to-purple-500/20 text-indigo-200 border border-indigo-400/30"
+                                                            : "text-zinc-300 hover:bg-white/[0.08] hover:text-white hover:border-white/20"
+                                                            }`}
+                                                    >
+                                                        <div className="text-xl">
+                                                            {languages.en.flag}
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-bold">
+                                                                {languages.en.name}
+                                                            </span>
+                                                            <span className="text-xs text-zinc-500">
+                                                                English
+                                                            </span>
+                                                        </div>
+                                                        {selectedLanguage === "en" && (
+                                                            <FaChevronDown className="h-3 w-3 text-indigo-300 ml-auto rotate-90" />
+                                                        )}
+                                                    </button>
+
+                                                    {/* Italian Option */}
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedLanguage("it");
+                                                            setIsLanguageDropdownOpen(false);
+                                                        }}
+                                                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-300 rounded-lg mx-2 ${selectedLanguage === "it"
+                                                            ? "bg-gradient-to-r from-indigo-500/30 to-purple-500/20 text-indigo-200 border border-indigo-400/30"
+                                                            : "text-zinc-300 hover:bg-white/[0.08] hover:text-white hover:border-white/20"
+                                                            }`}
+                                                    >
+                                                        <div className="text-xl">
+                                                            {languages.it.flag}
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-bold">
+                                                                {languages.it.name}
+                                                            </span>
+                                                            <span className="text-xs text-zinc-500">
+                                                                Italiano
+                                                            </span>
+                                                        </div>
+                                                        {selectedLanguage === "it" && (
+                                                            <FaChevronDown className="h-3 w-3 text-indigo-300 ml-auto rotate-90" />
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                </div>
+
+                                {/* Minimal Controls Section */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-3">
+
+                                    {/* Speech Speed Control */}
+                                    <div className="bg-white/[0.02] backdrop-blur-sm rounded-lg border border-white/8 p-4">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="p-2 rounded-lg bg-indigo-500/10">
+                                                <svg className="h-4 w-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-white">
+                                                    Speech Speed
+                                                </h3>
+                                                <p className="text-xs text-zinc-400">
+                                                    Adjust AI response playback speed
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-2">
+                                            {(["easy", "medium", "fast"] as const).map((lvl, index) => {
+                                                const icons = [FaClock, FaPlay, FaTachometerAlt];
+                                                const IconComponent = icons[index];
+                                                const speeds = ["Slow", "Normal", "Fast"];
+                                                const labels = ["Easy", "Medium", "Fast"];
+
+                                                return (
+                                                    <button
+                                                        key={lvl}
+                                                        onClick={() => handleLevelChange(lvl)}
+                                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 flex-1 ${level === lvl
+                                                                ? "bg-emerald-500 text-white shadow-md"
+                                                                : "bg-white/[0.05] text-zinc-400 hover:text-zinc-300 hover:bg-white/[0.08]"
+                                                            }`}
+                                                    >
+                                                        <IconComponent className="h-3 w-3" />
+                                                        <div className="flex flex-col items-start">
+                                                            <span className="text-xs font-medium">
+                                                                {labels[index]}
+                                                            </span>
+                                                            <span className="text-xs opacity-75">
+                                                                {speeds[index]}
+                                                            </span>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Minimal Role Play Section */}
+                                    <div className="bg-white/[0.02] backdrop-blur-sm rounded-lg border border-white/8 p-4">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="p-2 rounded-lg bg-emerald-500/10">
+                                                <FaUserTie className="h-4 w-4 text-emerald-400" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-white">
+                                                    Role Play Mode
+                                                </h3>
+                                                <p className="text-xs text-zinc-400">
+                                                    AI acts as staff from your selected organization
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Show selected organization if available */}
+                                        {(rolePlayEnabled && organizationName) || (userType === 'customer' && selectedOrgForCustomer) || (userType === 'org_owner' && orgName) ? (
+                                            <div className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-400/20 mb-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <FaBuilding className="h-3 w-3 text-emerald-400" />
+                                                        <span className="text-xs font-medium text-emerald-300">
+                                                            {rolePlayEnabled && organizationName
+                                                                ? organizationName
+                                                                : userType === 'customer' && selectedOrgForCustomer
+                                                                    ? selectedOrgForCustomer.name
+                                                                    : userType === 'org_owner' && orgName
+                                                                        ? orgName
+                                                                        : "Organization Selected"
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => {
+                                                            // Clear role play and organization data
+                                                            setRolePlayEnabled(false);
+                                                            setOrganizationName("");
+                                                            setOrganizationDetails("");
+                                                            setRoleTitle("");
+                                                            setSelectedOrgForCustomer(null);
+
+                                                            // Send WebSocket message to clear role play
+                                                            if (ws.current?.readyState === WebSocket.OPEN) {
+                                                                ws.current.send(JSON.stringify({
+                                                                    type: "clear_roleplay"
+                                                                }));
+                                                            }
+                                                        }}
+                                                        className="p-1 rounded-full hover:bg-red-500/20 transition-colors duration-200 group"
+                                                        title="Remove Organization"
+                                                    >
+                                                        <svg className="h-3 w-3 text-red-400 group-hover:text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : null}
+
+                                        <button
+                                            onClick={() => {
+                                                if (userType === 'org_owner' && orgName) {
+                                                    handleConfigureRolePlay();
+                                                } else if (userType === 'customer') {
+                                                    handleConfigureRolePlay();
+                                                } else {
+                                                    setShowRolePlayModal(true);
+                                                }
+                                            }}
+                                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/[0.05] text-zinc-400 hover:text-zinc-300 hover:bg-white/[0.08] transition-all duration-200 w-full"
+                                        >
+                                            <FaCog className="h-3 w-3" />
+                                            <span className="text-xs font-medium">
+                                                {rolePlayEnabled
+                                                    ? "Configure Role Play"
+                                                    : userType === 'customer'
+                                                        ? "Select Organization"
+                                                        : userType === 'org_owner'
+                                                            ? "Configure Organization"
+                                                            : "Configure Role Play"
+                                                }
+                                            </span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+
+
+                            {/* Role Play Configuration Modal */}
+                            {showRolePlayModal && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                                    <div className="bg-gradient-to-br from-white/[0.05] to-white/[0.02] backdrop-blur-xl rounded-3xl border border-white/20 p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h2 className="text-2xl font-bold text-zinc-100">Configure Role Play</h2>
+                                            <button
+                                                onClick={() => setShowRolePlayModal(false)}
+                                                className="text-zinc-400 hover:text-zinc-200 text-2xl"
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+
+                                        {/* Template Selection */}
+                                        <div className="mb-6">
+                                            <label className="block text-sm font-semibold text-zinc-300 mb-3">
+                                                Choose Organization Type
+                                            </label>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                                {Object.entries(rolePlayTemplates).map(([key, template]) => (
+                                                    <button
+                                                        key={key}
+                                                        onClick={() => {
+                                                            setRolePlayTemplate(key as any);
+                                                            if (!roleTitle || roleTitle === "Teacher" || roleTitle === "Software Developer" || roleTitle === "Waiter" || roleTitle === "Nurse" || roleTitle === "Employee") {
+                                                                setRoleTitle(template.defaultRole);
+                                                            }
+                                                        }}
+                                                        className={`p-4 rounded-xl border transition-all duration-300 text-center ${rolePlayTemplate === key
+                                                            ? "bg-gradient-to-r from-blue-500/25 to-indigo-500/25 border-blue-400/40 text-blue-200"
+                                                            : "bg-white/[0.03] border-white/10 text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-300"
+                                                            }`}
+                                                    >
+                                                        <div className="text-2xl mb-2">{template.icon}</div>
+                                                        <div className="font-semibold text-sm">{template.name}</div>
+                                                        <div className="text-xs opacity-70 mt-1">{template.description}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Organization Details Form */}
+                                        <div className="space-y-4">
+                                            <div key="org-name-container">
+                                                <label className="block text-sm font-semibold text-zinc-300 mb-2">
+                                                    Organization Name
+                                                </label>
+                                                <input
+                                                    key="org-name-input"
+                                                    type="text"
+                                                    value={organizationName}
+                                                    onChange={(e) => setOrganizationName(e.target.value)}
+                                                    placeholder="e.g., ABC International School"
+                                                    className="w-full px-4 py-3 bg-white/[0.05] border border-white/10 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-400/50 transition-all duration-300"
+                                                    autoComplete="off"
+                                                    spellCheck="false"
+                                                />
+                                            </div>
+
+                                            <div key="org-details-container">
+                                                <label className="block text-sm font-semibold text-zinc-300 mb-2">
+                                                    Organization Details
+                                                </label>
+                                                <textarea
+                                                    key="org-details-textarea"
+                                                    value={organizationDetails}
+                                                    onChange={(e) => setOrganizationDetails(e.target.value)}
+                                                    placeholder={rolePlayTemplates[rolePlayTemplate].placeholder}
+                                                    rows={4}
+                                                    className="w-full px-4 py-3 bg-white/[0.05] border border-white/10 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-400/50 transition-all duration-300 resize-none"
+                                                    autoComplete="off"
+                                                    spellCheck="false"
+                                                />
+                                            </div>
+
+                                            <div key="role-title-container">
+                                                <label className="block text-sm font-semibold text-zinc-300 mb-2">
+                                                    Your Role Title
+                                                </label>
+                                                <input
+                                                    key="role-title-input"
+                                                    type="text"
+                                                    value={roleTitle}
+                                                    onChange={(e) => setRoleTitle(e.target.value)}
+                                                    placeholder={rolePlayTemplates[rolePlayTemplate].defaultRole}
+                                                    className="w-full px-4 py-3 bg-white/[0.05] border border-white/10 rounded-xl text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-400/50 transition-all duration-300"
+                                                    autoComplete="off"
+                                                    spellCheck="false"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Action Buttons */}
+                                        <div className="flex gap-3 mt-8">
+                                            <button
+                                                onClick={() => {
+                                                    setRolePlayEnabled(false);
+                                                    setOrganizationName("");
+                                                    setOrganizationDetails("");
+                                                    setRoleTitle("");
+                                                    setShowRolePlayModal(false);
+                                                    sendPrefs();
+                                                }}
+                                                className="flex-1 px-4 py-3 bg-white/[0.05] border border-white/10 rounded-xl text-zinc-300 hover:bg-white/[0.08] transition-all duration-300"
+                                            >
+                                                Reset
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setRolePlayEnabled(true);
+                                                    setShowRolePlayModal(false);
+                                                    sendPrefs();
+                                                }}
+                                                disabled={!organizationName || !organizationDetails}
+                                                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500/25 to-indigo-500/25 border border-blue-400/40 rounded-xl text-blue-200 hover:from-blue-500/35 hover:to-indigo-500/35 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {rolePlayEnabled ? "Update Role Play" : "Start Role Play"}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Role Play Answers Modal */}
+                            <RolePlayAnswers
+                                clientId={clientIdRef.current}
+                                isVisible={showRolePlayAnswers}
+                                onClose={() => setShowRolePlayAnswers(false)}
+                            />
+
+                            {/* Minimal Voice Control Center */}
+                            <div className="bg-gradient-to-br from-white/[0.02] to-white/[0.01] backdrop-blur-xl rounded-xl border border-white/10 p-3 sm:p-4 md:p-6 mb-4 sm:mb-6 overflow-hidden">
+                                {/* Audio Wave Based Glowing Effects */}
+                                {(() => {
+                                    const isSpeechActive = listening && micLevel > 0.01;
+                                    const isTtsActive = aiSpeaking && ttsAudioLevel > 0.01;
+                                    const isActive = isSpeechActive || isTtsActive;
+
+                                    if (!isActive) return null;
+
+                                    // Determine active source values
+                                    const activeLevel = isSpeechActive ? micLevel : ttsAudioLevel;
+                                    const activeFrame = isSpeechActive ? waveAnimationFrame : ttsWaveAnimationFrame;
+                                    const baseHue = isSpeechActive ? 200 : 120; // Blue for speech, Green for TTS
+
+                                    return (
+                                        <>
+                                            {/* Outer Glow Ring - Synced with Audio Wave */}
+                                            <div
+                                                className="absolute inset-0 rounded-3xl pointer-events-none"
+                                                style={{
+                                                    background: `conic-gradient(from ${activeFrame * 2}deg, 
                                             hsl(${(baseHue + activeLevel * 120 + activeFrame * 2) % 360}, 70%, 50%), 
                                             hsl(${(baseHue + activeLevel * 120 + activeFrame * 2 + 14.4) % 360}, 70%, 50%), 
                                             hsl(${(baseHue + activeLevel * 120 + activeFrame * 2 + 28.8) % 360}, 70%, 50%), 
@@ -2779,778 +2856,750 @@ export default function VoiceAgent() {
                                             hsl(${(baseHue + activeLevel * 120 + activeFrame * 2 + 331.2) % 360}, 70%, 50%), 
                                             hsl(${(baseHue + activeLevel * 120 + activeFrame * 2 + 345.6) % 360}, 70%, 50%), 
                                             hsl(${(baseHue + activeLevel * 120 + activeFrame * 2) % 360}, 70%, 50%))`,
-                                        opacity: activeLevel * 0.4,
-                                        filter: 'blur(25px)',
-                                        transform: `scale(${1 + activeLevel * 0.15}) rotate(${activeFrame * 0.5}deg)`
-                                    }}
-                                />
-                            
-                                {/* Inner Glow Ring - Synced with Audio Wave */}
-                                <div 
-                                    className="absolute inset-2 rounded-3xl pointer-events-none"
-                                    style={{
-                                        background: `radial-gradient(circle at center, 
+                                                    opacity: activeLevel * 0.4,
+                                                    filter: 'blur(25px)',
+                                                    transform: `scale(${1 + activeLevel * 0.15}) rotate(${activeFrame * 0.5}deg)`
+                                                }}
+                                            />
+
+                                            {/* Inner Glow Ring - Synced with Audio Wave */}
+                                            <div
+                                                className="absolute inset-2 rounded-3xl pointer-events-none"
+                                                style={{
+                                                    background: `radial-gradient(circle at center, 
                                             hsl(${(baseHue + activeLevel * 120 + activeFrame * 3) % 360}, 80%, 60%) 0%, 
                                             hsl(${(baseHue + activeLevel * 120 + activeFrame * 3 + 60) % 360}, 70%, 50%) 30%, 
                                             hsl(${(baseHue + activeLevel * 120 + activeFrame * 3 + 120) % 360}, 60%, 40%) 60%, 
                                             transparent 80%)`,
-                                        opacity: activeLevel * 0.5,
-                                        filter: 'blur(20px)',
-                                        transform: `scale(${1 + activeLevel * 0.1})`
-                                    }}
-                                />
-                                
-                                {/* Pulsing Border Glow - Synced with Audio Wave */}
-                                <div 
-                                    className="absolute inset-0 rounded-3xl pointer-events-none border-2"
-                                    style={{
-                                        borderColor: `hsl(${(baseHue + activeLevel * 120 + activeFrame * 4) % 360}, 90%, 70%)`,
-                                        opacity: activeLevel * 0.7,
-                                        boxShadow: `0 0 ${activeLevel * 40 + 25}px hsl(${(baseHue + activeLevel * 120 + activeFrame * 4) % 360}, 90%, 70%),
+                                                    opacity: activeLevel * 0.5,
+                                                    filter: 'blur(20px)',
+                                                    transform: `scale(${1 + activeLevel * 0.1})`
+                                                }}
+                                            />
+
+                                            {/* Pulsing Border Glow - Synced with Audio Wave */}
+                                            <div
+                                                className="absolute inset-0 rounded-3xl pointer-events-none border-2"
+                                                style={{
+                                                    borderColor: `hsl(${(baseHue + activeLevel * 120 + activeFrame * 4) % 360}, 90%, 70%)`,
+                                                    opacity: activeLevel * 0.7,
+                                                    boxShadow: `0 0 ${activeLevel * 40 + 25}px hsl(${(baseHue + activeLevel * 120 + activeFrame * 4) % 360}, 90%, 70%),
                                                    0 0 ${activeLevel * 60 + 35}px hsl(${(baseHue + activeLevel * 120 + activeFrame * 4 + 120) % 360}, 80%, 60%),
                                                    0 0 ${activeLevel * 80 + 45}px hsl(${(baseHue + activeLevel * 120 + activeFrame * 4 + 240) % 360}, 70%, 50%)`,
-                                        animation: 'pulse 1.2s ease-in-out infinite',
-                                        transform: `scale(${1 + Math.sin(activeFrame * 0.1) * activeLevel * 0.05})`
-                                    }}
-                                />
-                            </>
-                        );
-                    })()}
-                    
-                    {/* Static Background */}
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5 rounded-3xl pointer-events-none" />
-                    
-                            <div className="relative flex flex-col items-center">
-                        {/* Role Play Test Button */}
-                        {rolePlayEnabled && (
-                            <div className="mb-4 text-center">
-                                <div className="text-xs text-green-300 bg-green-500/10 px-3 py-2 rounded-lg border border-green-400/30 mb-2">
-                                    🎭 Role Play Active: {organizationName} • {roleTitle}
-                                </div>
-                                <div className="text-xs text-blue-300 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-400/30 mb-2">
-                                    📝 Template: {rolePlayTemplate} • Role: {roleTitle}
-                                </div>
-                                <div className="flex gap-2 justify-center mb-2">
-                                    <button
-                                        onClick={() => {
-                                            console.log("Testing role play with question...");
-                                            // Simulate asking about organization
-                                            const testQuestion = "What is your organization name?";
-                                            console.log("Test question:", testQuestion);
-                                        }}
-                                        className="px-3 py-2 bg-blue-500/20 text-blue-300 text-xs rounded border border-blue-400/30 hover:bg-blue-500/30 transition-all duration-300"
-                                    >
-                                        Test Role Play
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            console.log("Clearing role play...");
-                                            if (ws.current?.readyState === WebSocket.OPEN) {
-                                                ws.current.send(JSON.stringify({
-                                                    type: "clear_roleplay"
-                                                }));
-                                            }
-                                        }}
-                                        className="px-3 py-2 bg-red-500/20 text-red-300 text-xs rounded border border-red-400/30 hover:bg-red-500/30 transition-all duration-300"
-                                    >
-                                        Clear Role Play
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                        
-                        {/* Clean Audio Wave Animation */}
-                        <div className="mb-8 flex justify-center">
-                            <div className="flex items-center justify-center space-x-2 h-20">
-                                {Array.from({ length: 25 }).map((_, i) => {
-                                    const baseHeight = 12;
-                                    const maxHeight = 60;
-                                    
-                                    // Determine if we're showing speech waves or TTS audio waves
-                                    const isSpeechActive = listening && micLevel > 0.01;
-                                    const isTtsActive = aiSpeaking && ttsAudioLevel > 0.01;
-                                    const isActive = isSpeechActive || isTtsActive;
-                                    
-                                    // Calculate wave height based on active source
-                                    let waveHeight = baseHeight;
-                                    if (isSpeechActive) {
-                                        waveHeight = Math.max(baseHeight, micLevel * maxHeight + Math.sin(waveAnimationFrame * 0.15 + i * 0.4) * (micLevel * 20 + 8));
-                                    } else if (isTtsActive) {
-                                        waveHeight = Math.max(baseHeight, ttsAudioLevel * maxHeight + Math.sin(ttsWaveAnimationFrame * 0.15 + i * 0.4) * (ttsAudioLevel * 20 + 8));
-                                    }
-                                    
-                                    // Clean rainbow colors based on active source
-                                    let baseHue, animationHue, saturation, lightness;
-                                    
-                                    if (isSpeechActive) {
-                                        // Speech wave colors (blue to green spectrum)
-                                        baseHue = micLevel * 120 + 200; // Blue to green
-                                        animationHue = waveAnimationFrame * 2;
-                                        saturation = Math.min(100, 70 + micLevel * 30);
-                                        lightness = Math.min(80, 50 + micLevel * 30);
-                                    } else if (isTtsActive) {
-                                        // TTS audio wave colors (green to yellow spectrum)
-                                        baseHue = ttsAudioLevel * 60 + 120; // Green to yellow
-                                        animationHue = ttsWaveAnimationFrame * 2;
-                                        saturation = Math.min(100, 70 + ttsAudioLevel * 30);
-                                        lightness = Math.min(80, 50 + ttsAudioLevel * 30);
-                                    } else {
-                                        // Inactive state
-                                        baseHue = 200;
-                                        animationHue = 0;
-                                        saturation = 20;
-                                        lightness = 40;
-                                    }
-                                    
-                                    const positionHue = i * 14.4; // 360/25 = 14.4 degrees per bar
-                                    const hue = isActive 
-                                        ? (baseHue + positionHue + animationHue) % 360 
-                                        : 200; // Blue placeholder color
-                                    
-                                    const opacity = isActive 
-                                        ? Math.max(0.6, (isSpeechActive ? micLevel : ttsAudioLevel) * 0.8 + 0.2) 
-                                        : 0.3;
-                                    
-                                    return (
-                                        <div
-                                            key={i}
-                                            className={`w-2 rounded-full transition-all duration-200 ease-out`}
-                                            style={{
-                                                height: `${waveHeight}px`,
-                                                backgroundColor: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
-                                                opacity: opacity,
-                                                animationDelay: `${i * 60}ms`,
-                                                transform: isActive 
-                                                    ? `scaleY(${1 + Math.sin((isSpeechActive ? waveAnimationFrame : ttsWaveAnimationFrame) * 0.08 + i * 0.25) * 0.15}) scaleX(${1 + Math.sin((isSpeechActive ? waveAnimationFrame : ttsWaveAnimationFrame) * 0.12 + i * 0.3) * 0.1})`
-                                                    : 'scaleY(1) scaleX(1)',
-                                                boxShadow: 'none',
-                                                filter: 'none'
-                                            }}
-                                        />
+                                                    animation: 'pulse 1.2s ease-in-out infinite',
+                                                    transform: `scale(${1 + Math.sin(activeFrame * 0.1) * activeLevel * 0.05})`
+                                                }}
+                                            />
+                                        </>
                                     );
-                                })}
-                            </div>
-                        </div>
+                                })()}
 
-                        {/* Small Rounded Button - Fixed Click with Glass UI */}
-                                <div className="flex justify-center">
-                            <button
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    console.log("Button clicked, listening:", listening, "connected:", connected);
-                                    if (listening) {
-                                        stopMic();
-                                    } else {
-                                        startMic();
-                                    }
-                                }}
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onMouseUp={(e) => e.stopPropagation()}
-                                        className={` px-4 py-2 rounded-full font-medium text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer ${listening
-                                        ? listening && micLevel > 0.01
-                                            ? "bg-red-600/20 backdrop-blur-xl text-white hover:bg-red-600/30 shadow-lg"
-                                            : "bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white shadow-lg"
-                                        : !connected
-                                            ? "bg-zinc-600/80 text-white cursor-not-allowed shadow-lg"
-                                            : "bg-blue-600/80 text-white hover:bg-blue-600 shadow-lg"
-                                }`}
-                                disabled={!connected}
-                                style={{ 
-                                    pointerEvents: 'auto',
-                                    ...(listening && micLevel > 0.01 ? {
-                                        background: `linear-gradient(135deg, 
-                                            rgba(239, 68, 68, 0.2) 0%, 
-                                            rgba(239, 68, 68, 0.1) 50%, 
-                                            rgba(239, 68, 68, 0.2) 100%)`,
-                                        backdropFilter: 'blur(20px)',
-                                        boxShadow: `0 8px 32px rgba(239, 68, 68, 0.3),
-                                                   inset 0 1px 0 rgba(255, 255, 255, 0.2)`,
-                                        transform: `scale(${1 + micLevel * 0.05})`
-                                    } : {})
-                                }}
-                            >
-                                {listening ? (
-                                    <>
-                                        {aiSpeaking ? (
-                                            <>
-                                                <div className="h-4 w-4 rounded-full bg-green-400 animate-pulse" />
-                                                <span 
-                                                    style={{
-                                                        color: 'white',
-                                                        textShadow: `0 0 10px hsl(${((listening && micLevel > 0.01) ? (micLevel * 360 + waveAnimationFrame * 2) : (ttsAudioLevel * 60 + 120 + ttsWaveAnimationFrame * 2)) % 360}, 80%, 70%)`,
-                                                        fontWeight: '600'
-                                                    }}
-                                                >
-                                                    Speaking
-                                                </span>
-                                            </>
-                                        ) : isWaitingForResponse ? (
-                                            <>
-                                                <div className="h-4 w-4 rounded-full bg-purple-400 animate-pulse" />
-                                                <span 
-                                                    style={{
-                                                        color: 'white',
-                                                        textShadow: `0 0 10px hsl(${(280 + ttsWaveAnimationFrame * 2) % 360}, 80%, 70%)`,
-                                                        fontWeight: '600'
-                                                    }}
-                                                >
-                                                    AI Thinking
-                                                </span>
-                                            </>
-                                        ) : (
-                                    <>
-                                        <Pause 
-                                            className="h-4 w-4" 
-                                            style={{
-                                                ...((listening && micLevel > 0.01) || (aiSpeaking && ttsAudioLevel > 0.01) ? {
-                                                    filter: `drop-shadow(0 0 8px hsl(${((listening && micLevel > 0.01) ? (micLevel * 360 + waveAnimationFrame * 2) : (ttsAudioLevel * 60 + 120 + ttsWaveAnimationFrame * 2)) % 360}, 80%, 70%))`,
-                                                    transform: `scale(${1 + ((listening && micLevel > 0.01) ? micLevel : ttsAudioLevel) * 0.1})`
-                                                } : {})
-                                            }}
-                                        />
-                                        <span 
-                                            style={{
-                                                ...((listening && micLevel > 0.01) || (aiSpeaking && ttsAudioLevel > 0.01) ? {
-                                                    textShadow: `0 0 10px hsl(${((listening && micLevel > 0.01) ? (micLevel * 360 + waveAnimationFrame * 2) : (ttsAudioLevel * 60 + 120 + ttsWaveAnimationFrame * 2)) % 360}, 80%, 70%)`,
-                                                    fontWeight: '600'
-                                                } : {})
-                                            }}
-                                        >
-                                            Stop
-                                        </span>
-                                            </>
-                                        )}
-                                    </>
-                                ) : (
-                                    <>
-                                        {!connected ? (
-                                            <>
-                                                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                <span>Connecting...</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Mic className="h-4 w-4" />
-                                                <span>Start</span>
-                                            </>
-                                        )}
-                                    </>
-                                )}
-                            </button>
-                        </div>
+                                {/* Static Background */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5 rounded-3xl pointer-events-none" />
 
-                                {/* Voice Selection Dropdown - Moved below Start button */}
-                                <div className="flex justify-center mt-4">
-                                    <div className="relative" ref={voiceDropdownRef}>
+                                <div className="relative flex flex-col items-center">
+                                    {/* Role Play Test Button */}
+                                    {rolePlayEnabled && (
+                                        <div className="mb-4 text-center">
+                                            <div className="text-xs text-green-300 bg-green-500/10 px-3 py-2 rounded-lg border border-green-400/30 mb-2">
+                                                🎭 Role Play Active: {organizationName} • {roleTitle}
+                                            </div>
+                                            <div className="text-xs text-blue-300 bg-blue-500/10 px-3 py-2 rounded-lg border border-blue-400/30 mb-2">
+                                                📝 Template: {rolePlayTemplate} • Role: {roleTitle}
+                                            </div>
+                                            <div className="flex gap-2 justify-center mb-2">
+                                                <button
+                                                    onClick={() => {
+                                                        console.log("Testing role play with question...");
+                                                        // Simulate asking about organization
+                                                        const testQuestion = "What is your organization name?";
+                                                        console.log("Test question:", testQuestion);
+                                                    }}
+                                                    className="px-3 py-2 bg-blue-500/20 text-blue-300 text-xs rounded border border-blue-400/30 hover:bg-blue-500/30 transition-all duration-300"
+                                                >
+                                                    Test Role Play
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        console.log("Clearing role play...");
+                                                        if (ws.current?.readyState === WebSocket.OPEN) {
+                                                            ws.current.send(JSON.stringify({
+                                                                type: "clear_roleplay"
+                                                            }));
+                                                        }
+                                                    }}
+                                                    className="px-3 py-2 bg-red-500/20 text-red-300 text-xs rounded border border-red-400/30 hover:bg-red-500/30 transition-all duration-300"
+                                                >
+                                                    Clear Role Play
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Clean Audio Wave Animation */}
+                                    <div className="mb-8 flex justify-center">
+                                        <div className="flex items-center justify-center space-x-2 h-20">
+                                            {Array.from({ length: 25 }).map((_, i) => {
+                                                const baseHeight = 12;
+                                                const maxHeight = 60;
+
+                                                // Determine if we're showing speech waves or TTS audio waves
+                                                const isSpeechActive = listening && micLevel > 0.01;
+                                                const isTtsActive = aiSpeaking && ttsAudioLevel > 0.01;
+                                                const isActive = isSpeechActive || isTtsActive;
+
+                                                // Calculate wave height based on active source
+                                                let waveHeight = baseHeight;
+                                                if (isSpeechActive) {
+                                                    waveHeight = Math.max(baseHeight, micLevel * maxHeight + Math.sin(waveAnimationFrame * 0.15 + i * 0.4) * (micLevel * 20 + 8));
+                                                } else if (isTtsActive) {
+                                                    waveHeight = Math.max(baseHeight, ttsAudioLevel * maxHeight + Math.sin(ttsWaveAnimationFrame * 0.15 + i * 0.4) * (ttsAudioLevel * 20 + 8));
+                                                }
+
+                                                // Clean rainbow colors based on active source
+                                                let baseHue, animationHue, saturation, lightness;
+
+                                                if (isSpeechActive) {
+                                                    // Speech wave colors (blue to green spectrum)
+                                                    baseHue = micLevel * 120 + 200; // Blue to green
+                                                    animationHue = waveAnimationFrame * 2;
+                                                    saturation = Math.min(100, 70 + micLevel * 30);
+                                                    lightness = Math.min(80, 50 + micLevel * 30);
+                                                } else if (isTtsActive) {
+                                                    // TTS audio wave colors (green to yellow spectrum)
+                                                    baseHue = ttsAudioLevel * 60 + 120; // Green to yellow
+                                                    animationHue = ttsWaveAnimationFrame * 2;
+                                                    saturation = Math.min(100, 70 + ttsAudioLevel * 30);
+                                                    lightness = Math.min(80, 50 + ttsAudioLevel * 30);
+                                                } else {
+                                                    // Inactive state
+                                                    baseHue = 200;
+                                                    animationHue = 0;
+                                                    saturation = 20;
+                                                    lightness = 40;
+                                                }
+
+                                                const positionHue = i * 14.4; // 360/25 = 14.4 degrees per bar
+                                                const hue = isActive
+                                                    ? (baseHue + positionHue + animationHue) % 360
+                                                    : 200; // Blue placeholder color
+
+                                                const opacity = isActive
+                                                    ? Math.max(0.6, (isSpeechActive ? micLevel : ttsAudioLevel) * 0.8 + 0.2)
+                                                    : 0.3;
+
+                                                return (
+                                                    <div
+                                                        key={i}
+                                                        className={`w-2 rounded-full transition-all duration-200 ease-out`}
+                                                        style={{
+                                                            height: `${waveHeight}px`,
+                                                            backgroundColor: `hsl(${hue}, ${saturation}%, ${lightness}%)`,
+                                                            opacity: opacity,
+                                                            animationDelay: `${i * 60}ms`,
+                                                            transform: isActive
+                                                                ? `scaleY(${1 + Math.sin((isSpeechActive ? waveAnimationFrame : ttsWaveAnimationFrame) * 0.08 + i * 0.25) * 0.15}) scaleX(${1 + Math.sin((isSpeechActive ? waveAnimationFrame : ttsWaveAnimationFrame) * 0.12 + i * 0.3) * 0.1})`
+                                                                : 'scaleY(1) scaleX(1)',
+                                                            boxShadow: 'none',
+                                                            filter: 'none'
+                                                        }}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Small Rounded Button - Fixed Click with Glass UI */}
+                                    <div className="flex justify-center">
                                         <button
                                             onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
-                                                console.log('Voice modal clicked, opening modal');
-                                                setIsVoiceModalOpen(true);
+                                                console.log("Button clicked, listening:", listening, "connected:", connected);
+                                                if (listening) {
+                                                    stopMic();
+                                                } else {
+                                                    startMic();
+                                                }
                                             }}
                                             onMouseDown={(e) => e.stopPropagation()}
-                                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/[0.05] transition-colors"
+                                            onMouseUp={(e) => e.stopPropagation()}
+                                            className={` px-4 py-2 rounded-full font-medium text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer ${listening
+                                                ? listening && micLevel > 0.01
+                                                    ? "bg-red-600/20 backdrop-blur-xl text-white hover:bg-red-600/30 shadow-lg"
+                                                    : "bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white shadow-lg"
+                                                : !connected
+                                                    ? "bg-zinc-600/80 text-white cursor-not-allowed shadow-lg"
+                                                    : "bg-blue-600/80 text-white hover:bg-blue-600 shadow-lg"
+                                                }`}
+                                            disabled={!connected}
+                                            style={{
+                                                pointerEvents: 'auto',
+                                                ...(listening && micLevel > 0.01 ? {
+                                                    background: `linear-gradient(135deg, 
+                                            rgba(239, 68, 68, 0.2) 0%, 
+                                            rgba(239, 68, 68, 0.1) 50%, 
+                                            rgba(239, 68, 68, 0.2) 100%)`,
+                                                    backdropFilter: 'blur(20px)',
+                                                    boxShadow: `0 8px 32px rgba(239, 68, 68, 0.3),
+                                                   inset 0 1px 0 rgba(255, 255, 255, 0.2)`,
+                                                    transform: `scale(${1 + micLevel * 0.05})`
+                                                } : {})
+                                            }}
                                         >
-                                            <FaMicrophone className="h-4 w-4 text-purple-400" />
-                                            <span className="text-sm font-medium text-white">
-                                                {voiceConfig[selectedLanguage]?.find(v => v.id === selectedVoice)?.name || "Select Voice"}
-                                            </span>
-                                            <FaChevronDown className="h-3 w-3 text-zinc-400" />
+                                            {listening ? (
+                                                <>
+                                                    {aiSpeaking ? (
+                                                        <>
+                                                            <div className="h-4 w-4 rounded-full bg-green-400 animate-pulse" />
+                                                            <span
+                                                                style={{
+                                                                    color: 'white',
+                                                                    textShadow: `0 0 10px hsl(${((listening && micLevel > 0.01) ? (micLevel * 360 + waveAnimationFrame * 2) : (ttsAudioLevel * 60 + 120 + ttsWaveAnimationFrame * 2)) % 360}, 80%, 70%)`,
+                                                                    fontWeight: '600'
+                                                                }}
+                                                            >
+                                                                Speaking
+                                                            </span>
+                                                        </>
+                                                    ) : isWaitingForResponse ? (
+                                                        <>
+                                                            <div className="h-4 w-4 rounded-full bg-purple-400 animate-pulse" />
+                                                            <span
+                                                                style={{
+                                                                    color: 'white',
+                                                                    textShadow: `0 0 10px hsl(${(280 + ttsWaveAnimationFrame * 2) % 360}, 80%, 70%)`,
+                                                                    fontWeight: '600'
+                                                                }}
+                                                            >
+                                                                AI Thinking
+                                                            </span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Pause
+                                                                className="h-4 w-4"
+                                                                style={{
+                                                                    ...((listening && micLevel > 0.01) || (aiSpeaking && ttsAudioLevel > 0.01) ? {
+                                                                        filter: `drop-shadow(0 0 8px hsl(${((listening && micLevel > 0.01) ? (micLevel * 360 + waveAnimationFrame * 2) : (ttsAudioLevel * 60 + 120 + ttsWaveAnimationFrame * 2)) % 360}, 80%, 70%))`,
+                                                                        transform: `scale(${1 + ((listening && micLevel > 0.01) ? micLevel : ttsAudioLevel) * 0.1})`
+                                                                    } : {})
+                                                                }}
+                                                            />
+                                                            <span
+                                                                style={{
+                                                                    ...((listening && micLevel > 0.01) || (aiSpeaking && ttsAudioLevel > 0.01) ? {
+                                                                        textShadow: `0 0 10px hsl(${((listening && micLevel > 0.01) ? (micLevel * 360 + waveAnimationFrame * 2) : (ttsAudioLevel * 60 + 120 + ttsWaveAnimationFrame * 2)) % 360}, 80%, 70%)`,
+                                                                        fontWeight: '600'
+                                                                    } : {})
+                                                                }}
+                                                            >
+                                                                Stop
+                                                            </span>
+                                                        </>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    {!connected ? (
+                                                        <>
+                                                            <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                            <span>Connecting...</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Mic className="h-4 w-4" />
+                                                            <span>Start</span>
+                                                        </>
+                                                    )}
+                                                </>
+                                            )}
                                         </button>
-
                                     </div>
-                                </div>
 
-                    </div>
-                </div>
-
-
-                {/* Minimal Panels */}
-                <div className="grid lg:grid-cols-2 gap-3 sm:gap-4">
-                    {/* Minimal Voice Panel */}
-                    <div className="group relative rounded-lg border border-white/5 bg-white/[0.01] backdrop-blur-xl overflow-hidden transition-colors hover:border-white/10">
-                        <div className="relative px-3 py-3 border-b border-white/5">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    {/* Soft Icon */}
-                                    <div className="relative">
-                                        <div className="h-6 w-6 rounded-md bg-white/[0.03] flex items-center justify-center border border-white/5 transition-colors">
-                                            <User className="h-3 w-3 text-zinc-400" />
-                                        </div>
-                                    </div>
-                                    
-                                    <div>
-                                        <h3 className="text-sm font-medium text-zinc-200">
-                                            {currentLang.labels.yourVoice}
-                                        </h3>
-                                        <p className="text-xs text-zinc-500">
-                                            {currentLang.labels.yourVoiceDesc}
-                                        </p>
-                                    </div>
-                                </div>
-                                
-                                {/* Minimal Status Indicators */}
-                                <div className="flex items-center gap-1">
-                                    {(useWebkitVAD || useFallbackVAD) && (
-                                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
-                                            <div className="w-1 h-1 bg-emerald-400 rounded-full" />
-                                            <span className="text-xs text-emerald-300">STT</span>
-                                        </div>
-                                    )}
-                                    {listening && (
-                                        <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
-                                            <div className="w-1 h-1 bg-blue-400 rounded-full" />
-                                            <span className="text-xs text-blue-300">Live</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Soft Organized Content */}
-                        <div className="relative p-5 min-h-[180px]">
-                            {/* Soft Live Processing */}
-                            {(useWebkitVAD || useFallbackVAD) && (
-                                <div className="mb-4">
-                                    <div className="relative group">
-                                        {/* Soft Live Container */}
-                                        <div className="min-h-[60px] p-3 bg-white/[0.02] rounded-xl border border-white/6 hover:border-white/8 transition-all duration-300 shadow-sm hover:shadow-md">
-                                            {interimTranscript && (
-                                                <div className="text-sm text-blue-300 italic leading-relaxed">
-                                                    {interimTranscript}
-                                                    <span className="animate-pulse text-blue-400 ml-1">|</span>
-                                                </div>
-                                            )}
-                                            {!interimTranscript && !finalTranscript && (
-                                                <div className="text-sm text-zinc-500 italic leading-relaxed">
-                                                    {listening ? "Listening..." : "Ready"}
-                                                </div>
-                                            )}
-                                            {finalTranscript && !interimTranscript && (
-                                                <div className="text-sm text-zinc-500 italic leading-relaxed">
-                                                    Processing complete...
-                                                </div>
-                                            )}
-                                        </div>
-                                        
-                                        {/* Soft Confidence Badge */}
-                                        {vadConfidence > 0 && (
-                                            <div className="absolute -top-1 -right-1 px-2 py-1 bg-white/[0.05] border border-white/8 rounded-lg backdrop-blur-sm shadow-sm">
-                                                <span className="text-xs text-zinc-400 font-medium">
-                                                    {(vadConfidence * 100).toFixed(0)}%
+                                    {/* Voice Selection Dropdown - Moved below Start button */}
+                                    <div className="flex justify-center mt-4">
+                                        <div className="relative" ref={voiceDropdownRef}>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    console.log('Voice modal clicked, opening modal');
+                                                    setIsVoiceModalOpen(true);
+                                                }}
+                                                onMouseDown={(e) => e.stopPropagation()}
+                                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/[0.03] border border-white/10 hover:bg-white/[0.05] transition-colors"
+                                            >
+                                                <FaMicrophone className="h-4 w-4 text-purple-400" />
+                                                <span className="text-sm font-medium text-white">
+                                                    {voiceConfig[selectedLanguage]?.find(v => v.id === selectedVoice)?.name || "Select Voice"}
                                                 </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
+                                                <FaChevronDown className="h-3 w-3 text-zinc-400" />
+                                            </button>
 
-                            {transcript ? (
-                                <div className="space-y-3">
-                                    {/* Soft AI Status */}
-                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.02] rounded-lg border border-white/6 shadow-sm">
-                                        <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
-                                        <span className="text-xs font-medium text-purple-300">AI Enhanced</span>
-                                        <div className="ml-auto">
-                                            <span className="text-xs text-zinc-500">Active</span>
                                         </div>
                                     </div>
 
-                                    {/* Soft Transcript Cards */}
-                                    <div className="space-y-2">
-                                        {transcript.split(".").map((s, i) =>
-                                            s.trim() && (
-                                                <div key={i} className="bg-white/[0.02] rounded-lg p-3 border border-white/6 hover:border-white/8 transition-all duration-300 group shadow-sm hover:shadow-md">
-                                                    <p className="text-sm leading-relaxed text-zinc-300 group-hover:text-zinc-200 transition-colors duration-300">{s.trim()}.</p>
+                                </div>
+                            </div>
+
+
+                            {/* Minimal Panels */}
+                            <div className="grid lg:grid-cols-2 gap-3 sm:gap-4">
+                                {/* Minimal Voice Panel */}
+                                <div className="group relative rounded-lg border border-white/5 bg-white/[0.01] backdrop-blur-xl overflow-hidden transition-colors hover:border-white/10">
+                                    <div className="relative px-3 py-3 border-b border-white/5">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                {/* Soft Icon */}
+                                                <div className="relative">
+                                                    <div className="h-6 w-6 rounded-md bg-white/[0.03] flex items-center justify-center border border-white/5 transition-colors">
+                                                        <User className="h-3 w-3 text-zinc-400" />
+                                                    </div>
                                                 </div>
-                                            )
-                                        )}
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="flex items-center justify-center h-full text-zinc-500">
-                                    <div className="text-center">
-                                        <Mic className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                                        <p className="text-xs font-medium mb-1 text-zinc-400">
-                                            {currentLang.labels.readyToCapture}
-                                        </p>
-                                        <p className="text-xs text-zinc-600 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/6">
-                                            {useWebkitVAD ? "STT Active" : 
-                                             useFallbackVAD ? "VAD Active" : 
-                                             "Start Conversation"}
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
 
-                    {/* Minimal Professional AI Response */}
-                    <div className="group relative rounded-2xl border border-white/8 bg-white/[0.02] backdrop-blur-xl shadow-[0_12px_40px_-12px_rgba(0,0,0,0.8)] overflow-hidden transition-all duration-400 hover:shadow-[0_16px_50px_-12px_rgba(0,0,0,0.9)] hover:border-white/12">
-                        {/* Soft animated background */}
-                        <div className="absolute inset-0 bg-white/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                        
-                        <div className="relative px-5 py-4 border-b border-white/8 bg-white/[0.01]">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    {/* Soft Icon */}
-                                    <div className="relative">
-                                        <div className="h-9 w-9 rounded-lg bg-white/[0.05] flex items-center justify-center border border-white/10 shadow-sm group-hover:shadow-md transition-all duration-300">
-                                            <Bot className="h-4.5 w-4.5 text-zinc-400 group-hover:text-zinc-300 transition-colors duration-300" />
-                                        </div>
-                                    </div>
-                                    
-                                    <div>
-                                        <h3 className="text-lg font-semibold text-zinc-200 mb-0.5 group-hover:text-zinc-100 transition-colors duration-300">
-                                            {currentLang.labels.aiResponse}
-                                        </h3>
-                                        <p className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors duration-300">
-                                            {currentLang.labels.aiResponseDesc}
-                                        </p>
-                                        {rolePlayEnabled && (
-                                            <div className="mt-1 text-xs text-green-300 bg-green-500/10 px-2 py-0.5 rounded border border-green-400/30">
-                                                🎭 {organizationName} • {roleTitle}
+                                                <div>
+                                                    <h3 className="text-sm font-medium text-zinc-200">
+                                                        {currentLang.labels.yourVoice}
+                                                    </h3>
+                                                    <p className="text-xs text-zinc-500">
+                                                        {currentLang.labels.yourVoiceDesc}
+                                                    </p>
+                                                </div>
                                             </div>
-                                        )}
-                                    </div>
-                                </div>
-                                
-                                {/* Soft Status Indicators */}
-                                <div className="flex items-center gap-2">
-                                    {aiSpeaking && (
-                                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/8 shadow-sm">
-                                            <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse" />
-                                            <span className="text-xs font-medium text-indigo-300">Speaking</span>
-                                        </div>
-                                    )}
-                                    {aiSpeaking && listening && (
-                                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-400/30 shadow-sm">
-                                            <div className="w-1.5 h-1.5 bg-orange-400 rounded-full" />
-                                            <span className="text-xs font-medium text-orange-300">Mic Paused</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
 
-                        {/* Soft Organized Content */}
-                        <div className="relative p-5 min-h-[180px]">
-                            {aiText ? (
-                                <div className="space-y-4">
-                                    {/* Grammar Correction Block */}
-                                    {aiText.includes('🔴 GRAMMAR_CORRECTION_START 🔴') && (
-                                        <div className="bg-red-500/10 border border-red-400/30 rounded-lg p-4">
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <div className="w-2 h-2 bg-red-400 rounded-full"></div>
-                                                <h4 className="text-sm font-semibold text-red-300">Grammar Checker</h4>
-                                                <div className="ml-auto text-xs text-red-400">AI</div>
+                                            {/* Minimal Status Indicators */}
+                                            <div className="flex items-center gap-1">
+                                                {(useWebkitVAD || useFallbackVAD) && (
+                                                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
+                                                        <div className="w-1 h-1 bg-emerald-400 rounded-full" />
+                                                        <span className="text-xs text-emerald-300">STT</span>
+                                                    </div>
+                                                )}
+                                                {listening && (
+                                                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
+                                                        <div className="w-1 h-1 bg-blue-400 rounded-full" />
+                                                        <span className="text-xs text-blue-300">Live</span>
+                                                    </div>
+                                                )}
                                             </div>
-                                            
-                                            {(() => {
-                                                const startMarker = '🔴 GRAMMAR_CORRECTION_START 🔴';
-                                                const endMarker = '🔴 GRAMMAR_CORRECTION_END 🔴';
-                                                const startIndex = aiText.indexOf(startMarker);
-                                                const endIndex = aiText.indexOf(endMarker);
-                                                
-                                                
-                                                if (startIndex !== -1 && endIndex !== -1) {
-                                                    const grammarText = aiText.substring(startIndex + startMarker.length, endIndex).trim();
-                                                    
-                                                    
-                                                    // More robust parsing - handle different formats
-                                                    let incorrectText = '';
-                                                    let correctText = '';
-                                                    
-                                                    // Clean the grammar text first
-                                                    const cleanGrammarText = grammarText.replace(/^\s*[-•]\s*/gm, '').trim();
-                                                    
-                                                    // Try multiple parsing patterns
-                                                    const patterns = [
-                                                        // Pattern 1: "INCORRECT: text CORRECT: text"
-                                                        /INCORRECT:\s*([^C]+?)\s*CORRECT:\s*(.+)/i,
-                                                        // Pattern 2: "INCORRECT: text\nCORRECT: text"
-                                                        /INCORRECT:\s*([^\n]+)\s*\n\s*CORRECT:\s*([^\n]+)/i,
-                                                        // Pattern 3: "❌ text ✅ text"
-                                                        /❌\s*([^✅]+?)\s*✅\s*(.+)/,
-                                                        // Pattern 4: "Wrong: text Correct: text"
-                                                        /Wrong:\s*([^C]+?)\s*Correct:\s*(.+)/i,
-                                                        // Pattern 5: "Error: text Fixed: text"
-                                                        /Error:\s*([^F]+?)\s*Fixed:\s*(.+)/i
-                                                    ];
-                                                    
-                                                    for (const pattern of patterns) {
-                                                        const match = cleanGrammarText.match(pattern);
-                                                        if (match) {
-                                                            incorrectText = match[1].trim();
-                                                            correctText = match[2].trim();
-                                                            break;
-                                                        }
-                                                    }
-                                                    
-                                                    // If no pattern matched, try line-by-line parsing
-                                                    if (!incorrectText && !correctText) {
-                                                        const lines = cleanGrammarText.split('\n').map(line => line.trim()).filter(line => line);
-                                                        
-                                                        for (const line of lines) {
-                                                            if (line.match(/^(INCORRECT|❌|Wrong|Error):/i)) {
-                                                                incorrectText = line.replace(/^(INCORRECT|❌|Wrong|Error):\s*/i, '').trim();
-                                                            } else if (line.match(/^(CORRECT|✅|Correct|Fixed):/i)) {
-                                                                correctText = line.replace(/^(CORRECT|✅|Correct|Fixed):\s*/i, '').trim();
-                                                            }
-                                                        }
-                                                    }
-                                                    
-                                                    // Final fallback - if we have text but no clear structure
-                                                    if (!incorrectText && !correctText && cleanGrammarText.length > 0) {
-                                                        // Try to split by common separators
-                                                        const separators = ['→', '->', '→', '→', '→'];
-                                                        for (const sep of separators) {
-                                                            if (cleanGrammarText.includes(sep)) {
-                                                                const parts = cleanGrammarText.split(sep);
-                                                                if (parts.length === 2) {
-                                                                    incorrectText = parts[0].trim();
-                                                                    correctText = parts[1].trim();
-                                                                    break;
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    
-                                                    
-                                                    return (
-                                                        <div className="space-y-4">
-                                                            {incorrectText && correctText && (
-                                                                <div className="bg-gradient-to-r from-red-500/10 to-orange-500/10 border border-red-400/30 rounded-xl p-5 shadow-lg">
-                                                                    <div className="flex items-center gap-3 mb-4">
-                                                                        <div className="w-3 h-3 bg-red-400 rounded-full animate-pulse"></div>
-                                                                        <h5 className="text-sm font-bold text-red-300 uppercase tracking-wide">Grammar Correction</h5>
-                                                                        <div className="ml-auto">
-                                                                            <span className="text-xs bg-red-500/20 text-red-300 px-2 py-1 rounded-full">AI</span>
-                                                                        </div>
-                                                                    </div>
-                                                                    
-                                                                    <div className="space-y-3">
-                                                                        <div className="bg-red-500/5 border-l-4 border-red-400 rounded-lg p-4">
-                                                                            <div className="flex items-center gap-2 mb-2">
-                                                                                <span className="text-xs font-semibold text-red-400 uppercase tracking-wide">❌ Incorrect</span>
-                                                                            </div>
-                                                                            <p className="text-sm text-red-200 line-through decoration-red-400 decoration-2">
-                                                                                {incorrectText}
-                                                                            </p>
-                                                                        </div>
-                                                                        
-                                                                        <div className="flex items-center justify-center">
-                                                                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                                                                            </svg>
-                                                                        </div>
-                                                                        
-                                                                        <div className="bg-green-500/5 border-l-4 border-green-400 rounded-lg p-4">
-                                                                            <div className="flex items-center gap-2 mb-2">
-                                                                                <span className="text-xs font-semibold text-green-400 uppercase tracking-wide">✅ Correct</span>
-                                                                            </div>
-                                                                            <p className="text-sm text-green-200 font-medium">
-                                                                                {correctText}
-                                                                            </p>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                            
-                                                            {correctText && !incorrectText && (
-                                                                <div className="bg-green-500/10 border border-green-400/30 rounded-xl p-5 shadow-lg">
-                                                                    <div className="flex items-center gap-3 mb-3">
-                                                                        <div className="w-3 h-3 bg-green-400 rounded-full"></div>
-                                                                        <h5 className="text-sm font-bold text-green-300 uppercase tracking-wide">Grammar Check</h5>
-                                                                        <div className="ml-auto">
-                                                                            <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full">AI</span>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="bg-green-500/5 border-l-4 border-green-400 rounded-lg p-4">
-                                                                        <p className="text-sm text-green-200 font-medium">
-                                                                            {correctText}
-                                                                        </p>
-                                                                    </div>
-                                                                </div>
-                                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Soft Organized Content */}
+                                    <div className="relative p-5 min-h-[180px]">
+                                        {/* Soft Live Processing */}
+                                        {(useWebkitVAD || useFallbackVAD) && (
+                                            <div className="mb-4">
+                                                <div className="relative group">
+                                                    {/* Soft Live Container */}
+                                                    <div className="min-h-[60px] p-3 bg-white/[0.02] rounded-xl border border-white/6 hover:border-white/8 transition-all duration-300 shadow-sm hover:shadow-md">
+                                                        {interimTranscript && (
+                                                            <div className="text-sm text-blue-300 italic leading-relaxed">
+                                                                {interimTranscript}
+                                                                <span className="animate-pulse text-blue-400 ml-1">|</span>
+                                                            </div>
+                                                        )}
+                                                        {!interimTranscript && !finalTranscript && (
+                                                            <div className="text-sm text-zinc-500 italic leading-relaxed">
+                                                                {listening ? "Listening..." : "Ready"}
+                                                            </div>
+                                                        )}
+                                                        {finalTranscript && !interimTranscript && (
+                                                            <div className="text-sm text-zinc-500 italic leading-relaxed">
+                                                                Processing complete...
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Soft Confidence Badge */}
+                                                    {vadConfidence > 0 && (
+                                                        <div className="absolute -top-1 -right-1 px-2 py-1 bg-white/[0.05] border border-white/8 rounded-lg backdrop-blur-sm shadow-sm">
+                                                            <span className="text-xs text-zinc-400 font-medium">
+                                                                {(vadConfidence * 100).toFixed(0)}%
+                                                            </span>
                                                         </div>
-                                                    );
-                                                }
-                                                return null;
-                                            })()}
-                                        </div>
-                                    )}
-                                    
-                                    {/* AI Response Block */}
-                                    <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-400/30 rounded-xl p-5 shadow-lg">
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-                                            <h4 className="text-sm font-bold text-green-300 uppercase tracking-wide">Intelligent Response</h4>
-                                            <div className="ml-auto">
-                                                <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full">AI</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {transcript ? (
+                                            <div className="space-y-3">
+                                                {/* Soft AI Status */}
+                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.02] rounded-lg border border-white/6 shadow-sm">
+                                                    <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
+                                                    <span className="text-xs font-medium text-purple-300">AI Enhanced</span>
+                                                    <div className="ml-auto">
+                                                        <span className="text-xs text-zinc-500">Active</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Soft Transcript Cards */}
+                                                <div className="space-y-2">
+                                                    {transcript.split(".").map((s, i) =>
+                                                        s.trim() && (
+                                                            <div key={i} className="bg-white/[0.02] rounded-lg p-3 border border-white/6 hover:border-white/8 transition-all duration-300 group shadow-sm hover:shadow-md">
+                                                                <p className="text-sm leading-relaxed text-zinc-300 group-hover:text-zinc-200 transition-colors duration-300">{s.trim()}.</p>
+                                                            </div>
+                                                        )
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="flex items-center justify-center h-full text-zinc-500">
+                                                <div className="text-center">
+                                                    <Mic className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                                                    <p className="text-xs font-medium mb-1 text-zinc-400">
+                                                        {currentLang.labels.readyToCapture}
+                                                    </p>
+                                                    <p className="text-xs text-zinc-600 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/6">
+                                                        {useWebkitVAD ? "STT Active" :
+                                                            useFallbackVAD ? "VAD Active" :
+                                                                "Start Conversation"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Minimal Professional AI Response */}
+                                <div className="group relative rounded-2xl border border-white/8 bg-white/[0.02] backdrop-blur-xl shadow-[0_12px_40px_-12px_rgba(0,0,0,0.8)] overflow-hidden transition-all duration-400 hover:shadow-[0_16px_50px_-12px_rgba(0,0,0,0.9)] hover:border-white/12">
+                                    {/* Soft animated background */}
+                                    <div className="absolute inset-0 bg-white/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                                    <div className="relative px-5 py-4 border-b border-white/8 bg-white/[0.01]">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                {/* Soft Icon */}
+                                                <div className="relative">
+                                                    <div className="h-9 w-9 rounded-lg bg-white/[0.05] flex items-center justify-center border border-white/10 shadow-sm group-hover:shadow-md transition-all duration-300">
+                                                        <Bot className="h-4.5 w-4.5 text-zinc-400 group-hover:text-zinc-300 transition-colors duration-300" />
+                                                    </div>
+                                                </div>
+
+                                                <div>
+                                                    <h3 className="text-lg font-semibold text-zinc-200 mb-0.5 group-hover:text-zinc-100 transition-colors duration-300">
+                                                        {currentLang.labels.aiResponse}
+                                                    </h3>
+                                                    <p className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors duration-300">
+                                                        {currentLang.labels.aiResponseDesc}
+                                                    </p>
+                                                    {rolePlayEnabled && (
+                                                        <div className="mt-1 text-xs text-green-300 bg-green-500/10 px-2 py-0.5 rounded border border-green-400/30">
+                                                            🎭 {organizationName} • {roleTitle}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Soft Status Indicators */}
+                                            <div className="flex items-center gap-2">
+                                                {aiSpeaking && (
+                                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/8 shadow-sm">
+                                                        <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse" />
+                                                        <span className="text-xs font-medium text-indigo-300">Speaking</span>
+                                                    </div>
+                                                )}
+                                                {aiSpeaking && listening && (
+                                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-400/30 shadow-sm">
+                                                        <div className="w-1.5 h-1.5 bg-orange-400 rounded-full" />
+                                                        <span className="text-xs font-medium text-orange-300">Mic Paused</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
-                                        <div className="bg-green-500/5 border-l-4 border-green-400 rounded-lg p-4">
-                                            <p className="text-sm leading-relaxed text-green-200 whitespace-pre-wrap">
-                                                {aiText.includes('🔴 GRAMMAR_CORRECTION_START 🔴') 
-                                                    ? aiText.split('🔴 GRAMMAR_CORRECTION_END 🔴')[1]?.trim() || aiText
-                                                    : aiText
-                                                }
-                                            </p>
-                                        </div>
+                                    </div>
+
+                                    {/* Soft Organized Content */}
+                                    <div className="relative p-5 min-h-[180px]">
+                                         {aiText ? (
+                                             <div className="space-y-4">
+                                                 {/* Grammar Correction Block - Only show if grammar correction exists */}
+                                                 {aiText.includes('🔴 GRAMMAR_CORRECTION_START 🔴') && (
+                                                     <div className="bg-red-500/8 border border-red-400/20 rounded-lg p-3 mb-3">
+                                                         <div className="flex items-center gap-2 mb-2">
+                                                             <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
+                                                             <h4 className="text-xs font-semibold text-red-300">Grammar Checker</h4>
+                                                             <div className="ml-auto text-xs text-red-400/70">AI</div>
+                                                         </div>
+
+                                                         {(() => {
+                                                             const startMarker = '🔴 GRAMMAR_CORRECTION_START 🔴';
+                                                             const endMarker = '🔴 GRAMMAR_CORRECTION_END 🔴';
+                                                             const startIndex = aiText.indexOf(startMarker);
+                                                             const endIndex = aiText.indexOf(endMarker);
+
+                                                             if (startIndex !== -1 && endIndex !== -1) {
+                                                                 const grammarText = aiText.substring(startIndex + startMarker.length, endIndex).trim();
+
+                                                                 // More robust parsing - handle different formats
+                                                                 let incorrectText = '';
+                                                                 let correctText = '';
+
+                                                                 // Clean the grammar text first
+                                                                 const cleanGrammarText = grammarText.replace(/^\s*[-•]\s*/gm, '').trim();
+
+                                                                 // Try multiple parsing patterns
+                                                                 const patterns = [
+                                                                     // Pattern 1: "INCORRECT: text CORRECT: text"
+                                                                     /INCORRECT:\s*([^C]+?)\s*CORRECT:\s*(.+)/i,
+                                                                     // Pattern 2: "INCORRECT: text\nCORRECT: text"
+                                                                     /INCORRECT:\s*([^\n]+)\s*\n\s*CORRECT:\s*([^\n]+)/i,
+                                                                     // Pattern 3: "❌ text ✅ text"
+                                                                     /❌\s*([^✅]+?)\s*✅\s*(.+)/,
+                                                                     // Pattern 4: "Wrong: text Correct: text"
+                                                                     /Wrong:\s*([^C]+?)\s*Correct:\s*(.+)/i,
+                                                                     // Pattern 5: "Error: text Fixed: text"
+                                                                     /Error:\s*([^F]+?)\s*Fixed:\s*(.+)/i
+                                                                 ];
+
+                                                                 for (const pattern of patterns) {
+                                                                     const match = cleanGrammarText.match(pattern);
+                                                                     if (match) {
+                                                                         incorrectText = match[1].trim();
+                                                                         correctText = match[2].trim();
+                                                                         break;
+                                                                     }
+                                                                 }
+
+                                                                 // If no pattern matched, try line-by-line parsing
+                                                                 if (!incorrectText && !correctText) {
+                                                                     const lines = cleanGrammarText.split('\n').map(line => line.trim()).filter(line => line);
+
+                                                                     for (const line of lines) {
+                                                                         if (line.match(/^(INCORRECT|❌|Wrong|Error):/i)) {
+                                                                             incorrectText = line.replace(/^(INCORRECT|❌|Wrong|Error):\s*/i, '').trim();
+                                                                         } else if (line.match(/^(CORRECT|✅|Correct|Fixed):/i)) {
+                                                                             correctText = line.replace(/^(CORRECT|✅|Correct|Fixed):\s*/i, '').trim();
+                                                                         }
+                                                                     }
+                                                                 }
+
+                                                                 // Final fallback - if we have text but no clear structure
+                                                                 if (!incorrectText && !correctText && cleanGrammarText.length > 0) {
+                                                                     // Try to split by common separators
+                                                                     const separators = ['→', '->', '→', '→', '→'];
+                                                                     for (const sep of separators) {
+                                                                         if (cleanGrammarText.includes(sep)) {
+                                                                             const parts = cleanGrammarText.split(sep);
+                                                                             if (parts.length === 2) {
+                                                                                 incorrectText = parts[0].trim();
+                                                                                 correctText = parts[1].trim();
+                                                                                 break;
+                                                                             }
+                                                                         }
+                                                                     }
+                                                                 }
+
+                                                                 return (
+                                                                     <div className="space-y-2">
+                                                                         {incorrectText && correctText && (
+                                                                             <div className="bg-red-500/5 border border-red-400/20 rounded-lg p-3">
+                                                                                 <div className="space-y-2">
+                                                                                     <div className="flex items-center gap-2">
+                                                                                         <div className="w-1 h-1 bg-red-400 rounded-full"></div>
+                                                                                         <span className="text-xs text-red-300 font-medium">Incorrect:</span>
+                                                                                         <span className="text-xs text-red-200 line-through">{incorrectText}</span>
+                                                                                     </div>
+                                                                                     <div className="flex items-center gap-2">
+                                                                                         <div className="w-1 h-1 bg-green-400 rounded-full"></div>
+                                                                                         <span className="text-xs text-green-300 font-medium">Correct:</span>
+                                                                                         <span className="text-xs text-green-200">{correctText}</span>
+                                                                                     </div>
+                                                                                 </div>
+                                                                             </div>
+                                                                         )}
+
+                                                                         {correctText && !incorrectText && (
+                                                                             <div className="bg-green-500/10 border border-green-400/30 rounded-xl p-5 shadow-lg">
+                                                                                 <div className="flex items-center gap-3 mb-3">
+                                                                                     <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+                                                                                     <h5 className="text-sm font-bold text-green-300 uppercase tracking-wide">Grammar Check</h5>
+                                                                                     <div className="ml-auto">
+                                                                                         <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full">AI</span>
+                                                                                     </div>
+                                                                                 </div>
+                                                                                 <div className="bg-green-500/5 border-l-4 border-green-400 rounded-lg p-4">
+                                                                                     <p className="text-sm text-green-200 font-medium">
+                                                                                         {correctText}
+                                                                                     </p>
+                                                                                 </div>
+                                                                             </div>
+                                                                         )}
+                                                                     </div>
+                                                                 );
+                                                             }
+                                                             return null;
+                                                         })()}
+                                                     </div>
+                                                 )}
+
+                                                 {/* AI Response Block - Always show */}
+                                                 <div className="bg-green-500/8 border border-green-400/20 rounded-lg p-3">
+                                                     <div className="flex items-center gap-2 mb-2">
+                                                         <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                                                         <h4 className="text-xs font-semibold text-green-300">AI Response</h4>
+                                                         <div className="ml-auto text-xs text-green-400/70">AI</div>
+                                                     </div>
+                                                     <div className="bg-green-500/5 border-l-2 border-green-400 rounded-lg p-3">
+                                                         <p className="text-sm leading-relaxed text-green-200 whitespace-pre-wrap">
+                                                             {aiText.includes('🔴 GRAMMAR_CORRECTION_START 🔴')
+                                                                 ? aiText.split('🔴 GRAMMAR_CORRECTION_END 🔴')[1]?.trim() || aiText
+                                                                 : aiText
+                                                             }
+                                                         </p>
+                                                     </div>
+                                                 </div>
+                                             </div>
+                                        ) : (
+                                            <div className="flex items-center justify-center h-full text-zinc-500">
+                                                <div className="text-center px-4">
+                                                    <Bot className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                                                    <p className="text-sm font-semibold mb-1">
+                                                        {currentLang.labels.aiWillRespond}
+                                                    </p>
+                                                    <p className="text-xs text-zinc-600">
+                                                        {currentLang.labels.speakToGetResponse}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="flex items-center justify-center h-full text-zinc-500">
-                                    <div className="text-center px-4">
-                                        <Bot className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                                        <p className="text-sm font-semibold mb-1">
-                                            {currentLang.labels.aiWillRespond}
-                                        </p>
-                                        <p className="text-xs text-zinc-600">
-                                            {currentLang.labels.speakToGetResponse}
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Minimal Mobile-Optimized Footer */}
-                <div className="mt-6 sm:mt-8 text-center px-2 sm:px-4">
-                    {/* Compact Status Grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-3 max-w-4xl mx-auto">
-                        {/* Headphones */}
-                        <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
-                            <Headphones className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400 shrink-0" />
-                            <span className="text-xs font-medium text-zinc-300 truncate">
-                                Optimal
-                            </span>
-                        </div>
-                        
-                        {/* Microphone */}
-                        <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
-                            <Mic className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400 shrink-0" />
-                            <span className="text-xs font-medium text-zinc-300 truncate">
-                                Natural
-                            </span>
-                        </div>
-                        
-                        {/* Real-time */}
-                        <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
-                            <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400 shrink-0" />
-                            <span className="text-xs font-medium text-zinc-300 truncate">
-                                Real-time
-                            </span>
-                        </div>
-                        
-                        {/* Difficulty Level */}
-                        <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
-                            <Brain className="h-3 w-3 sm:h-4 sm:w-4 text-indigo-400 shrink-0" />
-                            <span className="text-xs font-medium text-zinc-300 truncate">
-                                {currentLang.levels[level]}
-                            </span>
-                        </div>
-                    </div>
-
-                    {/* Minimal Brand Text */}
-                    <p className="text-xs text-zinc-500 bg-white/3 px-3 py-1.5 rounded-lg border border-white/5 inline-block">
-                        SHCI Voice Assistant
-                    </p>
-                </div>
-                </div>
-                    </div>
-                </div>
-            </div>
-
-        {/* Professional Voice Selection Modal */}
-        {isVoiceModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/20 shadow-xl p-5 max-w-md w-full mx-4">
-                    {/* Modal Header */}
-                    <div className="flex items-center justify-center mb-4">
-                        <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30">
-                            <FaMicrophone className="h-6 w-6 text-emerald-400" />
-                        </div>
-                    </div>
-                    
-                    <div className="text-center mb-5">
-                        <h2 className="text-xl font-bold text-white mb-2">
-                            Select Voice
-                        </h2>
-                        <p className="text-zinc-400 text-xs">
-                            Choose your preferred AI voice
-                        </p>
-                    </div>
-
-                    {/* Voice Options */}
-                    <div className="space-y-3 mb-5">
-                        {voiceConfig[selectedLanguage]?.map((voice) => (
-                            <button
-                                key={voice.id}
-                                onClick={() => {
-                                    console.log('🎤 VOICE DEBUG: Voice selected:', voice.id, voice.name);
-                                    setSelectedVoice(voice.id);
-                                    setIsVoiceModalOpen(false);
-                                }}
-                                className={`w-full group relative p-3 rounded-xl transition-all duration-300 text-left border-2 ${
-                                    selectedVoice === voice.id
-                                        ? "bg-emerald-500/15 border-emerald-400/50 shadow-md shadow-emerald-500/10"
-                                        : "bg-white/[0.05] border-white/10 hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:shadow-md hover:shadow-emerald-500/5"
-                                }`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-lg border transition-all duration-300 ${
-                                        selectedVoice === voice.id
-                                            ? "bg-emerald-500/30 border-emerald-400/50"
-                                            : "bg-emerald-500/20 border-emerald-500/30 group-hover:bg-emerald-500/30 group-hover:border-emerald-400/50"
-                                    }`}>
-                                        <div className="text-lg">
-                                            {voice.gender === "female" ? "👩" : "👨"}
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col flex-1 min-w-0">
-                                        <span className="text-sm font-semibold text-white">
-                                            {voice.name}
-                                        </span>
-                                        <span className="text-xs text-zinc-400">
-                                            {voice.gender} • {voice.quality}
-                                        </span>
-                                    </div>
-                                    {selectedVoice === voice.id && (
-                                        <div className="p-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30">
-                                            <svg className="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        </div>
-                                    )}
-                                </div>
-                            </button>
-                        )) || (
-                            <div className="text-center py-8">
-                                <div className="p-4 rounded-full bg-zinc-800/50 mx-auto w-fit mb-4">
-                                    <FaMicrophone className="h-8 w-8 text-zinc-500" />
-                                </div>
-                                <p className="text-zinc-400">No voices available for {selectedLanguage}</p>
                             </div>
-                        )}
-                    </div>
 
-                    {/* Modal Footer */}
-                    <div className="pt-4 border-t border-white/10">
-                        <button
-                            onClick={() => setIsVoiceModalOpen(false)}
-                            className="w-full px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-semibold transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-emerald-500/20 text-sm"
-                        >
-                            Done
-                        </button>
+                            {/* Minimal Mobile-Optimized Footer */}
+                            <div className="mt-6 sm:mt-8 text-center px-2 sm:px-4">
+                                {/* Compact Status Grid */}
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-3 max-w-4xl mx-auto">
+                                    {/* Headphones */}
+                                    <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
+                                        <Headphones className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400 shrink-0" />
+                                        <span className="text-xs font-medium text-zinc-300 truncate">
+                                            Optimal
+                                        </span>
+                                    </div>
+
+                                    {/* Microphone */}
+                                    <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
+                                        <Mic className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400 shrink-0" />
+                                        <span className="text-xs font-medium text-zinc-300 truncate">
+                                            Natural
+                                        </span>
+                                    </div>
+
+                                    {/* Real-time */}
+                                    <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
+                                        <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400 shrink-0" />
+                                        <span className="text-xs font-medium text-zinc-300 truncate">
+                                            Real-time
+                                        </span>
+                                    </div>
+
+                                    {/* Difficulty Level */}
+                                    <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.02] px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-white/8">
+                                        <Brain className="h-3 w-3 sm:h-4 sm:w-4 text-indigo-400 shrink-0" />
+                                        <span className="text-xs font-medium text-zinc-300 truncate">
+                                            {currentLang.levels[level]}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Minimal Brand Text */}
+                                <p className="text-xs text-zinc-500 bg-white/3 px-3 py-1.5 rounded-lg border border-white/5 inline-block">
+                                    SHCI Voice Assistant
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        )}
+
+            {/* Professional Voice Selection Modal */}
+            {isVoiceModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                    <div className="bg-gradient-to-br from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/20 shadow-xl p-5 max-w-md w-full mx-4">
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-center mb-4">
+                            <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30">
+                                <FaMicrophone className="h-6 w-6 text-emerald-400" />
+                            </div>
+                        </div>
+
+                        <div className="text-center mb-5">
+                            <h2 className="text-xl font-bold text-white mb-2">
+                                Select Voice
+                            </h2>
+                            <p className="text-zinc-400 text-xs">
+                                Choose your preferred AI voice
+                            </p>
+                        </div>
+
+                        {/* Voice Options */}
+                        <div className="space-y-3 mb-5">
+                            {voiceConfig[selectedLanguage]?.map((voice) => (
+                                <button
+                                    key={voice.id}
+                                    onClick={() => {
+                                        console.log('🎤 VOICE DEBUG: Voice selected:', voice.id, voice.name);
+                                        setSelectedVoice(voice.id);
+                                        setIsVoiceModalOpen(false);
+                                    }}
+                                    className={`w-full group relative p-3 rounded-xl transition-all duration-300 text-left border-2 ${selectedVoice === voice.id
+                                            ? "bg-emerald-500/15 border-emerald-400/50 shadow-md shadow-emerald-500/10"
+                                            : "bg-white/[0.05] border-white/10 hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:shadow-md hover:shadow-emerald-500/5"
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-2 rounded-lg border transition-all duration-300 ${selectedVoice === voice.id
+                                                ? "bg-emerald-500/30 border-emerald-400/50"
+                                                : "bg-emerald-500/20 border-emerald-500/30 group-hover:bg-emerald-500/30 group-hover:border-emerald-400/50"
+                                            }`}>
+                                            <div className="text-lg">
+                                                {voice.gender === "female" ? "👩" : "👨"}
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col flex-1 min-w-0">
+                                            <span className="text-sm font-semibold text-white">
+                                                {voice.name}
+                                            </span>
+                                            <span className="text-xs text-zinc-400">
+                                                {voice.gender} • {voice.quality}
+                                            </span>
+                                        </div>
+                                        {selectedVoice === voice.id && (
+                                            <div className="p-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30">
+                                                <svg className="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </div>
+                                        )}
+                                    </div>
+                                </button>
+                            )) || (
+                                    <div className="text-center py-8">
+                                        <div className="p-4 rounded-full bg-zinc-800/50 mx-auto w-fit mb-4">
+                                            <FaMicrophone className="h-8 w-8 text-zinc-500" />
+                                        </div>
+                                        <p className="text-zinc-400">No voices available for {selectedLanguage}</p>
+                                    </div>
+                                )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="pt-4 border-t border-white/10">
+                            <button
+                                onClick={() => setIsVoiceModalOpen(false)}
+                                className="w-full px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-semibold transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-emerald-500/20 text-sm"
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

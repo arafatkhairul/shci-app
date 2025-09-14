@@ -1991,21 +1991,68 @@ async def ws_endpoint(ws: WebSocket):
                                     corrected_ai_text = enforce_level_style(ai_text, mem.level)
                                     log.info(f"[{conn_id}] 🎯 Level {mem.level} enforced: '{ai_text[:60]}...' → '{corrected_ai_text[:60]}...'")
 
-                                    # Separate grammar correction from TTS text
+                                    # Create structured TTS text with grammar correction
                                     tts_text = corrected_ai_text
+                                    log.info(f"[{conn_id}] 🔍 Checking for grammar correction markers...")
                                     if "🔴 GRAMMAR_CORRECTION_START 🔴" in corrected_ai_text:
-                                        # Extract only the LLM answer part for TTS (after grammar correction end)
+                                        # Parse grammar correction and create structured TTS text
+                                        start_marker = "🔴 GRAMMAR_CORRECTION_START 🔴"
                                         end_marker = "🔴 GRAMMAR_CORRECTION_END 🔴"
-                                        if end_marker in corrected_ai_text:
-                                            tts_text = corrected_ai_text.split(end_marker)[1].strip()
-                                            # Clean up the TTS text
-                                            tts_lines = [line.strip() for line in tts_text.split('\n') if line.strip()]
-                                            tts_text = ' '.join(tts_lines)
+                                        
+                                        start_index = corrected_ai_text.find(start_marker)
+                                        end_index = corrected_ai_text.find(end_marker)
+                                        log.info(f"[{conn_id}] 🔍 Grammar markers - Start: {start_index}, End: {end_index}")
+                                        
+                                        if start_index != -1 and end_index != -1:
+                                            grammar_text = corrected_ai_text[start_index + len(start_marker):end_index].strip()
+                                            ai_response = corrected_ai_text[end_index + len(end_marker):].strip()
+                                            
+                                            # Parse incorrect and correct text
+                                            incorrect_text = ""
+                                            correct_text = ""
+                                            
+                                            # Clean the grammar text
+                                            clean_grammar_text = grammar_text.replace("•", "").replace("-", "").strip()
+                                            
+                                            # Try to parse INCORRECT: ... CORRECT: ... format
+                                            import re
+                                            patterns = [
+                                                r"INCORRECT:\s*([^\n]+)\s*\n\s*CORRECT:\s*([^\n]+)",
+                                                r"❌\s*([^✅]+?)\s*✅\s*(.+)",
+                                                r"Wrong:\s*([^C]+?)\s*Correct:\s*(.+)",
+                                                r"Error:\s*([^F]+?)\s*Fixed:\s*(.+)"
+                                            ]
+                                            
+                                            for pattern in patterns:
+                                                match = re.search(pattern, clean_grammar_text, re.IGNORECASE)
+                                                if match:
+                                                    incorrect_text = match.group(1).strip()
+                                                    correct_text = match.group(2).strip()
+                                                    break
+                                            
+                                            # If no pattern matched, try line-by-line parsing
+                                            if not incorrect_text and not correct_text:
+                                                lines = [line.strip() for line in clean_grammar_text.split('\n') if line.strip()]
+                                                for line in lines:
+                                                    if re.match(r"^(INCORRECT|❌|Wrong|Error):", line, re.IGNORECASE):
+                                                        incorrect_text = re.sub(r"^(INCORRECT|❌|Wrong|Error):\s*", "", line, flags=re.IGNORECASE).strip()
+                                                    elif re.match(r"^(CORRECT|✅|Correct|Fixed):", line, re.IGNORECASE):
+                                                        correct_text = re.sub(r"^(CORRECT|✅|Correct|Fixed):\s*", "", line, flags=re.IGNORECASE).strip()
+                                            
+                                            # Create structured TTS text
+                                            if incorrect_text and correct_text:
+                                                tts_text = f"Grammar correction. You said: {incorrect_text}. The correct way is: {correct_text}. {ai_response}"
+                                                log.info(f"[{conn_id}] ✅ Grammar correction TTS text created!")
+                                            else:
+                                                # Fallback: just use AI response
+                                                tts_text = ai_response
+                                                log.info(f"[{conn_id}] ⚠️ Fallback: Using AI response only")
                                         else:
                                             # Fallback: remove grammar correction markers
                                             tts_text = corrected_ai_text.replace("🔴 GRAMMAR_CORRECTION_START 🔴", "").replace("🔴 GRAMMAR_CORRECTION_END 🔴", "").strip()
                                     
                                     log.info(f"[{conn_id}] 📤 Sending AI response to frontend: '{corrected_ai_text[:60]}...'")
+                                    log.info(f"[{conn_id}] 🔊 TTS text for audio: '{tts_text[:100]}...'")
                                     await send_json(ws, {"type": "ai_text", "text": corrected_ai_text})
                                     mem.add_history("assistant", corrected_ai_text)
                                     log.info(f"[{conn_id}] ✅ AI response sent successfully")
