@@ -75,6 +75,8 @@ class PiperTTSProvider(TTSInterface):
         self.voice = None
         self.model_path = None
         self.config_path = None
+        self._voice_cache = {}  # Cache for multiple voice models
+        self._initialized = False
         
         # Voice configuration with multiple models
         self.voice_configs = {
@@ -153,9 +155,11 @@ class PiperTTSProvider(TTSInterface):
         
         if self.available:
             self._initialize_voice()
+            self._initialized = True
             log.info(f"🔧 CUDA: {'Enabled' if self.use_cuda else 'Disabled'}")
+            log.info(f"✅ Piper TTS initialized with voice: {self.current_voice}")
         else:
-            pass
+            log.warning("❌ Piper TTS not available")
     
     def _detect_device_config(self):
         """Force CPU usage for Piper TTS - GPU completely disabled."""
@@ -242,6 +246,12 @@ class PiperTTSProvider(TTSInterface):
     def _initialize_voice(self):
         """Initialize Piper voice model with GPU/CPU configuration."""
         try:
+            # Check if voice is already cached
+            if self.current_voice in self._voice_cache:
+                log.info(f"🎤 Using cached voice: {self.current_voice}")
+                self.voice = self._voice_cache[self.current_voice]
+                return
+            
             # Get URLs for current voice
             voice_config = self.voice_configs[self.current_voice]
             model_url = voice_config["model_url"]
@@ -291,6 +301,10 @@ class PiperTTSProvider(TTSInterface):
                 )
                 log.info("[OK] Model loaded successfully with CPU")
             
+            # Cache the loaded voice
+            self._voice_cache[self.current_voice] = self.voice
+            log.info(f"💾 Voice cached: {self.current_voice}")
+            
         except Exception as e:
             log.error(f"Failed to initialize Piper voice: {e}")
             self.available = False
@@ -311,43 +325,38 @@ class PiperTTSProvider(TTSInterface):
             self.model_path = voice_config["model_path"]
             self.config_path = voice_config["config_path"]
             
-            # Clear existing voice model
-            self.voice = None
-            
-            # Reinitialize voice with new model
-            log.info(f"🎤 Loading new model: {self.model_path}")
-            self._initialize_voice()
-            
-            if self.voice:
-                log.info(f"✅ Voice switched successfully to {voice_config['name']}")
+            # Check if voice is already cached
+            if voice_id in self._voice_cache:
+                log.info(f"🎤 Using cached voice: {voice_id}")
+                self.voice = self._voice_cache[voice_id]
+                log.info(f"✅ Voice switched successfully to {voice_config['name']} (from cache)")
             else:
-                log.error(f"❌ Failed to load voice model for {voice_id}")
+                # Load new voice model
+                log.info(f"🎤 Loading new model: {self.model_path}")
+                self._initialize_voice()
+                
+                if self.voice:
+                    log.info(f"✅ Voice switched successfully to {voice_config['name']}")
+                else:
+                    log.error(f"❌ Failed to load voice model for {voice_id}")
 
     async def synthesize_async(self, text: str, language: str = "en", voice: str = None, **kwargs) -> bytes:
         """Asynchronously synthesize text using Piper TTS."""
         if not self.available or not self.voice:
             raise RuntimeError("Piper TTS not available")
         
-        # Switch voice if specified
+        # Switch voice if specified (optimized with caching)
         if voice and voice != self.current_voice:
-            log.info(f"🎤 Switching voice from {self.current_voice} to {voice}")
             self.set_voice(voice)
-        elif voice:
-            log.info(f"🎤 Using current voice: {voice}")
-        
-        # Log current voice being used for synthesis
-        current_voice_config = self.voice_configs.get(self.current_voice, {})
-        voice_name = current_voice_config.get('name', 'Unknown')
-        log.info(f"🎤 Synthesizing with voice: {voice_name} ({self.current_voice})")
         
         try:
             loop = asyncio.get_event_loop()
             # Remove unsupported parameters from kwargs as Piper TTS doesn't support them
             piper_kwargs = {k: v for k, v in kwargs.items() if k not in ['speaker_wav', 'speed']}
             # Use optimized streaming for better performance
-            # Note: run_in_executor doesn't accept **kwargs, so we pass parameters directly
             return await loop.run_in_executor(None, self.synthesize_stream_optimized, text, language, voice, piper_kwargs)
         except Exception as e:
+            log.error(f"Synthesis error: {e}")
             return b""
     
     def synthesize_sync(self, text: str, language: str = "en", voice: str = None, **kwargs) -> bytes:
@@ -469,19 +478,11 @@ class PiperTTSProvider(TTSInterface):
             return b""
     
     def synthesize_stream_optimized(self, text: str, language: str = "en", voice: str = None, kwargs: dict = None) -> bytes:
-        """Optimized synthesis for real-time response using memory buffer."""
-        if not self.available:
+        """Ultra-optimized synthesis for minimal latency using direct memory operations."""
+        if not self.available or not self.voice:
             raise RuntimeError("Piper TTS not available")
         
-        if voice and voice != self.current_voice:
-            self.set_voice(voice)
-        
-        if not self.voice:
-            self._initialize_voice()
-        
-        log.info(f"🎤 Starting optimized synthesis for voice: {self.current_voice}")
-        
-        # Use memory buffer instead of file for faster processing
+        # Use memory buffer for fastest processing
         import io
         
         # Create in-memory WAV buffer
@@ -500,20 +501,9 @@ class PiperTTSProvider(TTSInterface):
                 noise_scale = kwargs.get('noise_scale', self.noise_scale)
                 noise_w = kwargs.get('noise_w', self.noise_w)
                 
-                # Debug log for noise_scale
-                log.info(f"🎵 NOISE_SCALE DEBUG: kwargs={kwargs}, noise_scale={noise_scale}, self.noise_scale={self.noise_scale}")
-                
-                # Detect API signature
-                sig = inspect.signature(PiperVoice.synthesize)
-                params = sig.parameters
-                use_kwargs = all(k in params for k in ("length_scale", "noise_scale", "noise_w"))
-                has_syn_config = ("syn_config" in params) or ("synthesis_config" in params)
-                
-                log.info("🚀 Using optimized memory-based synthesis")
-                
-                # Use the most efficient synthesis method
-                if use_kwargs:
-                    # New API: direct kwargs (fastest)
+                # Use the fastest synthesis method available
+                try:
+                    # Try direct synthesis (fastest method)
                     self.voice.synthesize(
                         text,
                         wf,
@@ -522,38 +512,28 @@ class PiperTTSProvider(TTSInterface):
                         noise_w=noise_w,
                         sentence_silence=0.0,
                     )
-                elif has_syn_config:
-                    # Old API: SynthesisConfig object
-                    from piper.voice import SynthesisConfig
-                    
+                except Exception as e:
+                    # Fallback to SynthesisConfig if direct method fails
                     try:
-                        cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w=noise_w)
-                    except TypeError:
-                        cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w_scale=noise_w)
-                    
-                    kw = {}
-                    if "syn_config" in params:
-                        kw["syn_config"] = cfg
-                    else:
-                        kw["synthesis_config"] = cfg
-                    
-                    try:
-                        self.voice.synthesize(text, wf, **kw)
-                    except TypeError:
-                        self.voice.synthesize_wav(text, wf, **kw)
-                else:
-                    # Fallback to basic synthesis
-                    self.voice.synthesize_wav(text, wf)
+                        from piper.voice import SynthesisConfig
+                        cfg = SynthesisConfig(
+                            length_scale=length_scale, 
+                            noise_scale=noise_scale, 
+                            noise_w=noise_w
+                        )
+                        self.voice.synthesize(text, wf, syn_config=cfg)
+                    except Exception:
+                        # Final fallback
+                        self.voice.synthesize_wav(text, wf)
             
             # Get audio data from buffer
             audio_data = wav_buffer.getvalue()
             wav_buffer.close()
             
-            log.info(f"✅ Optimized synthesis completed: {len(audio_data)} bytes")
             return audio_data
             
         except Exception as e:
-            log.error(f"Optimized synthesis failed: {e}")
+            log.error(f"Ultra-optimized synthesis failed: {e}")
             wav_buffer.close()
             return b""
     
@@ -749,8 +729,19 @@ class TTSFactory:
         provider = self.get_provider(system)
         return provider.synthesize_sync(text, language, voice, **kwargs)
 
+# Global TTS factory instance (Singleton pattern)
+_tts_factory_instance = None
+
+def get_tts_factory() -> TTSFactory:
+    """Get singleton TTS factory instance."""
+    global _tts_factory_instance
+    if _tts_factory_instance is None:
+        _tts_factory_instance = TTSFactory()
+        log.info("🏭 TTS Factory initialized (singleton)")
+    return _tts_factory_instance
+
 # Global TTS factory instance
-tts_factory = TTSFactory()
+tts_factory = get_tts_factory()
 
 # Convenience functions
 def get_tts_provider(system: Optional[TTSSystem] = None) -> TTSInterface:
