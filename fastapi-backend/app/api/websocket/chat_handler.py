@@ -192,7 +192,7 @@ class ChatHandler:
 
     async def generate_and_send_response(self, websocket: WebSocket, transcript: str, 
                                        mem: SessionMemory, conn_id: str):
-        """Generate AI response and send it"""
+        """Generate AI response with real-time streaming TTS"""
         try:
             # Get language configuration
             lang_config = LANGUAGES[mem.language]
@@ -201,32 +201,93 @@ class ChatHandler:
             # Create context messages
             context_messages = self.llm_service.create_context_messages(mem.get_recent_context())
             
-            # Generate AI response
-            ai_response = await self.llm_service.generate_with_context(
-                user_message=transcript,
-                context=context_messages,
-                persona=persona,
-                language=mem.language
-            )
+            # Add user message to memory
+            mem.add_history("user", transcript)
             
-            if ai_response:
-                # Add to memory
-                mem.add_history("assistant", ai_response)
+            # Generate streaming AI response
+            full_response = ""
+            async for text_chunk in self.llm_service.generate_streaming_response(
+                messages=context_messages + [{"role": "user", "content": transcript}],
+                temperature=0.7
+            ):
+                if text_chunk:
+                    full_response += text_chunk
+                    
+                    # Send text chunk to frontend for real-time display
+                    await self.send_json(websocket, {
+                        "type": "ai_text_chunk", 
+                        "text": text_chunk,
+                        "is_final": False
+                    })
+            
+            if full_response:
+                # Send final complete text
+                await self.send_json(websocket, {
+                    "type": "ai_text", 
+                    "text": full_response,
+                    "is_final": True
+                })
                 
-                # Send text response
-                await self.send_json(websocket, {"type": "ai_text", "text": ai_response})
+                # Add complete response to memory
+                mem.add_history("assistant", full_response)
                 
-                # Generate and send audio
-                await self.generate_and_send_audio(websocket, ai_response, mem, conn_id)
+                # Generate and send streaming audio
+                await self.generate_and_send_streaming_audio(websocket, full_response, mem, conn_id)
             else:
                 log.warning(f"[{conn_id}] No AI response generated")
                 
         except Exception as e:
             log_exception(log, f"[{conn_id}] generate_response", e)
 
+    async def generate_and_send_streaming_audio(self, websocket: WebSocket, text: str, 
+                                              mem: SessionMemory, conn_id: str):
+        """Generate and send streaming audio chunks"""
+        try:
+            # Create a simple text stream from the complete text
+            async def text_stream():
+                # Split text into chunks for streaming
+                words = text.split()
+                chunk_size = 8  # Process 8 words at a time
+                
+                for i in range(0, len(words), chunk_size):
+                    chunk = " ".join(words[i:i + chunk_size])
+                    if i + chunk_size < len(words):
+                        chunk += " "  # Add space if not the last chunk
+                    yield chunk
+                    await asyncio.sleep(0.1)  # Small delay between chunks
+            
+            # Generate streaming audio chunks
+            async for audio_chunk in self.tts_service.synthesize_streaming_chunks(
+                text_stream=text_stream(),
+                language=mem.language,
+                voice=mem.voice,
+                level=mem.level,
+                chunk_size=50
+            ):
+                if audio_chunk and audio_chunk.get('audio_data'):
+                    audio_b64 = base64.b64encode(audio_chunk['audio_data']).decode("utf-8")
+                    await self.send_json(websocket, {
+                        "type": "ai_audio_chunk",
+                        "text": audio_chunk['text'],
+                        "audio_base64": audio_b64,
+                        "audio_size": audio_chunk['audio_size'],
+                        "is_final": False
+                    })
+                    log.info(f"[{conn_id}] 🔊 Audio chunk sent ({audio_chunk['audio_size']} bytes)")
+            
+            # Send final audio completion signal
+            await self.send_json(websocket, {
+                "type": "ai_audio_complete",
+                "is_final": True
+            })
+            log.info(f"[{conn_id}] 🔊 Audio streaming completed")
+                
+        except Exception as e:
+            log_exception(log, f"[{conn_id}] generate_streaming_audio", e)
+
     async def generate_and_send_audio(self, websocket: WebSocket, text: str, 
                                     mem: SessionMemory, conn_id: str):
-        """Generate and send audio response"""
+        """Generate and send audio response (legacy method)"""
         try:
             # Synthesize audio
             audio_data = await self.tts_service.synthesize_with_level(

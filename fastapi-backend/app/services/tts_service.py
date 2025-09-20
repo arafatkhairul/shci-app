@@ -89,3 +89,84 @@ class TTSService:
             length_scale=adjusted_length_scale
         )
 
+    async def synthesize_streaming_chunks(
+        self,
+        text_stream,
+        language: str = "en",
+        voice: Optional[str] = None,
+        level: str = "medium",
+        chunk_size: int = 50
+    ):
+        """Synthesize text chunks as they arrive from streaming LLM"""
+        import asyncio
+        from collections import deque
+        
+        # Buffer for accumulating text
+        text_buffer = ""
+        sentence_endings = ['.', '!', '?', ';', ':', '\n']
+        
+        # Adjust length scale based on level
+        adjusted_length_scale = self.length_scale * self.adjust_speed_for_level(level)
+        
+        async for chunk in text_stream:
+            if not chunk:
+                continue
+                
+            text_buffer += chunk
+            
+            # Check if we have enough text for a meaningful audio chunk
+            if len(text_buffer) >= chunk_size:
+                # Find a good breaking point (sentence ending)
+                break_point = -1
+                for i in range(len(text_buffer) - 1, -1, -1):
+                    if text_buffer[i] in sentence_endings:
+                        break_point = i + 1
+                        break
+                
+                # If no sentence ending found, use chunk_size
+                if break_point == -1:
+                    break_point = min(chunk_size, len(text_buffer))
+                
+                # Extract text to synthesize
+                text_to_synthesize = text_buffer[:break_point].strip()
+                text_buffer = text_buffer[break_point:]
+                
+                if text_to_synthesize:
+                    try:
+                        # Synthesize this chunk
+                        audio_data = await self.synthesize_text(
+                            text=text_to_synthesize,
+                            language=language,
+                            voice=voice,
+                            length_scale=adjusted_length_scale
+                        )
+                        
+                        if audio_data:
+                            yield {
+                                'text': text_to_synthesize,
+                                'audio_data': audio_data,
+                                'audio_size': len(audio_data)
+                            }
+                    except Exception as e:
+                        log.error(f"TTS streaming chunk error: {e}")
+                        continue
+        
+        # Process any remaining text in buffer
+        if text_buffer.strip():
+            try:
+                audio_data = await self.synthesize_text(
+                    text=text_buffer.strip(),
+                    language=language,
+                    voice=voice,
+                    length_scale=adjusted_length_scale
+                )
+                
+                if audio_data:
+                    yield {
+                        'text': text_buffer.strip(),
+                        'audio_data': audio_data,
+                        'audio_size': len(audio_data)
+                    }
+            except Exception as e:
+                log.error(f"TTS final chunk error: {e}")
+

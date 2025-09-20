@@ -3,7 +3,8 @@ LLM Service for AI interactions
 """
 import asyncio
 import aiohttp
-from typing import Dict, Any, Optional
+import json
+from typing import Dict, Any, Optional, AsyncGenerator
 from app.config.settings import settings
 from app.utils.logger import get_logger, log_exception
 
@@ -61,6 +62,53 @@ class LLMService:
                 await asyncio.sleep(1)  # Wait before retry
         
         return None
+
+    async def generate_streaming_response(
+        self, 
+        messages: list, 
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None
+    ):
+        """Generate streaming response from LLM"""
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}" if self.api_key else ""
+        }
+        
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "stream": True
+        }
+        
+        if max_tokens:
+            payload["max_tokens"] = max_tokens
+        
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+                async with session.post(self.api_url, json=payload, headers=headers) as response:
+                    if response.status == 200:
+                        async for line in response.content:
+                            line = line.decode('utf-8').strip()
+                            if line.startswith('data: '):
+                                data_str = line[6:]  # Remove 'data: ' prefix
+                                if data_str == '[DONE]':
+                                    break
+                                try:
+                                    data = json.loads(data_str)
+                                    if 'choices' in data and len(data['choices']) > 0:
+                                        delta = data['choices'][0].get('delta', {})
+                                        if 'content' in delta:
+                                            yield delta['content']
+                                except json.JSONDecodeError:
+                                    continue
+                    else:
+                        log.warning(f"LLM streaming API returned status {response.status}")
+                        
+        except Exception as e:
+            log_exception(log, "LLM streaming error", e)
 
     async def generate_with_context(
         self,

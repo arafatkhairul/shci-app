@@ -1339,6 +1339,46 @@ export default function VoiceAgent() {
         }
     };
 
+    // ---------- Helpers: Real-time Audio Chunk Playback ----------
+    const playAudioChunk = async (base64: string) => {
+        try {
+            if (!audioCtx.current) {
+                audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            }
+            await audioCtx.current.resume();
+
+            const binary = atob(base64);
+            const array = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+
+            const audioBuf = await audioCtx.current.decodeAudioData(array.buffer);
+            const src = audioCtx.current.createBufferSource();
+            src.buffer = audioBuf;
+            src.connect(audioCtx.current.destination);
+            
+            // Set speaking state for first chunk
+            if (!aiSpeaking) {
+                setAiSpeaking(true);
+                setIsWaitingForResponse(false);
+            }
+            
+            src.start(0);
+        } catch (error) {
+            console.error("Error playing audio chunk:", error);
+            // Fallback to simple audio element
+            try {
+                const el = new Audio(`data:audio/wav;base64,${base64}`);
+                if (!aiSpeaking) {
+                    setAiSpeaking(true);
+                    setIsWaitingForResponse(false);
+                }
+                el.play();
+            } catch (fallbackError) {
+                console.error("Fallback audio chunk error:", fallbackError);
+            }
+        }
+    };
+
     // ---------- WS URL ----------
     const buildWsUrl = () => {
         // Use environment variables for WebSocket URL configuration
@@ -1409,12 +1449,27 @@ export default function VoiceAgent() {
                     try {
                         const data = JSON.parse(event.data);
                         switch (data.type) {
+                            case "ai_text_chunk":
+                                console.log("🤖 AI Text chunk received:", data.text);
+                                // Append text chunk for real-time display
+                                setAiText(prev => prev + (data.text || ""));
+                                break;
+
                             case "ai_text":
                                 console.log("🤖 AI Response received:", data.text);
                                 setAiText(data.text || "");
                                 setIsProcessing(false);
                                 // Don't clear waiting state here - keep "AI Thinking" until audio starts
                                 if (useLocalTTS && data.text) speakWithGrammarCorrection(data.text);
+                                break;
+
+                            case "ai_audio_chunk":
+                                console.log("🔊 AI Audio chunk received:", data.audio_base64 ? "Yes" : "No");
+                                setIsProcessing(false);
+                                // Play audio chunk immediately for real-time experience
+                                if (!useLocalTTS && data.audio_base64) {
+                                    await playAudioChunk(data.audio_base64);
+                                }
                                 break;
 
                             case "ai_audio":
@@ -1424,6 +1479,12 @@ export default function VoiceAgent() {
                                 if (!useLocalTTS && data.audio_base64) {
                                     await playServerMp3(data.audio_base64);
                                 }
+                                break;
+
+                            case "ai_audio_complete":
+                                console.log("🔊 AI Audio streaming completed");
+                                setAiSpeaking(false);
+                                setIsWaitingForResponse(false);
                                 break;
 
                             case "final_transcript":
