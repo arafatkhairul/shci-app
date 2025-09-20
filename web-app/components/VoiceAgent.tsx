@@ -95,6 +95,7 @@ export default function VoiceAgent() {
     const audioQueueRef = useRef<AudioBufferSourceNode[]>([]);
     const isPlayingAudioRef = useRef(false);
     const currentAudioIndexRef = useRef(0);
+    const audioPlaybackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Professional mic level update function with advanced filtering
     const updateMicLevel = useCallback((rawValue: number, source: string) => {
@@ -1344,6 +1345,36 @@ export default function VoiceAgent() {
         }
     };
 
+    // ---------- Helpers: Audio Management ----------
+    const stopAllAudio = () => {
+        console.log("🛑 Stopping all audio playback");
+        
+        // Stop all audio sources in queue
+        audioQueueRef.current.forEach((src, index) => {
+            try {
+                src.stop();
+                src.disconnect();
+            } catch (error) {
+                console.log(`Audio source ${index} already stopped`);
+            }
+        });
+        
+        // Clear queue and reset state
+        audioQueueRef.current = [];
+        currentAudioIndexRef.current = 0;
+        isPlayingAudioRef.current = false;
+        
+        // Clear any pending timeouts
+        if (audioPlaybackTimeoutRef.current) {
+            clearTimeout(audioPlaybackTimeoutRef.current);
+            audioPlaybackTimeoutRef.current = null;
+        }
+        
+        // Reset audio state
+        setAiSpeaking(false);
+        setIsWaitingForResponse(false);
+    };
+
     // ---------- Helpers: Real-time Audio Chunk Playback ----------
     const playAudioChunk = async (base64: string) => {
         try {
@@ -1361,15 +1392,26 @@ export default function VoiceAgent() {
             src.buffer = audioBuf;
             src.connect(audioCtx.current.destination);
             
-            // Add to audio queue
-            audioQueueRef.current.push(src);
-            
-            // Set speaking state for first chunk
+            // If not currently playing, start playing immediately
             if (!isPlayingAudioRef.current) {
+                console.log("🎵 Starting new audio playback");
+                audioQueueRef.current = [src]; // Clear queue and start fresh
+                currentAudioIndexRef.current = 0;
+                isPlayingAudioRef.current = true;
                 setAiSpeaking(true);
                 setIsWaitingForResponse(false);
-                isPlayingAudioRef.current = true;
-                playNextAudioInQueue();
+                
+                // Play immediately
+                src.onended = () => {
+                    console.log("🎵 Audio chunk finished");
+                    isPlayingAudioRef.current = false;
+                    setAiSpeaking(false);
+                    setIsWaitingForResponse(false);
+                };
+                src.start(0);
+            } else {
+                console.log("🎵 Audio already playing, skipping chunk");
+                // If already playing, skip this chunk to prevent overlap
             }
             
         } catch (error) {
@@ -1377,28 +1419,14 @@ export default function VoiceAgent() {
         }
     };
 
-    const playNextAudioInQueue = () => {
-        if (currentAudioIndexRef.current < audioQueueRef.current.length) {
-            const src = audioQueueRef.current[currentAudioIndexRef.current];
-            
-            src.onended = () => {
-                currentAudioIndexRef.current++;
-                if (currentAudioIndexRef.current < audioQueueRef.current.length) {
-                    // Play next audio in queue
-                    playNextAudioInQueue();
-                } else {
-                    // All audio chunks played, clear queue
-                    audioQueueRef.current = [];
-                    currentAudioIndexRef.current = 0;
-                    isPlayingAudioRef.current = false;
-                    setAiSpeaking(false);
-                    setIsWaitingForResponse(false);
-                }
-            };
-            
-            src.start(0);
-        }
-    };
+
+    // ---------- Cleanup Effect ----------
+    useEffect(() => {
+        return () => {
+            // Cleanup audio on component unmount
+            stopAllAudio();
+        };
+    }, []);
 
     // ---------- WS URL ----------
     const buildWsUrl = () => {
@@ -1491,10 +1519,8 @@ export default function VoiceAgent() {
 
                             case "ai_audio_start":
                                 console.log("🔊 AI Audio streaming started - clearing previous audio");
-                                // Clear previous audio queue and reset state
-                                audioQueueRef.current = [];
-                                currentAudioIndexRef.current = 0;
-                                isPlayingAudioRef.current = false;
+                                // Stop all current audio and clear state
+                                stopAllAudio();
                                 break;
 
                             case "ai_audio_chunk":
@@ -1517,8 +1543,7 @@ export default function VoiceAgent() {
 
                             case "ai_audio_complete":
                                 console.log("🔊 AI Audio streaming completed");
-                                setAiSpeaking(false);
-                                setIsWaitingForResponse(false);
+                                // Audio completion is handled by individual chunk onended events
                                 break;
 
                             case "final_transcript":
