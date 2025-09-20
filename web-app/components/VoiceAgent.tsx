@@ -97,6 +97,11 @@ export default function VoiceAgent() {
     const currentAudioIndexRef = useRef(0);
     const audioPlaybackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const audioQueueLockRef = useRef(false);
+    
+    // Real-time text highlighting during audio playback
+    const [highlightedText, setHighlightedText] = useState("");
+    const [currentSpeakingText, setCurrentSpeakingText] = useState("");
+    const speakingTextRef = useRef("");
 
     // Professional mic level update function with advanced filtering
     const updateMicLevel = useCallback((rawValue: number, source: string) => {
@@ -1375,10 +1380,12 @@ export default function VoiceAgent() {
         // Reset audio state
         setAiSpeaking(false);
         setIsWaitingForResponse(false);
+        setHighlightedText("");
+        setCurrentSpeakingText("");
     };
 
     // ---------- Helpers: Real-time Audio Chunk Playback ----------
-    const playAudioChunk = async (base64: string) => {
+    const playAudioChunk = async (base64: string, text?: string) => {
         try {
             if (!audioCtx.current) {
                 audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -1393,6 +1400,11 @@ export default function VoiceAgent() {
             const src = audioCtx.current.createBufferSource();
             src.buffer = audioBuf;
             src.connect(audioCtx.current.destination);
+            
+            // Store text for highlighting
+            if (text) {
+                src.text = text;
+            }
             
             // Add to queue instead of playing immediately
             audioQueueRef.current.push(src);
@@ -1418,6 +1430,8 @@ export default function VoiceAgent() {
             isPlayingAudioRef.current = false;
             setAiSpeaking(false);
             setIsWaitingForResponse(false);
+            setHighlightedText("");
+            setCurrentSpeakingText("");
             return;
         }
 
@@ -1432,9 +1446,19 @@ export default function VoiceAgent() {
         console.log(`🎵 Playing audio chunk (${audioQueueRef.current.length} remaining in queue)`);
         isPlayingAudioRef.current = true;
 
+        // Highlight the text being spoken
+        if (src.text) {
+            setCurrentSpeakingText(src.text);
+            setHighlightedText(src.text);
+            speakingTextRef.current = src.text;
+        }
+
         src.onended = () => {
             console.log("🎵 Audio chunk finished");
             isPlayingAudioRef.current = false;
+            
+            // Clear highlighting for this chunk
+            setHighlightedText("");
             
             // Play next audio in queue after a short delay
             setTimeout(() => {
@@ -1554,7 +1578,7 @@ export default function VoiceAgent() {
                                 setIsProcessing(false);
                                 // Play audio chunk immediately for real-time experience
                                 if (!useLocalTTS && data.audio_base64) {
-                                    await playAudioChunk(data.audio_base64);
+                                    await playAudioChunk(data.audio_base64, data.text);
                                 }
                                 break;
 
@@ -3593,10 +3617,27 @@ export default function VoiceAgent() {
                                                      </div>
                                                      <div className="bg-green-500/5 border-l-2 border-green-400 rounded-lg p-3">
                                                          <p className="text-sm leading-relaxed text-green-200 whitespace-pre-wrap">
-                                                             {aiText.includes('🔴 GRAMMAR_CORRECTION_START 🔴')
-                                                                 ? aiText.split('🔴 GRAMMAR_CORRECTION_END 🔴')[1]?.trim() || aiText
-                                                                 : aiText
-                                                             }
+                                                             {(() => {
+                                                                 const displayText = aiText.includes('🔴 GRAMMAR_CORRECTION_START 🔴')
+                                                                     ? aiText.split('🔴 GRAMMAR_CORRECTION_END 🔴')[1]?.trim() || aiText
+                                                                     : aiText;
+                                                                 
+                                                                 // If there's highlighted text, show it with highlighting
+                                                                 if (highlightedText && displayText.includes(highlightedText)) {
+                                                                     const parts = displayText.split(highlightedText);
+                                                                     return (
+                                                                         <>
+                                                                             {parts[0]}
+                                                                             <span className="bg-yellow-400/30 text-yellow-100 px-1 rounded animate-pulse">
+                                                                                 {highlightedText}
+                                                                             </span>
+                                                                             {parts[1]}
+                                                                         </>
+                                                                     );
+                                                                 }
+                                                                 
+                                                                 return displayText;
+                                                             })()}
                                                          </p>
                                                      </div>
                                                  </div>
