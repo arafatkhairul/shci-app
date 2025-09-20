@@ -96,6 +96,7 @@ export default function VoiceAgent() {
     const isPlayingAudioRef = useRef(false);
     const currentAudioIndexRef = useRef(0);
     const audioPlaybackTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const audioQueueLockRef = useRef(false);
 
     // Professional mic level update function with advanced filtering
     const updateMicLevel = useCallback((rawValue: number, source: string) => {
@@ -1363,6 +1364,7 @@ export default function VoiceAgent() {
         audioQueueRef.current = [];
         currentAudioIndexRef.current = 0;
         isPlayingAudioRef.current = false;
+        audioQueueLockRef.current = false;
         
         // Clear any pending timeouts
         if (audioPlaybackTimeoutRef.current) {
@@ -1392,23 +1394,55 @@ export default function VoiceAgent() {
             src.buffer = audioBuf;
             src.connect(audioCtx.current.destination);
             
-            // Always play immediately for real-time experience
-            console.log("🎵 Playing audio chunk immediately");
+            // Add to queue instead of playing immediately
+            audioQueueRef.current.push(src);
+            console.log(`🎵 Audio chunk added to queue (${audioQueueRef.current.length} in queue)`);
             
             // Set speaking state
             setAiSpeaking(true);
             setIsWaitingForResponse(false);
             
-            // Play immediately
-            src.onended = () => {
-                console.log("🎵 Audio chunk finished");
-                // Don't reset speaking state here - let the next chunk or completion handle it
-            };
-            src.start(0);
+            // Play next audio if not already playing
+            if (!isPlayingAudioRef.current) {
+                playNextAudioInQueue();
+            }
             
         } catch (error) {
             console.error("Error playing audio chunk:", error);
         }
+    };
+
+    const playNextAudioInQueue = () => {
+        if (audioQueueRef.current.length === 0) {
+            console.log("🎵 No more audio in queue");
+            isPlayingAudioRef.current = false;
+            setAiSpeaking(false);
+            setIsWaitingForResponse(false);
+            return;
+        }
+
+        if (isPlayingAudioRef.current) {
+            console.log("🎵 Already playing audio, waiting...");
+            return;
+        }
+
+        const src = audioQueueRef.current.shift(); // Remove first item from queue
+        if (!src) return;
+
+        console.log(`🎵 Playing audio chunk (${audioQueueRef.current.length} remaining in queue)`);
+        isPlayingAudioRef.current = true;
+
+        src.onended = () => {
+            console.log("🎵 Audio chunk finished");
+            isPlayingAudioRef.current = false;
+            
+            // Play next audio in queue after a short delay
+            setTimeout(() => {
+                playNextAudioInQueue();
+            }, 50); // Small delay to prevent overlap
+        };
+
+        src.start(0);
     };
 
 
