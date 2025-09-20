@@ -490,16 +490,17 @@ class PiperTTSProvider(TTSInterface):
         
         try:
             with wave.open(wav_buffer, 'wb') as wf:
-                # Set audio format
+                # Set audio format for optimal speed
                 wf.setnchannels(1)
                 wf.setsampwidth(2)  # 16-bit
                 wf.setframerate(self.voice.config.sample_rate)
                 
-                # Get synthesis parameters
+                # Get synthesis parameters with speed optimizations
                 kwargs = kwargs or {}
                 length_scale = kwargs.get('length_scale', self.length_scale)
                 noise_scale = kwargs.get('noise_scale', self.noise_scale)
                 noise_w = kwargs.get('noise_w', self.noise_w)
+                sentence_silence = kwargs.get('sentence_silence', 0.0)  # No silence for speed
                 
                 # Use the fastest synthesis method available
                 try:

@@ -216,6 +216,12 @@ class ChatHandler:
                 "is_final": False
             })
             
+            # Pre-warm TTS for faster first response
+            try:
+                await self.tts_service.synthesize_text("", mem.language, mem.voice)
+            except:
+                pass  # Ignore pre-warm errors
+            
             # Create messages with system prompt for voice agent
             messages = [
                 {"role": "system", "content": persona},
@@ -227,7 +233,7 @@ class ChatHandler:
             async for text_chunk in self.llm_service.generate_streaming_response(
                 messages=messages,
                 temperature=0.7,
-                max_tokens=150  # Limit response length
+                max_tokens=100  # Reduced for faster response
             ):
                 if text_chunk:
                     full_response += text_chunk
@@ -298,7 +304,7 @@ class ChatHandler:
         if not text_buffer.strip():
             return False
         
-        # Generate audio only for complete sentences or longer phrases
+        # Generate audio for faster response - reduced thresholds
         words = text_buffer.split()
         sentence_endings = ['.', '!', '?', ';', ':', '\n']
         
@@ -306,9 +312,9 @@ class ChatHandler:
         if any(text_buffer.rstrip().endswith(ending) for ending in sentence_endings):
             return True
         
-        # Only generate audio for longer phrases (6+ words) to avoid word-by-word playback
-        # This ensures we have enough context for natural speech flow
-        if len(words) >= 6:
+        # Generate audio for shorter phrases (3+ words) for instant response
+        # This provides faster audio generation while maintaining quality
+        if len(words) >= 3:
             return True
             
         return False

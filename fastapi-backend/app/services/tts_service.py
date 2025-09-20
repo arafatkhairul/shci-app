@@ -41,15 +41,19 @@ class TTSService:
             # Use provided length scale or default
             length_scale_to_use = length_scale or self.length_scale
             
+            # Optimized synthesis parameters for speed
+            synthesis_params = {
+                'text': text,
+                'language': language,
+                'voice': voice_to_use,
+                'length_scale': length_scale_to_use,
+                'noise_scale': self.noise_scale,
+                'noise_w': self.noise_w,
+                'sentence_silence': 0.0,  # Remove silence for faster response
+            }
+            
             # Direct synthesis using cached provider (no model reloading)
-            audio_data = await self.tts_provider.synthesize_async(
-                text=text,
-                language=language,
-                voice=voice_to_use,
-                length_scale=length_scale_to_use,
-                noise_scale=self.noise_scale,
-                noise_w=self.noise_w
-            )
+            audio_data = await self.tts_provider.synthesize_async(**synthesis_params)
             
             return audio_data
             
