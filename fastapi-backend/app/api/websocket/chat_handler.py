@@ -232,7 +232,6 @@ class ChatHandler:
                 if text_chunk:
                     full_response += text_chunk
                     text_buffer += text_chunk
-                    word_count += len(text_chunk.split())
                     
                     # Send text chunk to frontend for real-time display
                     await self.send_json(websocket, {
@@ -243,7 +242,7 @@ class ChatHandler:
                     })
                     is_first_chunk = False
                     
-                    # Generate audio for text chunk if it contains complete words/sentences
+                    # Generate audio for text chunk if it contains complete sentences
                     if self.should_generate_audio_chunk(text_buffer):
                         audio_chunk = await self.generate_audio_for_text_chunk(
                             text_buffer.strip(), mem, conn_id
@@ -299,19 +298,39 @@ class ChatHandler:
         if not text_buffer.strip():
             return False
         
-        # Generate audio if we have at least 3 words or a sentence ending
+        # Generate audio only for complete sentences or longer phrases
         words = text_buffer.split()
         sentence_endings = ['.', '!', '?', ';', ':', '\n']
         
-        # Check for sentence endings
+        # Check for sentence endings - this is the main trigger
         if any(text_buffer.rstrip().endswith(ending) for ending in sentence_endings):
             return True
         
-        # Check for minimum word count
-        if len(words) >= 3:
+        # Only generate audio for longer phrases (6+ words) to avoid word-by-word playback
+        # This ensures we have enough context for natural speech flow
+        if len(words) >= 6:
             return True
             
         return False
+
+    def split_text_into_sentences(self, text: str) -> list:
+        """Split text into natural sentence chunks for better audio flow"""
+        import re
+        
+        # Split by sentence endings but keep the punctuation
+        sentences = re.split(r'([.!?;:]+)', text)
+        
+        # Recombine sentences with their punctuation
+        result = []
+        for i in range(0, len(sentences), 2):
+            if i + 1 < len(sentences):
+                sentence = sentences[i] + sentences[i + 1]
+                if sentence.strip():
+                    result.append(sentence.strip())
+            elif sentences[i].strip():
+                result.append(sentences[i].strip())
+        
+        return result
 
     async def generate_audio_for_text_chunk(self, text: str, mem: SessionMemory, conn_id: str) -> str:
         """Generate audio for a text chunk and return base64 encoded audio"""
