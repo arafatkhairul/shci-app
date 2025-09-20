@@ -250,13 +250,18 @@ class ChatHandler:
                     
                     # Generate audio for text chunk if it contains complete sentences
                     if self.should_generate_audio_chunk(text_buffer):
+                        # Clean up text for better speech
+                        clean_text = text_buffer.strip()
+                        # Remove extra spaces and normalize text
+                        clean_text = ' '.join(clean_text.split())
+                        
                         audio_chunk = await self.generate_audio_for_text_chunk(
-                            text_buffer.strip(), mem, conn_id
+                            clean_text, mem, conn_id
                         )
                         if audio_chunk:
                             await self.send_json(websocket, {
                                 "type": "ai_audio_chunk",
-                                "text": text_buffer.strip(),
+                                "text": clean_text,
                                 "audio_base64": audio_chunk,
                                 "audio_size": len(audio_chunk),
                                 "is_final": False
@@ -265,13 +270,17 @@ class ChatHandler:
             
             # Generate audio for any remaining text
             if text_buffer.strip():
+                # Clean up final text for better speech
+                clean_text = text_buffer.strip()
+                clean_text = ' '.join(clean_text.split())
+                
                 audio_chunk = await self.generate_audio_for_text_chunk(
-                    text_buffer.strip(), mem, conn_id
+                    clean_text, mem, conn_id
                 )
                 if audio_chunk:
                     await self.send_json(websocket, {
                         "type": "ai_audio_chunk",
-                        "text": text_buffer.strip(),
+                        "text": clean_text,
                         "audio_base64": audio_chunk,
                         "audio_size": len(audio_chunk),
                         "is_final": False
@@ -304,17 +313,17 @@ class ChatHandler:
         if not text_buffer.strip():
             return False
         
-        # Generate audio for faster response - reduced thresholds
+        # Generate audio only for complete sentences to sound natural
         words = text_buffer.split()
         sentence_endings = ['.', '!', '?', ';', ':', '\n']
         
-        # Check for sentence endings - this is the main trigger
+        # Check for sentence endings - this is the main trigger for natural speech
         if any(text_buffer.rstrip().endswith(ending) for ending in sentence_endings):
             return True
         
-        # Generate audio for shorter phrases (3+ words) for instant response
-        # This provides faster audio generation while maintaining quality
-        if len(words) >= 3:
+        # Only generate audio for longer phrases (8+ words) to avoid robotic word-by-word playback
+        # This ensures natural human-like speech flow
+        if len(words) >= 8:
             return True
             
         return False

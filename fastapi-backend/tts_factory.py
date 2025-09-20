@@ -495,12 +495,12 @@ class PiperTTSProvider(TTSInterface):
                 wf.setsampwidth(2)  # 16-bit
                 wf.setframerate(self.voice.config.sample_rate)
                 
-                # Get synthesis parameters with speed optimizations
+                # Get synthesis parameters for natural human-like speech
                 kwargs = kwargs or {}
                 length_scale = kwargs.get('length_scale', self.length_scale)
                 noise_scale = kwargs.get('noise_scale', self.noise_scale)
                 noise_w = kwargs.get('noise_w', self.noise_w)
-                sentence_silence = kwargs.get('sentence_silence', 0.0)  # No silence for speed
+                sentence_silence = kwargs.get('sentence_silence', 0.1)  # Small pause for natural speech
                 
                 # Use the fastest synthesis method available
                 try:

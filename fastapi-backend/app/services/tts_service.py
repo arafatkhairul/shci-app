@@ -41,7 +41,7 @@ class TTSService:
             # Use provided length scale or default
             length_scale_to_use = length_scale or self.length_scale
             
-            # Optimized synthesis parameters for speed
+            # Optimized synthesis parameters for natural human-like speech
             synthesis_params = {
                 'text': text,
                 'language': language,
@@ -49,7 +49,7 @@ class TTSService:
                 'length_scale': length_scale_to_use,
                 'noise_scale': self.noise_scale,
                 'noise_w': self.noise_w,
-                'sentence_silence': 0.0,  # Remove silence for faster response
+                'sentence_silence': 0.1,  # Small pause for natural speech flow
             }
             
             # Direct synthesis using cached provider (no model reloading)
