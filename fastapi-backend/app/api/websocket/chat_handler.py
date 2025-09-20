@@ -227,6 +227,30 @@ class ChatHandler:
                 {"role": "system", "content": persona},
                 {"role": "system", "content": "IMPORTANT: You are a VOICE agent. Keep responses SHORT (1-2 sentences max). Speak naturally and concisely. No long explanations or detailed lists."}
             ]
+            
+            # Add grammar correction prompt
+            grammar_prompt = """IMPORTANT: If the user's input contains grammatical errors, spelling mistakes, or unclear language, respond in this EXACT format:
+
+🔴 GRAMMAR_CORRECTION_START 🔴
+INCORRECT: [exactly what the user said]
+CORRECT: [the grammatically correct version]
+🔴 GRAMMAR_CORRECTION_END 🔴
+
+Then provide your normal response to their question.
+
+EXAMPLE:
+User says: "what your name"
+You respond:
+🔴 GRAMMAR_CORRECTION_START 🔴
+INCORRECT: what your name
+CORRECT: What is your name?
+🔴 GRAMMAR_CORRECTION_END 🔴
+
+My name is SHCI. How can I help you?
+
+If the input is grammatically correct, respond normally without any grammar correction."""
+            
+            messages.append({"role": "system", "content": grammar_prompt})
             messages.extend(context_messages)
             messages.append({"role": "user", "content": transcript})
             

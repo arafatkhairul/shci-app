@@ -3488,13 +3488,16 @@ export default function VoiceAgent() {
                                     <div className="relative p-5 min-h-[180px]">
                                          {aiText ? (
                                              <div className="space-y-4">
-                                                 {/* Grammar Correction Block - Only show if grammar correction exists */}
+                                                 {/* Grammar Correction Block - Always visible when grammar correction exists */}
                                                  {aiText.includes('🔴 GRAMMAR_CORRECTION_START 🔴') && (
-                                                     <div className="bg-red-500/8 border border-red-400/20 rounded-lg p-3 mb-3">
-                                                         <div className="flex items-center gap-2 mb-2">
-                                                             <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
-                                                             <h4 className="text-xs font-semibold text-red-300">Grammar Checker</h4>
-                                                             <div className="ml-auto text-xs text-red-400/70">AI</div>
+                                                     <div className="bg-gradient-to-r from-red-500/15 to-orange-500/15 border border-red-400/40 rounded-xl p-5 mb-4 shadow-xl">
+                                                         <div className="flex items-center gap-3 mb-4">
+                                                             <div className="w-3 h-3 bg-gradient-to-r from-red-400 to-orange-400 rounded-full animate-pulse"></div>
+                                                             <h4 className="text-sm font-bold text-red-300 flex items-center gap-2">
+                                                                 <span>🔍</span>
+                                                                 Grammar Checker
+                                                             </h4>
+                                                             <div className="ml-auto text-xs text-red-400/90 bg-red-500/30 px-3 py-1 rounded-full font-semibold">LIVE</div>
                                                          </div>
 
                                                          {(() => {
@@ -3566,36 +3569,55 @@ export default function VoiceAgent() {
                                                                  }
 
                                                                  return (
-                                                                     <div className="space-y-2">
+                                                                     <div className="space-y-4">
                                                                          {incorrectText && correctText && (
-                                                                             <div className="bg-red-500/5 border border-red-400/20 rounded-lg p-3">
-                                                                                 <div className="space-y-2">
-                                                                                     <div className="flex items-center gap-2">
-                                                                                         <div className="w-1 h-1 bg-red-400 rounded-full"></div>
-                                                                                         <span className="text-xs text-red-300 font-medium">Incorrect:</span>
-                                                                                         <span className="text-xs text-red-200 line-through">{incorrectText}</span>
+                                                                             <div className="space-y-4">
+                                                                                 {/* Incorrect Text Block */}
+                                                                                 <div className="bg-red-500/20 border-l-4 border-red-400 rounded-lg p-4 transform hover:scale-[1.01] transition-all duration-200">
+                                                                                     <div className="flex items-center gap-3 mb-3">
+                                                                                         <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
+                                                                                         <span className="text-sm font-bold text-red-300 flex items-center gap-2">
+                                                                                             <span>❌</span>
+                                                                                             What you said:
+                                                                                         </span>
                                                                                      </div>
-                                                                                     <div className="flex items-center gap-2">
-                                                                                         <div className="w-1 h-1 bg-green-400 rounded-full"></div>
-                                                                                         <span className="text-xs text-green-300 font-medium">Correct:</span>
-                                                                                         <span className="text-xs text-green-200">{correctText}</span>
+                                                                                     <div className="bg-red-500/30 rounded-lg p-4 border border-red-400/30">
+                                                                                         <p className="text-base text-red-100 font-medium leading-relaxed">
+                                                                                             "{incorrectText}"
+                                                                                         </p>
+                                                                                     </div>
+                                                                                 </div>
+
+                                                                                 {/* Correct Text Block */}
+                                                                                 <div className="bg-green-500/20 border-l-4 border-green-400 rounded-lg p-4 transform hover:scale-[1.01] transition-all duration-200">
+                                                                                     <div className="flex items-center gap-3 mb-3">
+                                                                                         <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                                                                                         <span className="text-sm font-bold text-green-300 flex items-center gap-2">
+                                                                                             <span>✅</span>
+                                                                                             Correct way:
+                                                                                         </span>
+                                                                                     </div>
+                                                                                     <div className="bg-green-500/30 rounded-lg p-4 border border-green-400/30">
+                                                                                         <p className="text-base text-green-100 font-medium leading-relaxed">
+                                                                                             "{correctText}"
+                                                                                         </p>
                                                                                      </div>
                                                                                  </div>
                                                                              </div>
                                                                          )}
 
                                                                          {correctText && !incorrectText && (
-                                                                             <div className="bg-green-500/10 border border-green-400/30 rounded-xl p-5 shadow-lg">
+                                                                             <div className="bg-green-500/20 border-l-4 border-green-400 rounded-lg p-4">
                                                                                  <div className="flex items-center gap-3 mb-3">
-                                                                                     <div className="w-3 h-3 bg-green-400 rounded-full"></div>
-                                                                                     <h5 className="text-sm font-bold text-green-300 uppercase tracking-wide">Grammar Check</h5>
-                                                                                     <div className="ml-auto">
-                                                                                         <span className="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded-full">AI</span>
-                                                                                     </div>
+                                                                                     <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                                                                                     <span className="text-sm font-bold text-green-300 flex items-center gap-2">
+                                                                                         <span>✅</span>
+                                                                                         Grammar Check:
+                                                                                     </span>
                                                                                  </div>
-                                                                                 <div className="bg-green-500/5 border-l-4 border-green-400 rounded-lg p-4">
-                                                                                     <p className="text-sm text-green-200 font-medium">
-                                                                                         {correctText}
+                                                                                 <div className="bg-green-500/30 rounded-lg p-4 border border-green-400/30">
+                                                                                     <p className="text-base text-green-100 font-medium leading-relaxed">
+                                                                                         "{correctText}"
                                                                                      </p>
                                                                                  </div>
                                                                              </div>
