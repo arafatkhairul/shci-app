@@ -204,15 +204,26 @@ class ChatHandler:
             # Add user message to memory
             mem.add_history("user", transcript)
             
-            # Generate streaming AI response
+            # Generate streaming AI response with real-time audio
             full_response = ""
             is_first_chunk = True
+            text_buffer = ""
+            word_count = 0
+            
+            # Send audio start signal
+            await self.send_json(websocket, {
+                "type": "ai_audio_start",
+                "is_final": False
+            })
+            
             async for text_chunk in self.llm_service.generate_streaming_response(
                 messages=context_messages + [{"role": "user", "content": transcript}],
                 temperature=0.7
             ):
                 if text_chunk:
                     full_response += text_chunk
+                    text_buffer += text_chunk
+                    word_count += len(text_chunk.split())
                     
                     # Send text chunk to frontend for real-time display
                     await self.send_json(websocket, {
@@ -222,6 +233,35 @@ class ChatHandler:
                         "is_first_chunk": is_first_chunk
                     })
                     is_first_chunk = False
+                    
+                    # Generate audio for text chunk if it contains complete words/sentences
+                    if self.should_generate_audio_chunk(text_buffer):
+                        audio_chunk = await self.generate_audio_for_text_chunk(
+                            text_buffer.strip(), mem, conn_id
+                        )
+                        if audio_chunk:
+                            await self.send_json(websocket, {
+                                "type": "ai_audio_chunk",
+                                "text": text_buffer.strip(),
+                                "audio_base64": audio_chunk,
+                                "audio_size": len(audio_chunk),
+                                "is_final": False
+                            })
+                            text_buffer = ""  # Clear buffer after generating audio
+            
+            # Generate audio for any remaining text
+            if text_buffer.strip():
+                audio_chunk = await self.generate_audio_for_text_chunk(
+                    text_buffer.strip(), mem, conn_id
+                )
+                if audio_chunk:
+                    await self.send_json(websocket, {
+                        "type": "ai_audio_chunk",
+                        "text": text_buffer.strip(),
+                        "audio_base64": audio_chunk,
+                        "audio_size": len(audio_chunk),
+                        "is_final": False
+                    })
             
             if full_response:
                 # Send final complete text
@@ -231,16 +271,66 @@ class ChatHandler:
                     "is_final": True
                 })
                 
+                # Send audio complete signal
+                await self.send_json(websocket, {
+                    "type": "ai_audio_complete",
+                    "is_final": True
+                })
+                
                 # Add complete response to memory
                 mem.add_history("assistant", full_response)
-                
-                # Generate and send streaming audio
-                await self.generate_and_send_streaming_audio(websocket, full_response, mem, conn_id)
             else:
                 log.warning(f"[{conn_id}] No AI response generated")
                 
         except Exception as e:
             log_exception(log, f"[{conn_id}] generate_response", e)
+
+    def should_generate_audio_chunk(self, text_buffer: str) -> bool:
+        """Determine if we should generate audio for the current text buffer"""
+        if not text_buffer.strip():
+            return False
+        
+        # Generate audio if we have at least 3 words or a sentence ending
+        words = text_buffer.split()
+        sentence_endings = ['.', '!', '?', ';', ':', '\n']
+        
+        # Check for sentence endings
+        if any(text_buffer.rstrip().endswith(ending) for ending in sentence_endings):
+            return True
+        
+        # Check for minimum word count
+        if len(words) >= 3:
+            return True
+            
+        return False
+
+    async def generate_audio_for_text_chunk(self, text: str, mem: SessionMemory, conn_id: str) -> str:
+        """Generate audio for a text chunk and return base64 encoded audio"""
+        try:
+            if not text.strip():
+                return None
+                
+            # Generate audio using TTS service
+            audio_data = await self.tts_service.synthesize_text(
+                text=text,
+                language=mem.language,
+                voice=mem.voice,
+                length_scale=self.tts_service.length_scale * self.tts_service.adjust_speed_for_level(mem.level)
+            )
+            
+            if audio_data:
+                # Convert to base64
+                import base64
+                audio_b64 = base64.b64encode(audio_data).decode("utf-8")
+                log.info(f"[{conn_id}] 🔊 Generated audio for text chunk: '{text[:50]}...' ({len(audio_data)} bytes)")
+                return audio_b64
+            else:
+                log.warning(f"[{conn_id}] Failed to generate audio for text chunk")
+                return None
+                
+        except Exception as e:
+            log_exception(log, f"[{conn_id}] generate_audio_for_text_chunk", e)
+            return None
 
     async def generate_and_send_streaming_audio(self, websocket: WebSocket, text: str, 
                                               mem: SessionMemory, conn_id: str):

@@ -1392,27 +1392,19 @@ export default function VoiceAgent() {
             src.buffer = audioBuf;
             src.connect(audioCtx.current.destination);
             
-            // If not currently playing, start playing immediately
-            if (!isPlayingAudioRef.current) {
-                console.log("🎵 Starting new audio playback");
-                audioQueueRef.current = [src]; // Clear queue and start fresh
-                currentAudioIndexRef.current = 0;
-                isPlayingAudioRef.current = true;
-                setAiSpeaking(true);
-                setIsWaitingForResponse(false);
-                
-                // Play immediately
-                src.onended = () => {
-                    console.log("🎵 Audio chunk finished");
-                    isPlayingAudioRef.current = false;
-                    setAiSpeaking(false);
-                    setIsWaitingForResponse(false);
-                };
-                src.start(0);
-            } else {
-                console.log("🎵 Audio already playing, skipping chunk");
-                // If already playing, skip this chunk to prevent overlap
-            }
+            // Always play immediately for real-time experience
+            console.log("🎵 Playing audio chunk immediately");
+            
+            // Set speaking state
+            setAiSpeaking(true);
+            setIsWaitingForResponse(false);
+            
+            // Play immediately
+            src.onended = () => {
+                console.log("🎵 Audio chunk finished");
+                // Don't reset speaking state here - let the next chunk or completion handle it
+            };
+            src.start(0);
             
         } catch (error) {
             console.error("Error playing audio chunk:", error);
@@ -1543,7 +1535,9 @@ export default function VoiceAgent() {
 
                             case "ai_audio_complete":
                                 console.log("🔊 AI Audio streaming completed");
-                                // Audio completion is handled by individual chunk onended events
+                                // Reset speaking state when all audio is complete
+                                setAiSpeaking(false);
+                                setIsWaitingForResponse(false);
                                 break;
 
                             case "final_transcript":
