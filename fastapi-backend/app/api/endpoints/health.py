@@ -43,20 +43,20 @@ async def test_grammar_correction():
         # Create test messages with grammar correction prompt
         grammar_prompt = """IMPORTANT: If the user's input contains grammatical errors, spelling mistakes, or unclear language, respond in this EXACT format:
 
-🔴 GRAMMAR_CORRECTION_START 🔴
+GRAMMAR_CORRECTION_START
 INCORRECT: [exactly what the user said]
 CORRECT: [the grammatically correct version]
-🔴 GRAMMAR_CORRECTION_END 🔴
+GRAMMAR_CORRECTION_END
 
 Then provide your normal response to their question.
 
 EXAMPLE:
 User says: "what your name"
 You respond:
-🔴 GRAMMAR_CORRECTION_START 🔴
+GRAMMAR_CORRECTION_START
 INCORRECT: what your name
 CORRECT: What is your name?
-🔴 GRAMMAR_CORRECTION_END 🔴
+GRAMMAR_CORRECTION_END
 
 My name is SHCI. How can I help you?
 
@@ -72,7 +72,7 @@ If the input is grammatically correct, respond normally without any grammar corr
         response = await llm_service.generate_response(messages)
         
         # Check if grammar correction is present
-        has_grammar_correction = "🔴 GRAMMAR_CORRECTION_START 🔴" in response
+        has_grammar_correction = "GRAMMAR_CORRECTION_START" in response
         has_incorrect = "INCORRECT:" in response
         has_correct = "CORRECT:" in response
         

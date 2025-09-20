@@ -3488,21 +3488,17 @@ export default function VoiceAgent() {
                                     <div className="relative p-5 min-h-[180px]">
                                          {aiText ? (
                                              <div className="space-y-4">
-                                                 {/* Grammar Correction Block - Always visible when grammar correction exists */}
-                                                 {aiText.includes('🔴 GRAMMAR_CORRECTION_START 🔴') && (
-                                                     <div className="bg-gradient-to-r from-red-500/15 to-orange-500/15 border border-red-400/40 rounded-xl p-5 mb-4 shadow-xl">
-                                                         <div className="flex items-center gap-3 mb-4">
-                                                             <div className="w-3 h-3 bg-gradient-to-r from-red-400 to-orange-400 rounded-full animate-pulse"></div>
-                                                             <h4 className="text-sm font-bold text-red-300 flex items-center gap-2">
-                                                                 <span>🔍</span>
-                                                                 Grammar Checker
-                                                             </h4>
-                                                             <div className="ml-auto text-xs text-red-400/90 bg-red-500/30 px-3 py-1 rounded-full font-semibold">LIVE</div>
+                                                 {/* Grammar Correction Block - Minimal design */}
+                                                 {aiText.includes('GRAMMAR_CORRECTION_START') && (
+                                                     <div className="bg-gray-800/50 border border-gray-600/30 rounded-lg p-3 mb-3">
+                                                         <div className="flex items-center gap-2 mb-3">
+                                                             <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
+                                                             <h4 className="text-xs font-medium text-gray-300">Grammar Check</h4>
                                                          </div>
 
                                                          {(() => {
-                                                             const startMarker = '🔴 GRAMMAR_CORRECTION_START 🔴';
-                                                             const endMarker = '🔴 GRAMMAR_CORRECTION_END 🔴';
+                                                             const startMarker = 'GRAMMAR_CORRECTION_START';
+                                                             const endMarker = 'GRAMMAR_CORRECTION_END';
                                                              const startIndex = aiText.indexOf(startMarker);
                                                              const endIndex = aiText.indexOf(endMarker);
 
@@ -3569,57 +3565,42 @@ export default function VoiceAgent() {
                                                                  }
 
                                                                  return (
-                                                                     <div className="space-y-4">
+                                                                     <div className="space-y-2">
                                                                          {incorrectText && correctText && (
-                                                                             <div className="space-y-4">
-                                                                                 {/* Incorrect Text Block */}
-                                                                                 <div className="bg-red-500/20 border-l-4 border-red-400 rounded-lg p-4 transform hover:scale-[1.01] transition-all duration-200">
-                                                                                     <div className="flex items-center gap-3 mb-3">
-                                                                                         <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
-                                                                                         <span className="text-sm font-bold text-red-300 flex items-center gap-2">
-                                                                                             <span>❌</span>
-                                                                                             What you said:
-                                                                                         </span>
+                                                                             <div className="space-y-2">
+                                                                                 {/* Incorrect Text Block - Minimal */}
+                                                                                 <div className="bg-red-500/10 border-l-2 border-red-400 rounded p-2">
+                                                                                     <div className="flex items-center gap-2 mb-1">
+                                                                                         <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
+                                                                                         <span className="text-xs text-red-300">Incorrect:</span>
                                                                                      </div>
-                                                                                     <div className="bg-red-500/30 rounded-lg p-4 border border-red-400/30">
-                                                                                         <p className="text-base text-red-100 font-medium leading-relaxed">
-                                                                                             "{incorrectText}"
-                                                                                         </p>
-                                                                                     </div>
+                                                                                     <p className="text-sm text-red-200 ml-3">
+                                                                                         "{incorrectText}"
+                                                                                     </p>
                                                                                  </div>
 
-                                                                                 {/* Correct Text Block */}
-                                                                                 <div className="bg-green-500/20 border-l-4 border-green-400 rounded-lg p-4 transform hover:scale-[1.01] transition-all duration-200">
-                                                                                     <div className="flex items-center gap-3 mb-3">
-                                                                                         <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                                                                                         <span className="text-sm font-bold text-green-300 flex items-center gap-2">
-                                                                                             <span>✅</span>
-                                                                                             Correct way:
-                                                                                         </span>
+                                                                                 {/* Correct Text Block - Minimal */}
+                                                                                 <div className="bg-green-500/10 border-l-2 border-green-400 rounded p-2">
+                                                                                     <div className="flex items-center gap-2 mb-1">
+                                                                                         <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                                                                                         <span className="text-xs text-green-300">Correct:</span>
                                                                                      </div>
-                                                                                     <div className="bg-green-500/30 rounded-lg p-4 border border-green-400/30">
-                                                                                         <p className="text-base text-green-100 font-medium leading-relaxed">
-                                                                                             "{correctText}"
-                                                                                         </p>
-                                                                                     </div>
+                                                                                     <p className="text-sm text-green-200 ml-3">
+                                                                                         "{correctText}"
+                                                                                     </p>
                                                                                  </div>
                                                                              </div>
                                                                          )}
 
                                                                          {correctText && !incorrectText && (
-                                                                             <div className="bg-green-500/20 border-l-4 border-green-400 rounded-lg p-4">
-                                                                                 <div className="flex items-center gap-3 mb-3">
-                                                                                     <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                                                                                     <span className="text-sm font-bold text-green-300 flex items-center gap-2">
-                                                                                         <span>✅</span>
-                                                                                         Grammar Check:
-                                                                                     </span>
+                                                                             <div className="bg-green-500/10 border-l-2 border-green-400 rounded p-2">
+                                                                                 <div className="flex items-center gap-2 mb-1">
+                                                                                     <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                                                                                     <span className="text-xs text-green-300">Grammar Check:</span>
                                                                                  </div>
-                                                                                 <div className="bg-green-500/30 rounded-lg p-4 border border-green-400/30">
-                                                                                     <p className="text-base text-green-100 font-medium leading-relaxed">
-                                                                                         "{correctText}"
-                                                                                     </p>
-                                                                                 </div>
+                                                                                 <p className="text-sm text-green-200 ml-3">
+                                                                                     "{correctText}"
+                                                                                 </p>
                                                                              </div>
                                                                          )}
                                                                      </div>
@@ -3640,8 +3621,8 @@ export default function VoiceAgent() {
                                                      <div className="bg-green-500/5 border-l-2 border-green-400 rounded-lg p-3">
                                                          <p className="text-sm leading-relaxed text-green-200 whitespace-pre-wrap">
                                                              {(() => {
-                                                                 const displayText = aiText.includes('🔴 GRAMMAR_CORRECTION_START 🔴')
-                                                                     ? aiText.split('🔴 GRAMMAR_CORRECTION_END 🔴')[1]?.trim() || aiText
+                                                                 const displayText = aiText.includes('GRAMMAR_CORRECTION_START')
+                                                                     ? aiText.split('GRAMMAR_CORRECTION_END')[1]?.trim() || aiText
                                                                      : aiText;
                                                                  
                                                                  // If there's highlighted text, show it with highlighting

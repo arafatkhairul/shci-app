@@ -231,20 +231,20 @@ class ChatHandler:
             # Add grammar correction prompt
             grammar_prompt = """IMPORTANT: If the user's input contains grammatical errors, spelling mistakes, or unclear language, respond in this EXACT format:
 
-🔴 GRAMMAR_CORRECTION_START 🔴
+GRAMMAR_CORRECTION_START
 INCORRECT: [exactly what the user said]
 CORRECT: [the grammatically correct version]
-🔴 GRAMMAR_CORRECTION_END 🔴
+GRAMMAR_CORRECTION_END
 
 Then provide your normal response to their question.
 
 EXAMPLE:
 User says: "what your name"
 You respond:
-🔴 GRAMMAR_CORRECTION_START 🔴
+GRAMMAR_CORRECTION_START
 INCORRECT: what your name
 CORRECT: What is your name?
-🔴 GRAMMAR_CORRECTION_END 🔴
+GRAMMAR_CORRECTION_END
 
 My name is SHCI. How can I help you?
 
