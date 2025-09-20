@@ -32,7 +32,7 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
 NODE_ENV = os.getenv("NODE_ENV", "development").lower()
 
 # ---- LLM Configuration ----
-LLM_API_URL   = os.getenv("LLM_API_URL", "http://173.208.167.147:11434/v1/chat/completions").strip()
+LLM_API_URL   = os.getenv("LLM_API_URL", "http://69.197.183.130:11434/v1/chat/completions").strip()
 LLM_MODEL     = os.getenv("LLM_MODEL", "qwen2.5-14b-gpu").strip()
 LLM_API_KEY   = os.getenv("LLM_API_KEY", "").strip()  # optional
 LLM_TIMEOUT   = float(os.getenv("LLM_TIMEOUT", "10.0"))  # Reduced for faster responses
@@ -42,7 +42,7 @@ LLM_RETRIES   = int(os.getenv("LLM_RETRIES", "1"))  # Reduced retries for faster
 TTS_SYSTEM = os.getenv("TTS_SYSTEM", "piper").lower()
 
 # ---- Piper TTS Configuration ----
-PIPER_MODEL_NAME = os.getenv("PIPER_MODEL_NAME", "en_US-ljspeech-high").strip()
+PIPER_MODEL_NAME = os.getenv("PIPER_MODEL_NAME", "en_US-ljspeech-medium").strip()
 PIPER_LENGTH_SCALE = float(os.getenv("PIPER_LENGTH_SCALE", "1.5"))
 PIPER_NOISE_SCALE = float(os.getenv("PIPER_NOISE_SCALE", "1.0"))
 PIPER_NOISE_W = float(os.getenv("PIPER_NOISE_W", "0.8"))
