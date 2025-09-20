@@ -91,6 +91,11 @@ export default function VoiceAgent() {
     const [ttsWaveAnimationFrame, setTtsWaveAnimationFrame] = useState(0);
     const [ttsAudioLevel, setTtsAudioLevel] = useState(0);
 
+    // Audio queue management for streaming
+    const audioQueueRef = useRef<AudioBufferSourceNode[]>([]);
+    const isPlayingAudioRef = useRef(false);
+    const currentAudioIndexRef = useRef(0);
+
     // Professional mic level update function with advanced filtering
     const updateMicLevel = useCallback((rawValue: number, source: string) => {
         // Advanced filtering to prevent false positives
@@ -1356,26 +1361,42 @@ export default function VoiceAgent() {
             src.buffer = audioBuf;
             src.connect(audioCtx.current.destination);
             
+            // Add to audio queue
+            audioQueueRef.current.push(src);
+            
             // Set speaking state for first chunk
-            if (!aiSpeaking) {
+            if (!isPlayingAudioRef.current) {
                 setAiSpeaking(true);
                 setIsWaitingForResponse(false);
+                isPlayingAudioRef.current = true;
+                playNextAudioInQueue();
             }
             
-            src.start(0);
         } catch (error) {
             console.error("Error playing audio chunk:", error);
-            // Fallback to simple audio element
-            try {
-                const el = new Audio(`data:audio/wav;base64,${base64}`);
-                if (!aiSpeaking) {
-                    setAiSpeaking(true);
+        }
+    };
+
+    const playNextAudioInQueue = () => {
+        if (currentAudioIndexRef.current < audioQueueRef.current.length) {
+            const src = audioQueueRef.current[currentAudioIndexRef.current];
+            
+            src.onended = () => {
+                currentAudioIndexRef.current++;
+                if (currentAudioIndexRef.current < audioQueueRef.current.length) {
+                    // Play next audio in queue
+                    playNextAudioInQueue();
+                } else {
+                    // All audio chunks played, clear queue
+                    audioQueueRef.current = [];
+                    currentAudioIndexRef.current = 0;
+                    isPlayingAudioRef.current = false;
+                    setAiSpeaking(false);
                     setIsWaitingForResponse(false);
                 }
-                el.play();
-            } catch (fallbackError) {
-                console.error("Fallback audio chunk error:", fallbackError);
-            }
+            };
+            
+            src.start(0);
         }
     };
 
@@ -1451,8 +1472,13 @@ export default function VoiceAgent() {
                         switch (data.type) {
                             case "ai_text_chunk":
                                 console.log("🤖 AI Text chunk received:", data.text);
-                                // Append text chunk for real-time display
-                                setAiText(prev => prev + (data.text || ""));
+                                // Clear previous text and start fresh for new response
+                                if (data.is_first_chunk) {
+                                    setAiText(data.text || "");
+                                } else {
+                                    // Append text chunk for real-time display
+                                    setAiText(prev => prev + (data.text || ""));
+                                }
                                 break;
 
                             case "ai_text":
@@ -1461,6 +1487,14 @@ export default function VoiceAgent() {
                                 setIsProcessing(false);
                                 // Don't clear waiting state here - keep "AI Thinking" until audio starts
                                 if (useLocalTTS && data.text) speakWithGrammarCorrection(data.text);
+                                break;
+
+                            case "ai_audio_start":
+                                console.log("🔊 AI Audio streaming started - clearing previous audio");
+                                // Clear previous audio queue and reset state
+                                audioQueueRef.current = [];
+                                currentAudioIndexRef.current = 0;
+                                isPlayingAudioRef.current = false;
                                 break;
 
                             case "ai_audio_chunk":

@@ -206,6 +206,7 @@ class ChatHandler:
             
             # Generate streaming AI response
             full_response = ""
+            is_first_chunk = True
             async for text_chunk in self.llm_service.generate_streaming_response(
                 messages=context_messages + [{"role": "user", "content": transcript}],
                 temperature=0.7
@@ -217,8 +218,10 @@ class ChatHandler:
                     await self.send_json(websocket, {
                         "type": "ai_text_chunk", 
                         "text": text_chunk,
-                        "is_final": False
+                        "is_final": False,
+                        "is_first_chunk": is_first_chunk
                     })
+                    is_first_chunk = False
             
             if full_response:
                 # Send final complete text
@@ -243,6 +246,12 @@ class ChatHandler:
                                               mem: SessionMemory, conn_id: str):
         """Generate and send streaming audio chunks"""
         try:
+            # Send audio start signal to clear previous audio
+            await self.send_json(websocket, {
+                "type": "ai_audio_start",
+                "is_final": False
+            })
+            
             # Create a simple text stream from the complete text
             async def text_stream():
                 # Split text into chunks for streaming
