@@ -216,9 +216,18 @@ class ChatHandler:
                 "is_final": False
             })
             
+            # Create messages with system prompt for voice agent
+            messages = [
+                {"role": "system", "content": persona},
+                {"role": "system", "content": "IMPORTANT: You are a VOICE agent. Keep responses SHORT (1-2 sentences max). Speak naturally and concisely. No long explanations or detailed lists."}
+            ]
+            messages.extend(context_messages)
+            messages.append({"role": "user", "content": transcript})
+            
             async for text_chunk in self.llm_service.generate_streaming_response(
-                messages=context_messages + [{"role": "user", "content": transcript}],
-                temperature=0.7
+                messages=messages,
+                temperature=0.7,
+                max_tokens=150  # Limit response length
             ):
                 if text_chunk:
                     full_response += text_chunk
