@@ -421,11 +421,6 @@ install_nodejs() {
     fi
 }
 
-# Skip NVIDIA - already installed
-skip_nvidia() {
-    print_step "Skipping NVIDIA installation - already installed on server"
-    print_success "NVIDIA drivers and CUDA already available"
-}
 
 # Install Nginx and SSL
 install_nginx() {
@@ -511,27 +506,50 @@ setup_backend() {
     log_step "Setting up FastAPI backend..."
     cd "$PROJECT_DIR/fastapi-backend"
     
-    # Check if virtual environment already exists
+    # Force remove all Python versions and install Python 3.11.9
+    log_step "Setting up Python 3.11.9 (removing all existing Python versions)..."
+    
+    # Stop services first
+    log_step "Stopping services..."
+    sudo systemctl stop shci-backend shci-frontend 2>/dev/null || true
+    
+    # Remove all Python versions
+    log_step "Removing all Python versions..."
+    sudo apt remove -y python3.12 python3.12-venv python3.12-dev python3.12-distutils python3.12-minimal 2>/dev/null || true
+    sudo apt remove -y python3.11 python3.11-venv python3.11-dev python3.11-distutils python3.11-minimal 2>/dev/null || true
+    sudo apt autoremove -y 2>/dev/null || true
+    log_success "All Python versions removed"
+    
+    # Install Python 3.11.9 specifically
+    log_step "Installing Python 3.11.9..."
+    sudo apt update
+    sudo apt install -y software-properties-common
+    sudo add-apt-repository -y ppa:deadsnakes/ppa
+    sudo apt update
+    sudo apt install -y python3.11=3.11.9-1~24.04.1 python3.11-venv python3.11-dev python3.11-distutils python3.11-minimal python3.11-pip
+    
+    # Set Python 3.11 as default python3
+    sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+    sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+    
+    log_success "Python 3.11.9 installed and set as default"
+    
+    # Verify Python 3.11 installation
+    PYTHON_VERSION=$(python3.11 --version 2>&1)
+    log_success "Python version: $PYTHON_VERSION"
+    
+    # Remove old virtual environment and create new one with Python 3.11
     if [ -d "venv" ]; then
-        log_success "Virtual environment already exists"
-        source venv/bin/activate
-        
-        # Check if pip is available in venv
-        if [ -f "venv/bin/pip" ]; then
-            log_success "Virtual environment is functional"
-        else
-            log_warning "Virtual environment exists but pip is missing. Recreating..."
-            rm -rf venv
-            python3.12 -m venv venv
-            source venv/bin/activate
-            log_success "Virtual environment recreated"
-        fi
-    else
-        log_step "Creating virtual environment..."
-        python3.12 -m venv venv
-        source venv/bin/activate
-        log_success "Virtual environment created"
+        log_step "Removing old virtual environment..."
+        rm -rf venv
+        log_success "Old virtual environment removed"
     fi
+    
+    # Create new virtual environment with Python 3.11
+    log_step "Creating new virtual environment with Python 3.11..."
+    python3.11 -m venv venv
+    source venv/bin/activate
+    log_success "Virtual environment created with Python 3.11"
     
     # Upgrade pip
     log_step "Upgrading pip..."
@@ -542,6 +560,16 @@ setup_backend() {
     log_step "Installing Python dependencies..."
     pip install -r requirements.txt
     log_success "Dependencies installed"
+    
+    # Test Python imports to ensure everything works
+    log_step "Testing Python imports..."
+    python test_imports.py
+    if [ $? -eq 0 ]; then
+        log_success "Python imports test passed"
+    else
+        log_error "Python imports test failed"
+        exit 1
+    fi
     
     # Copy production environment file
     if [ -f "$PROJECT_DIR/production.env" ]; then
@@ -670,9 +698,9 @@ Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_GROUP
 WorkingDirectory=$PROJECT_DIR/fastapi-backend
-        Environment=PATH=$PROJECT_DIR/fastapi-backend/venv/bin
-        Environment=PYTHONPATH=$PROJECT_DIR/fastapi-backend:$PROJECT_DIR/fastapi-backend/app:.
-        EnvironmentFile=$PROJECT_DIR/fastapi-backend/.env
+Environment=PATH=$PROJECT_DIR/fastapi-backend/venv/bin
+Environment=PYTHONPATH=$PROJECT_DIR/fastapi-backend
+EnvironmentFile=$PROJECT_DIR/fastapi-backend/.env
         ExecStart=$PROJECT_DIR/fastapi-backend/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 Restart=always
 RestartSec=10
@@ -858,6 +886,22 @@ configure_ssl() {
             certbot renew --nginx --non-interactive
             log_success "SSL certificate renewed"
         fi
+        
+        # Test SSL certificate
+        log_step "Testing SSL certificate..."
+        if curl -s -I https://nodecel.com | grep -q "200 OK"; then
+            log_success "SSL certificate is working correctly"
+        else
+            log_warning "SSL certificate exists but not working, attempting to fix..."
+            certbot renew --force-renewal
+            systemctl reload nginx
+            sleep 5
+            if curl -s -I https://nodecel.com | grep -q "200 OK"; then
+                log_success "SSL fixed and working"
+            else
+                log_error "SSL configuration failed"
+            fi
+        fi
     else
         log_step "Obtaining SSL certificate..."
         
@@ -949,12 +993,23 @@ EOF
 start_services() {
     print_step "Starting services..."
     
+    # Reload systemd daemon to pick up service changes
+    systemctl daemon-reload
+    
+    # Stop services first to ensure clean restart
+    systemctl stop shci-backend 2>/dev/null || true
+    systemctl stop shci-frontend 2>/dev/null || true
+    
     # Start Nginx
     systemctl start nginx
     
     # Start SHCI services
     systemctl start shci-backend
     systemctl start shci-frontend
+    
+    # Enable services to start on boot
+    systemctl enable shci-backend
+    systemctl enable shci-frontend
     
     # Wait a moment for services to start
     sleep 5
