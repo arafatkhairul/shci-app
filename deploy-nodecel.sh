@@ -310,6 +310,14 @@ update_system() {
 install_python() {
     log_step "Checking Python 3.12 installation..."
     
+    # First, remove Python 3.11 if it exists to avoid conflicts
+    if check_command_exists "python3.11"; then
+        log_step "Removing Python 3.11 to avoid conflicts..."
+        apt remove -y python3.11 python3.11-venv python3.11-dev python3.11-distutils python3.11-minimal 2>/dev/null || true
+        apt autoremove -y 2>/dev/null || true
+        log_success "Python 3.11 removed"
+    fi
+    
     # Check if Python 3.12 is already installed
     if check_command_exists "python3.12"; then
         local python_version=$(python3.12 --version 2>&1 | cut -d' ' -f2)
@@ -341,13 +349,6 @@ install_python() {
             apt update
         else
             log_success "deadsnakes PPA already added"
-        fi
-        
-        # Remove Python 3.11 if it exists (optional cleanup)
-        if check_command_exists "python3.11"; then
-            log_step "Removing Python 3.11 to avoid conflicts..."
-            apt remove -y python3.11 python3.11-venv python3.11-dev python3.11-distutils 2>/dev/null || true
-            log_success "Python 3.11 removed"
         fi
         
         # Install Python 3.12 and related packages
@@ -506,50 +507,38 @@ setup_backend() {
     log_step "Setting up FastAPI backend..."
     cd "$PROJECT_DIR/fastapi-backend"
     
-    # Force remove all Python versions and install Python 3.11.9
-    log_step "Setting up Python 3.11.9 (removing all existing Python versions)..."
-    
     # Stop services first
     log_step "Stopping services..."
     sudo systemctl stop shci-backend shci-frontend 2>/dev/null || true
     
-    # Remove all Python versions
-    log_step "Removing all Python versions..."
-    sudo apt remove -y python3.12 python3.12-venv python3.12-dev python3.12-distutils python3.12-minimal 2>/dev/null || true
-    sudo apt remove -y python3.11 python3.11-venv python3.11-dev python3.11-distutils python3.11-minimal 2>/dev/null || true
-    sudo apt autoremove -y 2>/dev/null || true
-    log_success "All Python versions removed"
+    # Ensure Python 3.12 is available and set as default
+    log_step "Ensuring Python 3.12 is properly configured..."
     
-    # Install Python 3.11.9 specifically
-    log_step "Installing Python 3.11.9..."
-    sudo apt update
-    sudo apt install -y software-properties-common
-    sudo add-apt-repository -y ppa:deadsnakes/ppa
-    sudo apt update
-    sudo apt install -y python3.11=3.11.9-1~24.04.1 python3.11-venv python3.11-dev python3.11-distutils python3.11-minimal python3.11-pip
+    # Verify Python 3.12 installation
+    if ! check_command_exists "python3.12"; then
+        log_error "Python 3.12 is not installed. Please run install_python first."
+        exit 1
+    fi
     
-    # Set Python 3.11 as default python3
-    sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-    sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+    PYTHON_VERSION=$(python3.12 --version 2>&1)
+    log_success "Using Python version: $PYTHON_VERSION"
     
-    log_success "Python 3.11.9 installed and set as default"
+    # Set Python 3.12 as default python3
+    sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+    sudo update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1
     
-    # Verify Python 3.11 installation
-    PYTHON_VERSION=$(python3.11 --version 2>&1)
-    log_success "Python version: $PYTHON_VERSION"
-    
-    # Remove old virtual environment and create new one with Python 3.11
+    # Remove old virtual environment and create new one with Python 3.12
     if [ -d "venv" ]; then
         log_step "Removing old virtual environment..."
         rm -rf venv
         log_success "Old virtual environment removed"
     fi
     
-    # Create new virtual environment with Python 3.11
-    log_step "Creating new virtual environment with Python 3.11..."
-    python3.11 -m venv venv
+    # Create new virtual environment with Python 3.12
+    log_step "Creating new virtual environment with Python 3.12..."
+    python3.12 -m venv venv
     source venv/bin/activate
-    log_success "Virtual environment created with Python 3.11"
+    log_success "Virtual environment created with Python 3.12"
     
     # Upgrade pip
     log_step "Upgrading pip..."
@@ -1220,7 +1209,6 @@ main() {
     update_system
     install_python
     install_nodejs
-    skip_nvidia
     install_nginx
     clone_repository
     setup_backend
