@@ -234,9 +234,29 @@ check_sudo() {
     print_success "Running as root user - all privileges available"
 }
 
+# Check if package is installed
+check_package_installed() {
+    local package_name="$1"
+    if dpkg -l | grep -q "^ii.*$package_name "; then
+        return 0  # Package is installed
+    else
+        return 1  # Package is not installed
+    fi
+}
+
+# Check if command exists
+check_command_exists() {
+    local command_name="$1"
+    if command -v "$command_name" &> /dev/null; then
+        return 0  # Command exists
+    else
+        return 1  # Command doesn't exist
+    fi
+}
+
 # Update system packages
 update_system() {
-    print_step "Updating system packages..."
+    log_step "Updating system packages..."
     
     # Remove problematic NVIDIA repositories
     rm -f /etc/apt/sources.list.d/nvidia-*
@@ -247,27 +267,110 @@ update_system() {
     # Clean apt cache
     apt clean
     apt update && apt upgrade -y
-    apt install -y curl wget git build-essential software-properties-common apt-transport-https ca-certificates gnupg lsb-release
-    print_success "System packages updated"
+    
+    # Install essential packages only if not already installed
+    local essential_packages=("curl" "wget" "git" "build-essential" "software-properties-common" "apt-transport-https" "ca-certificates" "gnupg" "lsb-release")
+    
+    for package in "${essential_packages[@]}"; do
+        if check_package_installed "$package"; then
+            log_success "$package is already installed"
+        else
+            log_step "Installing $package..."
+            apt install -y "$package"
+            log_success "$package installed"
+        fi
+    done
+    
+    log_success "System packages updated"
 }
 
 # Install Python 3.11
 install_python() {
-    print_step "Installing Python 3.11..."
-    add-apt-repository ppa:deadsnakes/ppa -y
-    apt update
-    apt install -y python3.11 python3.11-venv python3.11-dev python3-pip python3.11-distutils
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-    update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
-    print_success "Python 3.11 installed"
+    log_step "Checking Python 3.11 installation..."
+    
+    # Check if Python 3.11 is already installed
+    if check_command_exists "python3.11"; then
+        local python_version=$(python3.11 --version 2>&1 | cut -d' ' -f2)
+        log_success "Python 3.11 is already installed (version: $python_version)"
+        
+        # Check if virtual environment module is available
+        if python3.11 -m venv --help &> /dev/null; then
+            log_success "Python 3.11 venv module is available"
+        else
+            log_step "Installing Python 3.11 venv module..."
+            apt install -y python3.11-venv
+            log_success "Python 3.11 venv module installed"
+        fi
+        
+        # Check if pip is available
+        if check_command_exists "pip3"; then
+            log_success "pip3 is already available"
+        else
+            log_step "Installing pip3..."
+            apt install -y python3-pip
+            log_success "pip3 installed"
+        fi
+    else
+        log_step "Installing Python 3.11..."
+        
+        # Add deadsnakes PPA if not already added
+        if ! grep -q "deadsnakes" /etc/apt/sources.list.d/*.list 2>/dev/null; then
+            add-apt-repository ppa:deadsnakes/ppa -y
+            apt update
+        else
+            log_success "deadsnakes PPA already added"
+        fi
+        
+        # Install Python 3.11 and related packages
+        apt install -y python3.11 python3.11-venv python3.11-dev python3-pip python3.11-distutils
+        
+        # Set up alternatives
+        update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+        update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+        
+        log_success "Python 3.11 installed successfully"
+    fi
 }
 
 # Install Node.js 24.1.0
 install_nodejs() {
-    print_step "Installing Node.js 24.1.0..."
-    curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-    apt install -y nodejs
-    print_success "Node.js $(node --version) installed"
+    log_step "Checking Node.js installation..."
+    
+    # Check if Node.js is already installed
+    if check_command_exists "node"; then
+        local node_version=$(node --version)
+        local required_version="v24"
+        
+        # Check if it's version 24.x
+        if [[ "$node_version" == v24* ]]; then
+            log_success "Node.js $node_version is already installed"
+        else
+            log_warning "Node.js $node_version is installed, but we need v24.x"
+            log_step "Updating to Node.js 24.x..."
+            
+            # Add NodeSource repository
+            curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+            apt install -y nodejs
+            
+            log_success "Node.js updated to $(node --version)"
+        fi
+    else
+        log_step "Installing Node.js 24.1.0..."
+        
+        # Add NodeSource repository
+        curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+        apt install -y nodejs
+        
+        log_success "Node.js $(node --version) installed"
+    fi
+    
+    # Check if npm is available
+    if check_command_exists "npm"; then
+        log_success "npm $(npm --version) is available"
+    else
+        log_error "npm is not available after Node.js installation"
+        return 1
+    fi
 }
 
 # Skip NVIDIA - already installed
@@ -278,44 +381,119 @@ skip_nvidia() {
 
 # Install Nginx and SSL
 install_nginx() {
-    print_step "Installing Nginx and SSL tools..."
-    apt install -y nginx certbot python3-certbot-nginx
-    systemctl enable nginx
-    print_success "Nginx and SSL tools installed"
+    log_step "Checking Nginx installation..."
+    
+    # Check if Nginx is already installed
+    if check_package_installed "nginx"; then
+        local nginx_version=$(nginx -v 2>&1 | cut -d' ' -f3)
+        log_success "Nginx is already installed (version: $nginx_version)"
+        
+        # Check if Nginx is enabled
+        if systemctl is-enabled nginx &> /dev/null; then
+            log_success "Nginx is already enabled"
+        else
+            log_step "Enabling Nginx..."
+            systemctl enable nginx
+            log_success "Nginx enabled"
+        fi
+    else
+        log_step "Installing Nginx..."
+        apt install -y nginx
+        systemctl enable nginx
+        log_success "Nginx installed and enabled"
+    fi
+    
+    # Check SSL tools
+    log_step "Checking SSL tools..."
+    
+    if check_package_installed "certbot"; then
+        log_success "Certbot is already installed"
+    else
+        log_step "Installing Certbot..."
+        apt install -y certbot python3-certbot-nginx
+        log_success "Certbot installed"
+    fi
+    
+    log_success "Nginx and SSL tools are ready"
 }
 
 # Clone repository
 clone_repository() {
-    print_step "Cloning SHCI repository..."
+    log_step "Checking SHCI repository..."
     
     if [ -d "$PROJECT_DIR" ]; then
-        print_warning "Project directory exists. Updating..."
+        log_step "Project directory exists. Checking for updates..."
         cd "$PROJECT_DIR"
-        git fetch --all
-        git reset --hard origin/$BRANCH
+        
+        # Check if it's a git repository
+        if [ -d ".git" ]; then
+            log_step "Updating existing repository..."
+            git fetch --all
+            
+            # Check current branch
+            local current_branch=$(git branch --show-current)
+            if [ "$current_branch" != "$BRANCH" ]; then
+                log_step "Switching to branch: $BRANCH"
+                git checkout "$BRANCH"
+            fi
+            
+            # Reset to latest commit
+            git reset --hard "origin/$BRANCH"
+            log_success "Repository updated to latest $BRANCH branch"
+        else
+            log_warning "Directory exists but is not a git repository. Removing and cloning fresh..."
+            cd /
+            rm -rf "$PROJECT_DIR"
+            git clone -b "$BRANCH" "$REPO_URL" "$PROJECT_DIR"
+            log_success "Repository cloned fresh"
+        fi
     else
-        git clone -b $BRANCH $REPO_URL $PROJECT_DIR
+        log_step "Cloning SHCI repository..."
+        git clone -b "$BRANCH" "$REPO_URL" "$PROJECT_DIR"
+        log_success "Repository cloned"
     fi
     
     # Set proper ownership
-    chown -R root:root $PROJECT_DIR
-    print_success "Repository cloned/updated"
+    chown -R root:root "$PROJECT_DIR"
+    log_success "Repository ownership set correctly"
 }
 
 # Setup backend
 setup_backend() {
-    print_step "Setting up FastAPI backend..."
+    log_step "Setting up FastAPI backend..."
     cd "$PROJECT_DIR/fastapi-backend"
     
-    # Create virtual environment
-    python3.11 -m venv venv
-    source venv/bin/activate
+    # Check if virtual environment already exists
+    if [ -d "venv" ]; then
+        log_success "Virtual environment already exists"
+        source venv/bin/activate
+        
+        # Check if pip is available in venv
+        if [ -f "venv/bin/pip" ]; then
+            log_success "Virtual environment is functional"
+        else
+            log_warning "Virtual environment exists but pip is missing. Recreating..."
+            rm -rf venv
+            python3.11 -m venv venv
+            source venv/bin/activate
+            log_success "Virtual environment recreated"
+        fi
+    else
+        log_step "Creating virtual environment..."
+        python3.11 -m venv venv
+        source venv/bin/activate
+        log_success "Virtual environment created"
+    fi
     
     # Upgrade pip
+    log_step "Upgrading pip..."
     pip install --upgrade pip wheel setuptools
+    log_success "pip upgraded"
     
     # Install dependencies
+    log_step "Installing Python dependencies..."
     pip install -r requirements.txt
+    log_success "Dependencies installed"
     
     # Copy production environment file
     if [ -f "$PROJECT_DIR/production.env" ]; then
@@ -376,28 +554,62 @@ EOF
 
 # Setup frontend
 setup_frontend() {
-    print_step "Setting up Next.js frontend..."
+    log_step "Setting up Next.js frontend..."
     cd "$PROJECT_DIR/web-app"
     
-    # Install dependencies
-    npm install
+    # Check if node_modules exists
+    if [ -d "node_modules" ]; then
+        log_success "Node modules already installed"
+        
+        # Check if package-lock.json exists and is newer than package.json
+        if [ -f "package-lock.json" ] && [ "package-lock.json" -nt "package.json" ]; then
+            log_success "Dependencies are up to date"
+        else
+            log_step "Updating dependencies..."
+            npm install
+            log_success "Dependencies updated"
+        fi
+    else
+        log_step "Installing Node.js dependencies..."
+        npm install
+        log_success "Dependencies installed"
+    fi
     
     # Create environment file
+    log_step "Setting up environment configuration..."
     cat > .env.local << 'EOF'
 NEXT_PUBLIC_API_URL=https://nodecel.com/api
 NEXT_PUBLIC_WS_URL=wss://nodecel.com/ws
 NEXT_PUBLIC_APP_URL=https://nodecel.com
 EOF
+    log_success "Environment file created"
     
     # Build frontend
+    log_step "Building Next.js frontend..."
     npm run build
-    
-    print_success "Frontend built successfully"
+    log_success "Frontend built successfully"
 }
 
 # Create systemd services
 create_services() {
-    print_step "Creating systemd services..."
+    log_step "Setting up systemd services..."
+    
+    # Check if services already exist
+    local services_exist=true
+    if [ ! -f "/etc/systemd/system/shci-backend.service" ] || [ ! -f "/etc/systemd/system/shci-frontend.service" ]; then
+        services_exist=false
+    fi
+    
+    if [ "$services_exist" = true ]; then
+        log_success "Systemd services already exist"
+        
+        # Check if services need updating by comparing content
+        log_step "Checking if services need updates..."
+        # For now, we'll recreate them to ensure they're up to date
+        log_step "Updating systemd services..."
+    else
+        log_step "Creating systemd services..."
+    fi
     
     # Backend service
     sudo tee /etc/systemd/system/shci-backend.service > /dev/null << EOF
@@ -446,15 +658,27 @@ WantedBy=multi-user.target
 EOF
 
     # Reload systemd
+    log_step "Reloading systemd daemon..."
     systemctl daemon-reload
+    
+    # Enable services
+    log_step "Enabling services..."
     systemctl enable shci-backend shci-frontend
     
-    print_success "Systemd services created"
+    log_success "Systemd services configured"
 }
 
 # Configure Nginx
 configure_nginx() {
-    print_step "Configuring Nginx..."
+    log_step "Configuring Nginx..."
+    
+    # Check if configuration already exists
+    if [ -f "/etc/nginx/sites-available/shci" ]; then
+        log_success "Nginx configuration already exists"
+        log_step "Updating Nginx configuration..."
+    else
+        log_step "Creating Nginx configuration..."
+    fi
     
     # Create Nginx configuration
     sudo tee /etc/nginx/sites-available/shci << 'EOF'
@@ -551,36 +775,95 @@ server {
 EOF
 
     # Enable site
+    log_step "Enabling Nginx site..."
     ln -sf /etc/nginx/sites-available/shci /etc/nginx/sites-enabled/
     rm -f /etc/nginx/sites-enabled/default
+    log_success "Nginx site enabled"
     
     # Test configuration
+    log_step "Testing Nginx configuration..."
     nginx -t
+    log_success "Nginx configuration is valid"
     
-    print_success "Nginx configured"
+    log_success "Nginx configured successfully"
 }
 
 # Configure SSL
 configure_ssl() {
-    print_step "Configuring SSL for nodecel.com..."
+    log_step "Configuring SSL for nodecel.com..."
     
-    # Start Nginx first
-    systemctl start nginx
+    # Check if SSL certificate already exists
+    if [ -d "/etc/letsencrypt/live/nodecel.com" ]; then
+        log_success "SSL certificate already exists for nodecel.com"
+        
+        # Check if certificate is valid and not expired
+        local cert_expiry=$(openssl x509 -enddate -noout -in /etc/letsencrypt/live/nodecel.com/cert.pem | cut -d= -f2)
+        local cert_expiry_epoch=$(date -d "$cert_expiry" +%s)
+        local current_epoch=$(date +%s)
+        local days_until_expiry=$(( (cert_expiry_epoch - current_epoch) / 86400 ))
+        
+        if [ "$days_until_expiry" -gt 30 ]; then
+            log_success "SSL certificate is valid for $days_until_expiry more days"
+        else
+            log_warning "SSL certificate expires in $days_until_expiry days. Renewing..."
+            certbot renew --nginx --non-interactive
+            log_success "SSL certificate renewed"
+        fi
+    else
+        log_step "Obtaining SSL certificate..."
+        
+        # Start Nginx first
+        systemctl start nginx
+        
+        # Get SSL certificate
+        certbot --nginx -d nodecel.com -d www.nodecel.com --non-interactive --agree-tos --email admin@nodecel.com
+        log_success "SSL certificate obtained"
+    fi
     
-    # Get SSL certificate
-    certbot --nginx -d nodecel.com -d www.nodecel.com --non-interactive --agree-tos --email admin@nodecel.com
-    
-    print_success "SSL configured for nodecel.com"
+    log_success "SSL configuration completed"
 }
 
 # Configure firewall
 configure_firewall() {
-    print_step "Configuring firewall..."
-    ufw --force enable
-    ufw allow 22/tcp
-    ufw allow 80/tcp
-    ufw allow 443/tcp
-    print_success "Firewall configured"
+    log_step "Configuring firewall..."
+    
+    # Check if UFW is already enabled
+    if ufw status | grep -q "Status: active"; then
+        log_success "UFW firewall is already enabled"
+    else
+        log_step "Enabling UFW firewall..."
+        ufw --force enable
+        log_success "UFW firewall enabled"
+    fi
+    
+    # Check and add rules if needed
+    log_step "Configuring firewall rules..."
+    
+    # SSH (port 22)
+    if ufw status | grep -q "22/tcp"; then
+        log_success "SSH rule already exists"
+    else
+        ufw allow 22/tcp
+        log_success "SSH rule added"
+    fi
+    
+    # HTTP (port 80)
+    if ufw status | grep -q "80/tcp"; then
+        log_success "HTTP rule already exists"
+    else
+        ufw allow 80/tcp
+        log_success "HTTP rule added"
+    fi
+    
+    # HTTPS (port 443)
+    if ufw status | grep -q "443/tcp"; then
+        log_success "HTTPS rule already exists"
+    else
+        ufw allow 443/tcp
+        log_success "HTTPS rule added"
+    fi
+    
+    log_success "Firewall configuration completed"
 }
 
 # Optimize system
