@@ -6,6 +6,7 @@
 # Project Directory: /var/www/shci-app
 # Domain: nodecel.com
 # User: root
+# Python: 3.12
 # Node.js: v24.1.0
 # ===================================================================
 
@@ -284,22 +285,22 @@ update_system() {
     log_success "System packages updated"
 }
 
-# Install Python 3.11
+# Install Python 3.12
 install_python() {
-    log_step "Checking Python 3.11 installation..."
+    log_step "Checking Python 3.12 installation..."
     
-    # Check if Python 3.11 is already installed
-    if check_command_exists "python3.11"; then
-        local python_version=$(python3.11 --version 2>&1 | cut -d' ' -f2)
-        log_success "Python 3.11 is already installed (version: $python_version)"
+    # Check if Python 3.12 is already installed
+    if check_command_exists "python3.12"; then
+        local python_version=$(python3.12 --version 2>&1 | cut -d' ' -f2)
+        log_success "Python 3.12 is already installed (version: $python_version)"
         
         # Check if virtual environment module is available
-        if python3.11 -m venv --help &> /dev/null; then
-            log_success "Python 3.11 venv module is available"
+        if python3.12 -m venv --help &> /dev/null; then
+            log_success "Python 3.12 venv module is available"
         else
-            log_step "Installing Python 3.11 venv module..."
-            apt install -y python3.11-venv
-            log_success "Python 3.11 venv module installed"
+            log_step "Installing Python 3.12 venv module..."
+            apt install -y python3.12-venv
+            log_success "Python 3.12 venv module installed"
         fi
         
         # Check if pip is available
@@ -311,7 +312,7 @@ install_python() {
             log_success "pip3 installed"
         fi
     else
-        log_step "Installing Python 3.11..."
+        log_step "Installing Python 3.12..."
         
         # Add deadsnakes PPA if not already added
         if ! grep -q "deadsnakes" /etc/apt/sources.list.d/*.list 2>/dev/null; then
@@ -321,14 +322,21 @@ install_python() {
             log_success "deadsnakes PPA already added"
         fi
         
-        # Install Python 3.11 and related packages
-        apt install -y python3.11 python3.11-venv python3.11-dev python3-pip python3.11-distutils
+        # Remove Python 3.11 if it exists (optional cleanup)
+        if check_command_exists "python3.11"; then
+            log_step "Removing Python 3.11 to avoid conflicts..."
+            apt remove -y python3.11 python3.11-venv python3.11-dev python3.11-distutils 2>/dev/null || true
+            log_success "Python 3.11 removed"
+        fi
+        
+        # Install Python 3.12 and related packages
+        apt install -y python3.12 python3.12-venv python3.12-dev python3-pip python3.12-distutils
         
         # Set up alternatives
-        update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
-        update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
+        update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+        update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1
         
-        log_success "Python 3.11 installed successfully"
+        log_success "Python 3.12 installed successfully"
     fi
 }
 
@@ -474,13 +482,13 @@ setup_backend() {
         else
             log_warning "Virtual environment exists but pip is missing. Recreating..."
             rm -rf venv
-            python3.11 -m venv venv
+            python3.12 -m venv venv
             source venv/bin/activate
             log_success "Virtual environment recreated"
         fi
     else
         log_step "Creating virtual environment..."
-        python3.11 -m venv venv
+        python3.12 -m venv venv
         source venv/bin/activate
         log_success "Virtual environment created"
     fi
@@ -959,7 +967,7 @@ show_final_info() {
     print_header "🎉 SHCI Installation Complete!"
     
     echo -e "${GREEN}✅ Installation Summary:${NC}"
-    echo -e "   • Python 3.11 with virtual environment"
+    echo -e "   • Python 3.12 with virtual environment"
     echo -e "   • Node.js $(node --version)"
     echo -e "   • FastAPI backend with GPU support"
     echo -e "   • Next.js frontend"
