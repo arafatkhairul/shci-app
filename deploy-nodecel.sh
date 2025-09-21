@@ -356,18 +356,30 @@ install_nodejs() {
             log_warning "Node.js $node_version is installed, but we need v24.x"
             log_step "Updating to Node.js 24.x..."
             
+            # Clean apt cache first to fix apt_pkg error
+            apt clean
+            apt update --fix-missing 2>/dev/null || true
+            
             # Add NodeSource repository
             curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-            apt install -y nodejs
+            
+            # Install Node.js with force-yes to avoid prompts
+            DEBIAN_FRONTEND=noninteractive apt install -y nodejs
             
             log_success "Node.js updated to $(node --version)"
         fi
     else
         log_step "Installing Node.js 24.1.0..."
         
+        # Clean apt cache first
+        apt clean
+        apt update --fix-missing 2>/dev/null || true
+        
         # Add NodeSource repository
         curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
-        apt install -y nodejs
+        
+        # Install Node.js
+        DEBIAN_FRONTEND=noninteractive apt install -y nodejs
         
         log_success "Node.js $(node --version) installed"
     fi
@@ -376,8 +388,15 @@ install_nodejs() {
     if check_command_exists "npm"; then
         log_success "npm $(npm --version) is available"
     else
-        log_error "npm is not available after Node.js installation"
-        return 1
+        log_warning "npm not found, installing separately..."
+        # Install npm separately if needed
+        DEBIAN_FRONTEND=noninteractive apt install -y npm
+        if check_command_exists "npm"; then
+            log_success "npm $(npm --version) installed"
+        else
+            log_error "Failed to install npm"
+            return 1
+        fi
     fi
 }
 
@@ -1038,6 +1057,42 @@ show_deployment_summary() {
     echo -e "   • If port conflicts: Check netstat -tlnp | grep :8000"
 }
 
+# Hard reset and fresh deployment
+hard_reset_deployment() {
+    log_step "Performing hard reset deployment..."
+    
+    # Stop all services first
+    systemctl stop shci-backend shci-frontend nginx 2>/dev/null || true
+    
+    # Remove project directory
+    if [ -d "$PROJECT_DIR" ]; then
+        log_step "Removing existing project directory..."
+        rm -rf "$PROJECT_DIR"
+        log_success "Project directory removed"
+    fi
+    
+    # Remove systemd services
+    log_step "Removing existing systemd services..."
+    rm -f /etc/systemd/system/shci-*.service
+    systemctl daemon-reload
+    log_success "Systemd services removed"
+    
+    # Remove nginx configuration
+    log_step "Removing existing nginx configuration..."
+    rm -f /etc/nginx/sites-available/shci
+    rm -f /etc/nginx/sites-enabled/shci
+    systemctl reload nginx 2>/dev/null || true
+    log_success "Nginx configuration removed"
+    
+    # Clean apt cache to fix apt_pkg error
+    log_step "Cleaning apt cache to fix apt_pkg error..."
+    apt clean
+    apt update --fix-missing
+    log_success "Apt cache cleaned"
+    
+    log_success "Hard reset completed - ready for fresh deployment"
+}
+
 # Main execution
 main() {
     print_header "SHCI Voice Assistant - Nodecel.com Production Deployment"
@@ -1048,6 +1103,11 @@ main() {
     log_message "Project directory: $PROJECT_DIR"
     log_message "Repository: $REPO_URL"
     log_message "Branch: $BRANCH"
+    
+    # Check if hard reset is requested
+    if [ "$1" = "--hard-reset" ] || [ "$1" = "-r" ]; then
+        hard_reset_deployment
+    fi
     
     # Pre-flight checks
     check_root
@@ -1099,6 +1159,36 @@ main() {
     
     print_success "Deployment completed! No reboot needed since NVIDIA was already installed."
 }
+
+# Show help
+show_help() {
+    echo "SHCI Voice Assistant - Nodecel.com Production Deployment"
+    echo ""
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  --hard-reset, -r    Perform hard reset (remove all existing files and start fresh)"
+    echo "  --help, -h          Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0                  # Normal deployment (smart checks)"
+    echo "  $0 --hard-reset     # Hard reset and fresh deployment"
+    echo "  $0 -r               # Hard reset and fresh deployment"
+    echo ""
+    echo "Hard reset will:"
+    echo "  - Stop all services"
+    echo "  - Remove project directory"
+    echo "  - Remove systemd services"
+    echo "  - Remove nginx configuration"
+    echo "  - Clean apt cache"
+    echo "  - Start fresh deployment"
+}
+
+# Check for help option
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    show_help
+    exit 0
+fi
 
 # Run main function
 main "$@"
