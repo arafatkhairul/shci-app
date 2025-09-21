@@ -45,21 +45,31 @@ class LLMService:
         
         for attempt in range(self.retries):
             try:
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+                log.info(f"🔄 LLM request attempt {attempt + 1}/{self.retries} to {self.api_url}")
+                timeout_config = aiohttp.ClientTimeout(total=self.timeout, connect=10.0)
+                async with aiohttp.ClientSession(timeout=timeout_config) as session:
                     async with session.post(self.api_url, json=payload, headers=headers) as response:
+                        log.info(f"📡 LLM API response status: {response.status}")
                         if response.status == 200:
                             data = await response.json()
-                            return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                            log.info(f"✅ LLM response received: {len(content)} characters")
+                            return content
                         else:
-                            log.warning(f"LLM API returned status {response.status}")
+                            error_text = await response.text()
+                            log.warning(f"⚠️ LLM API returned status {response.status}: {error_text}")
                             
             except asyncio.TimeoutError:
-                log.warning(f"LLM request timeout (attempt {attempt + 1}/{self.retries})")
+                log.warning(f"⏰ LLM request timeout after {self.timeout}s (attempt {attempt + 1}/{self.retries})")
+            except aiohttp.ClientError as e:
+                log.warning(f"🌐 LLM connection error (attempt {attempt + 1}/{self.retries}): {str(e)}")
             except Exception as e:
-                log_exception(log, f"LLM request error (attempt {attempt + 1}/{self.retries})", e)
+                log_exception(log, f"❌ LLM request error (attempt {attempt + 1}/{self.retries})", e)
                 
             if attempt < self.retries - 1:
-                await asyncio.sleep(1)  # Wait before retry
+                wait_time = (attempt + 1) * 2  # Exponential backoff
+                log.info(f"⏳ Waiting {wait_time}s before retry...")
+                await asyncio.sleep(wait_time)
         
         return None
 
@@ -87,28 +97,40 @@ class LLMService:
             payload["max_tokens"] = max_tokens
         
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout)) as session:
+            log.info(f"🔄 LLM streaming request to {self.api_url}")
+            timeout_config = aiohttp.ClientTimeout(total=self.timeout, connect=10.0)
+            async with aiohttp.ClientSession(timeout=timeout_config) as session:
                 async with session.post(self.api_url, json=payload, headers=headers) as response:
+                    log.info(f"📡 LLM streaming API response status: {response.status}")
                     if response.status == 200:
+                        chunk_count = 0
                         async for line in response.content:
                             line = line.decode('utf-8').strip()
                             if line.startswith('data: '):
                                 data_str = line[6:]  # Remove 'data: ' prefix
                                 if data_str == '[DONE]':
+                                    log.info(f"✅ LLM streaming completed with {chunk_count} chunks")
                                     break
                                 try:
                                     data = json.loads(data_str)
                                     if 'choices' in data and len(data['choices']) > 0:
                                         delta = data['choices'][0].get('delta', {})
                                         if 'content' in delta:
+                                            chunk_count += 1
                                             yield delta['content']
-                                except json.JSONDecodeError:
+                                except json.JSONDecodeError as e:
+                                    log.debug(f"JSON decode error in streaming: {e}")
                                     continue
                     else:
-                        log.warning(f"LLM streaming API returned status {response.status}")
+                        error_text = await response.text()
+                        log.warning(f"⚠️ LLM streaming API returned status {response.status}: {error_text}")
                         
+        except asyncio.TimeoutError:
+            log.warning(f"⏰ LLM streaming timeout after {self.timeout}s")
+        except aiohttp.ClientError as e:
+            log.warning(f"🌐 LLM streaming connection error: {str(e)}")
         except Exception as e:
-            log_exception(log, "LLM streaming error", e)
+            log_exception(log, "❌ LLM streaming error", e)
 
     async def generate_with_context(
         self,
