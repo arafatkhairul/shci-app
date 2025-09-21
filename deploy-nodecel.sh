@@ -99,31 +99,10 @@ install_nodejs() {
     print_success "Node.js $(node --version) installed"
 }
 
-# Check NVIDIA installation
-check_nvidia() {
-    print_step "Checking NVIDIA installation..."
-    
-    # Check if NVIDIA GPU is present
-    if ! lspci | grep -i nvidia > /dev/null; then
-        print_warning "NVIDIA GPU not detected. Skipping NVIDIA check."
-        return
-    fi
-    
-    # Check if NVIDIA drivers are already installed
-    if command -v nvidia-smi &> /dev/null; then
-        print_success "NVIDIA drivers already installed"
-        nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader,nounits
-    else
-        print_warning "NVIDIA drivers not found. Please install manually if needed."
-    fi
-    
-    # Check if CUDA is available
-    if command -v nvcc &> /dev/null; then
-        print_success "CUDA toolkit already installed"
-        nvcc --version | head -1
-    else
-        print_warning "CUDA toolkit not found. Please install manually if needed."
-    fi
+# Skip NVIDIA - already installed
+skip_nvidia() {
+    print_step "Skipping NVIDIA installation - already installed on server"
+    print_success "NVIDIA drivers and CUDA already available"
 }
 
 # Install Nginx and SSL
@@ -574,7 +553,7 @@ main() {
     update_system
     install_python
     install_nodejs
-    check_nvidia
+    skip_nvidia
     install_nginx
     clone_repository
     setup_backend
