@@ -317,24 +317,6 @@ install_python() {
     if check_command_exists "python3.12"; then
         local python_version=$(python3.12 --version 2>&1 | cut -d' ' -f2)
         log_success "Python 3.12 is already installed (version: $python_version)"
-        
-        # Check if virtual environment module is available
-        if python3.12 -m venv --help &> /dev/null; then
-            log_success "Python 3.12 venv module is available"
-        else
-            log_step "Installing Python 3.12 venv module..."
-            apt install -y python3.12-venv
-            log_success "Python 3.12 venv module installed"
-        fi
-        
-        # Check if pip is available
-        if check_command_exists "pip3"; then
-            log_success "pip3 is already available"
-        else
-            log_step "Installing pip3..."
-            apt install -y python3-pip
-            log_success "pip3 installed"
-        fi
     else
         log_step "Installing Python 3.12..."
         
@@ -354,6 +336,24 @@ install_python() {
         update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1
         
         log_success "Python 3.12 installed successfully"
+    fi
+    
+    # Ensure virtual environment module is available
+    if python3.12 -m venv --help &> /dev/null; then
+        log_success "Python 3.12 venv module is available"
+    else
+        log_step "Installing Python 3.12 venv module..."
+        apt install -y python3.12-venv
+        log_success "Python 3.12 venv module installed"
+    fi
+    
+    # Check if pip is available
+    if check_command_exists "pip3"; then
+        log_success "pip3 is already available"
+    else
+        log_step "Installing pip3..."
+        apt install -y python3-pip
+        log_success "pip3 installed"
     fi
 }
 
@@ -509,10 +509,20 @@ setup_backend() {
     # Ensure Python 3.12 is available and set as default
     log_step "Ensuring Python 3.12 is properly configured..."
     
-    # Verify Python 3.12 installation
+    # Verify Python 3.12 installation, install if not available
     if ! check_command_exists "python3.12"; then
-        log_error "Python 3.12 is not installed. Please run install_python first."
-        exit 1
+        log_step "Python 3.12 not found, installing..."
+        
+        # Add deadsnakes PPA if not already added
+        if ! grep -q "deadsnakes" /etc/apt/sources.list.d/*.list 2>/dev/null; then
+            add-apt-repository ppa:deadsnakes/ppa -y
+            apt update
+        fi
+        
+        # Install Python 3.12 and related packages
+        apt install -y python3.12 python3.12-venv python3.12-dev python3-pip python3.12-distutils
+        
+        log_success "Python 3.12 installed"
     fi
     
     PYTHON_VERSION=$(python3.12 --version 2>&1)
@@ -531,9 +541,20 @@ setup_backend() {
     
     # Create new virtual environment with Python 3.12
     log_step "Creating new virtual environment with Python 3.12..."
-    python3.12 -m venv venv
+    
+    # Try python3.12 first, fallback to python3 if not available
+    if command -v python3.12 &> /dev/null; then
+        python3.12 -m venv venv
+        log_success "Virtual environment created with Python 3.12"
+    elif command -v python3 &> /dev/null; then
+        python3 -m venv venv
+        log_success "Virtual environment created with system Python 3"
+    else
+        log_error "No Python 3 installation found"
+        exit 1
+    fi
+    
     source venv/bin/activate
-    log_success "Virtual environment created with Python 3.12"
     
     # Upgrade pip
     log_step "Upgrading pip..."
