@@ -6,6 +6,7 @@ import uuid
 import asyncio
 import base64
 import re
+import time
 from typing import Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from collections import deque
@@ -17,6 +18,7 @@ from app.models.session_memory import SessionMemory, MemoryStore
 from app.services.llm_service import LLMService
 from app.services.tts_service import TTSService
 from app.services.database_service import DatabaseService
+from app.services.session_service import session_service
 
 log = get_logger("chat_handler")
 
@@ -29,21 +31,56 @@ class ChatHandler:
         self.db_service = db_service
 
     async def handle_websocket(self, websocket: WebSocket):
-        """Handle WebSocket connection"""
+        """Handle WebSocket connection with persistent session memory"""
         await websocket.accept()
         conn_id = uuid.uuid4().hex[:8]
         
-        # Initialize session memory
-        mem = SessionMemory(language=DEFAULT_LANGUAGE)
+        # Clean up expired sessions
+        session_service.cleanup_expired_sessions()
+        
+        # Create or get existing session
+        session_id = session_service.create_or_get_session(conn_id)
+        
+        # Load session memory
+        mem = session_service.load_session_memory(session_id)
+        if not mem:
+            # Create new memory if none exists
+            mem = SessionMemory(language=DEFAULT_LANGUAGE)
+            mem.client_id = session_id
+            mem.session_start_time = time.time()
+            log.info(f"[{conn_id}] 🆕 Created new session memory for {session_id}")
+        else:
+            log.info(f"[{conn_id}] 🔄 Loaded existing session memory for {session_id}")
+        
         server_tts_enabled = True
-        mem_store: Optional[MemoryStore] = None
+        mem_store = MemoryStore(session_id)
         
         try:
-            # Send intro message
-            intro_text = LANGUAGES[mem.language]["intro_line"]
-            await self.send_json(websocket, {"type": "ai_text", "text": intro_text})
-            mem.add_history("assistant", intro_text)
+            # Check if this is a returning session or new session
+            if mem.total_interactions > 0:
+                # Returning session - send welcome back message
+                welcome_back_text = f"Welcome back! I remember our conversation about {', '.join(mem.conversation_topics[-3:]) if mem.conversation_topics else 'various topics'}. How can I help you today?"
+                await self.send_json(websocket, {"type": "ai_text", "text": welcome_back_text})
+                mem.add_history("assistant", welcome_back_text)
+                log.info(f"[{conn_id}] 🔄 Welcome back - {mem.total_interactions} previous interactions")
+            else:
+                # New session - send intro message
+                intro_text = LANGUAGES[mem.language]["intro_line"]
+                await self.send_json(websocket, {"type": "ai_text", "text": intro_text})
+                mem.add_history("assistant", intro_text)
+                log.info(f"[{conn_id}] 🆕 New session started")
+            
             mem.greeted = True
+            
+            # Send session info to frontend
+            await self.send_json(websocket, {
+                "type": "session_info",
+                "session_id": session_id,
+                "is_returning": mem.total_interactions > 0,
+                "previous_interactions": mem.total_interactions,
+                "topics_discussed": mem.conversation_topics[-5:] if mem.conversation_topics else []
+            })
+            
         except Exception as e:
             log_exception(log, f"[{conn_id}] intro_send", e)
 
@@ -54,10 +91,36 @@ class ChatHandler:
         voiced_count = 0
         silence_count = 0
         utter_frames = 0
+        
+        # Session timeout management (20 minutes = 1200 seconds)
+        session_timeout = 1200  # 20 minutes
+        last_activity_time = time.time()
+        memory_save_interval = 30  # Save memory every 30 seconds
+        last_memory_save = time.time()
 
         try:
             while True:
+                # Check session timeout
+                current_time = time.time()
+                if current_time - last_activity_time > session_timeout:
+                    log.info(f"[{conn_id}] ⏰ Session timeout after {session_timeout} seconds")
+                    await self.send_json(websocket, {
+                        "type": "session_timeout",
+                        "message": "Session expired after 20 minutes of inactivity"
+                    })
+                    break
+                
+                # Periodic memory saving
+                if current_time - last_memory_save > memory_save_interval and mem_store:
+                    mem_store.save(mem)
+                    last_memory_save = current_time
+                    log.info(f"[{conn_id}] 💾 Periodic memory save - {mem.total_interactions} interactions")
+                
                 msg = await websocket.receive()
+                last_activity_time = current_time  # Update activity time
+                
+                # Update session activity
+                session_service.update_session_activity(session_id)
 
                 # Handle control messages (JSON text)
                 if msg["type"] == "websocket.receive" and msg.get("text") is not None:
@@ -82,8 +145,19 @@ class ChatHandler:
 
         except WebSocketDisconnect:
             log.info(f"[{conn_id}] WebSocket disconnected")
+            # Save final memory state
+            if mem_store:
+                mem_store.save(mem)
+                log.info(f"[{conn_id}] 💾 Final memory save on disconnect - {mem.total_interactions} interactions")
         except Exception as e:
             log_exception(log, f"[{conn_id}] websocket_error", e)
+            # Save memory even on error
+            if mem_store:
+                try:
+                    mem_store.save(mem)
+                    log.info(f"[{conn_id}] 💾 Emergency memory save on error - {mem.total_interactions} interactions")
+                except:
+                    pass
 
     async def send_json(self, websocket: WebSocket, payload: dict):
         """Send JSON message through WebSocket"""
@@ -198,8 +272,8 @@ class ChatHandler:
             lang_config = LANGUAGES[mem.language]
             persona = lang_config["persona"]
             
-            # Create context messages
-            context_messages = self.llm_service.create_context_messages(mem.get_recent_context())
+            # Create context messages with enhanced conversation memory
+            context_messages = self.llm_service.create_context_messages(mem.get_context_for_llm())
             
             # Add user message to memory
             mem.add_history("user", transcript)
@@ -222,10 +296,30 @@ class ChatHandler:
             except:
                 pass  # Ignore pre-warm errors
             
-            # Create messages with system prompt for voice agent
+            # Get conversation summary for better context
+            conversation_summary = mem.get_conversation_summary()
+            
+            # Create enhanced system prompt with conversation context
+            enhanced_persona = f"""{persona}
+
+CONVERSATION CONTEXT:
+- User Name: {conversation_summary.get('user_name', 'Unknown')}
+- Session Duration: {conversation_summary.get('session_duration', 0):.1f} seconds
+- Total Interactions: {conversation_summary.get('total_interactions', 0)}
+- Topics Discussed: {', '.join(conversation_summary.get('topics_discussed', [])[-5:])}
+- Language: {conversation_summary.get('language', 'en')}
+- Difficulty Level: {conversation_summary.get('level', 'medium')}
+
+IMPORTANT: You are a VOICE agent with FULL CONVERSATION MEMORY. 
+- Remember previous conversations and topics discussed
+- Reference past interactions naturally when relevant
+- Keep responses SHORT (1-2 sentences max) but contextually aware
+- Speak naturally and concisely. No long explanations or detailed lists.
+- Use the user's name and conversation history to create a more personal experience."""
+            
+            # Create messages with enhanced system prompt
             messages = [
-                {"role": "system", "content": persona},
-                {"role": "system", "content": "IMPORTANT: You are a VOICE agent. Keep responses SHORT (1-2 sentences max). Speak naturally and concisely. No long explanations or detailed lists."}
+                {"role": "system", "content": enhanced_persona}
             ]
             
             # Add grammar correction prompt
@@ -324,13 +418,44 @@ If the input is grammatically correct, respond normally without any grammar corr
                     "is_final": True
                 })
                 
-                # Add complete response to memory
-                mem.add_history("assistant", full_response)
+            # Add complete response to memory
+            mem.add_history("assistant", full_response)
+            
+            # Save memory after each complete interaction for better persistence
+            if mem_store:
+                mem_store.save(mem)
+                log.info(f"[{conn_id}] 💾 Memory saved with {len(mem.conversation_context)} conversation turns")
+                
+                # Send updated conversation context to frontend
+                await self.send_conversation_context(websocket, mem, conn_id)
             else:
                 log.warning(f"[{conn_id}] No AI response generated")
                 
         except Exception as e:
             log_exception(log, f"[{conn_id}] generate_response", e)
+    
+    async def send_conversation_context(self, websocket: WebSocket, mem: SessionMemory, conn_id: str):
+        """Send conversation context information to frontend"""
+        try:
+            conversation_summary = mem.get_conversation_summary()
+            
+            await self.send_json(websocket, {
+                "type": "conversation_context",
+                "context": {
+                    "user_name": conversation_summary.get('user_name'),
+                    "session_duration": conversation_summary.get('session_duration', 0),
+                    "total_interactions": conversation_summary.get('total_interactions', 0),
+                    "topics_discussed": conversation_summary.get('topics_discussed', []),
+                    "conversation_length": conversation_summary.get('conversation_length', 0),
+                    "language": conversation_summary.get('language', 'en'),
+                    "level": conversation_summary.get('level', 'medium')
+                }
+            })
+            
+            log.info(f"[{conn_id}] 📊 Sent conversation context: {conversation_summary.get('total_interactions', 0)} interactions")
+            
+        except Exception as e:
+            log_exception(log, f"[{conn_id}] send_conversation_context", e)
 
     def should_generate_audio_chunk(self, text_buffer: str) -> bool:
         """Determine if we should generate audio for the current text buffer"""

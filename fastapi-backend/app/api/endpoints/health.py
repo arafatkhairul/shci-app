@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.config.settings import settings
 from app.utils.logger import get_logger
 from app.services.llm_service import LLMService
+from app.services.session_service import session_service
 
 log = get_logger("health_endpoints")
 router = APIRouter()
@@ -92,4 +93,20 @@ If the input is grammatically correct, respond normally without any grammar corr
             "status": "error",
             "error": str(e),
             "grammar_working": False
+        }
+
+@router.get("/session-stats")
+async def get_session_stats():
+    """Get session statistics"""
+    try:
+        stats = session_service.get_session_stats()
+        return {
+            "status": "success",
+            "session_stats": stats
+        }
+    except Exception as e:
+        log.error(f"Error getting session stats: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
         }
