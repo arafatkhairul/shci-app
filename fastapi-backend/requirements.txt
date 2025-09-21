@@ -26,6 +26,9 @@ python-dotenv==1.1.1
 # HTTP client for API requests
 requests==2.32.5
 
+# Async HTTP client for WebSocket and async operations
+aiohttp==3.9.1
+
 # System monitoring and optimization
 psutil==5.9.8
 
