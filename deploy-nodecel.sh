@@ -2,7 +2,7 @@
 # ===================================================================
 # SHCI Voice Assistant - Nodecel.com Production Deployment
 # ===================================================================
-# Complete deployment script for nodecel.com with NVIDIA RTX 5090 GPU
+# Complete deployment script for nodecel.com
 # Project Directory: /var/www/shci-app
 # Domain: nodecel.com
 # User: root
@@ -280,11 +280,6 @@ configure_git_ssh() {
 update_system() {
     log_step "Updating system packages..."
     
-    # Remove problematic NVIDIA repositories
-    rm -f /etc/apt/sources.list.d/nvidia-*
-    rm -f /etc/apt/sources.list.d/libnvidia-container-*
-    rm -f /etc/apt/sources.list.d/nvidia-container-runtime-*
-    rm -f /etc/apt/sources.list.d/nvidia-docker-*
     
     # Clean apt cache
     apt clean
@@ -569,13 +564,11 @@ setup_backend() {
         cat > .env << 'EOF'
 # Environment
 TTS_ENVIRONMENT=production
-PIPER_DEVICE=cuda
-PIPER_FORCE_CUDA=true
+PIPER_DEVICE=cpu
+PIPER_FORCE_CUDA=false
 
-# GPU Configuration
-CUDA_VISIBLE_DEVICES=0
-TORCH_DEVICE=cuda
-TTS_DEVICE=cuda
+# TTS Configuration
+TTS_DEVICE=cpu
 
 # API Configuration
 OPENAI_API_KEY=your_openai_key_here
@@ -607,10 +600,6 @@ PYTHONDONTWRITEBYTECODE=1
 MALLOC_TRIM_THRESHOLD_=131072
 MALLOC_MMAP_THRESHOLD_=131072
 
-# CUDA Optimization
-TORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
-CUDA_CACHE_DISABLE=0
-CUDA_LAUNCH_BLOCKING=0
 EOF
     fi
     
@@ -1072,12 +1061,6 @@ show_final_info() {
     echo -e "   • Restart: systemctl restart shci-backend shci-frontend"
     echo -e "   • Stop: systemctl stop shci-backend shci-frontend"
     
-    echo -e "\n${PURPLE}📊 GPU Information:${NC}"
-    if command -v nvidia-smi &> /dev/null; then
-        nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader,nounits
-    else
-        echo -e "   GPU drivers not installed or not detected"
-    fi
     
     echo -e "\n${CYAN}📝 Next Steps:${NC}"
     echo -e "   1. Update your OpenAI API key in: $PROJECT_DIR/fastapi-backend/.env"
@@ -1237,7 +1220,7 @@ main() {
     log_message "Deployment log saved to: $LOG_FILE"
     log_message "Backups saved to: $BACKUP_DIR/$DEPLOYMENT_DATE"
     
-    print_success "Deployment completed! No reboot needed since NVIDIA was already installed."
+    print_success "Deployment completed successfully!"
 }
 
 # Show help
