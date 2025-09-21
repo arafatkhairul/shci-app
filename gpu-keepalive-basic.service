@@ -1,0 +1,16 @@
+[Unit]
+Description=Basic GPU Keep-Alive Service (No Python)
+After=multi-user.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/shci-app
+ExecStart=/var/www/shci-app/gpu-keepalive-basic.sh
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
