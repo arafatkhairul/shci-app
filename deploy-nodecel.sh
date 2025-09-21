@@ -27,7 +27,7 @@ NC='\033[0m' # No Color
 # Configuration
 PROJECT_DIR="/var/www/shci-app"
 REPO_URL="https://github.com/arafatkhairul/shci-app.git"
-BRANCH="tts-medium-variants"
+BRANCH="feature/tts-medium-variants"
 SERVICE_USER="root"
 SERVICE_GROUP="root"
 LOG_FILE="/var/log/shci-deployment.log"
@@ -461,7 +461,7 @@ clone_repository() {
             local current_branch=$(git branch --show-current)
             if [ "$current_branch" != "$BRANCH" ]; then
                 log_step "Switching to branch: $BRANCH"
-                git checkout "$BRANCH"
+                git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH" origin/"$BRANCH"
             fi
             
             # Reset to latest commit
@@ -1070,6 +1070,12 @@ hard_reset_deployment() {
         rm -rf "$PROJECT_DIR"
         log_success "Project directory removed"
     fi
+    
+    # Clone fresh repository
+    log_step "Cloning fresh repository..."
+    git clone -b "$BRANCH" "$REPO_URL" "$PROJECT_DIR"
+    chown -R root:root "$PROJECT_DIR"
+    log_success "Fresh repository cloned"
     
     # Remove systemd services
     log_step "Removing existing systemd services..."
