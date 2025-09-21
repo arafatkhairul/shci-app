@@ -165,6 +165,10 @@ class PiperTTSProvider(TTSInterface):
             self._initialized = True
             log.info(f"🔧 CUDA: {'Enabled' if self.use_cuda else 'Disabled'}")
             log.info(f"✅ Piper TTS initialized with voice: {self.current_voice}")
+            
+            # Pre-load GPU if using CUDA
+            if self.use_cuda and self.device_info['cuda_available']:
+                self._preload_gpu()
         else:
             log.warning("❌ Piper TTS not available")
     
@@ -234,6 +238,39 @@ class PiperTTSProvider(TTSInterface):
         }
         
         return device_config
+    
+    def _preload_gpu(self):
+        """Pre-load GPU to prevent idle shutdown and reduce first-time load delays."""
+        try:
+            if not self.use_cuda or not self.device_info['cuda_available']:
+                return
+                
+            log.info("🚀 Pre-loading GPU to prevent idle shutdown...")
+            
+            import torch
+            gpu_id = self.device_info.get('gpu_id', 0)
+            
+            # Set CUDA device
+            torch.cuda.set_device(gpu_id)
+            
+            # Pre-load GPU with small operations
+            device = torch.device(f'cuda:{gpu_id}')
+            
+            # Create small tensors to keep GPU active
+            x = torch.randn(100, 100, device=device)
+            y = torch.randn(100, 100, device=device)
+            z = torch.mm(x, y)
+            
+            # Keep result in memory to prevent GPU from going idle
+            self._gpu_keepalive_tensor = z
+            
+            # Clear cache to free up memory
+            torch.cuda.empty_cache()
+            
+            log.info(f"✅ GPU {gpu_id} pre-loaded and kept active")
+            
+        except Exception as e:
+            log.warning(f"Failed to pre-load GPU: {e}")
     
     def _apply_server_optimizations(self):
         """Apply server-specific performance optimizations."""

@@ -1,0 +1,16 @@
+[Unit]
+Description=GPU Keep-Alive Service
+After=multi-user.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/shci-app
+ExecStart=/usr/bin/python3 /var/www/shci-app/gpu-keepalive.py --interval 30 --gpu-id 0
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
