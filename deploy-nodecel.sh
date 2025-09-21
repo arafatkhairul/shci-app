@@ -99,30 +99,31 @@ install_nodejs() {
     print_success "Node.js $(node --version) installed"
 }
 
-# Install NVIDIA drivers and CUDA
-install_nvidia() {
-    print_step "Installing NVIDIA drivers and CUDA..."
+# Check NVIDIA installation
+check_nvidia() {
+    print_step "Checking NVIDIA installation..."
     
     # Check if NVIDIA GPU is present
     if ! lspci | grep -i nvidia > /dev/null; then
-        print_warning "NVIDIA GPU not detected. Skipping NVIDIA installation."
+        print_warning "NVIDIA GPU not detected. Skipping NVIDIA check."
         return
     fi
     
-    # Install NVIDIA drivers
-    apt install -y nvidia-driver-535
-    print_warning "NVIDIA drivers installed. System will reboot after script completion."
+    # Check if NVIDIA drivers are already installed
+    if command -v nvidia-smi &> /dev/null; then
+        print_success "NVIDIA drivers already installed"
+        nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader,nounits
+    else
+        print_warning "NVIDIA drivers not found. Please install manually if needed."
+    fi
     
-    # Download and install CUDA
-    cd /tmp
-    wget https://developer.download.nvidia.com/compute/cuda/12.1.0/local_installers/cuda_12.1.0_530.30.02_linux.run
-    sh cuda_12.1.0_530.30.02_linux.run --silent --toolkit
-    
-    # Add CUDA to PATH
-    echo 'export PATH=/usr/local/cuda-12.1/bin:$PATH' | tee -a /etc/environment
-    echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64:$LD_LIBRARY_PATH' | tee -a /etc/environment
-    
-    print_success "NVIDIA drivers and CUDA installed"
+    # Check if CUDA is available
+    if command -v nvcc &> /dev/null; then
+        print_success "CUDA toolkit already installed"
+        nvcc --version | head -1
+    else
+        print_warning "CUDA toolkit not found. Please install manually if needed."
+    fi
 }
 
 # Install Nginx and SSL
@@ -573,7 +574,7 @@ main() {
     update_system
     install_python
     install_nodejs
-    install_nvidia
+    check_nvidia
     install_nginx
     clone_repository
     setup_backend
@@ -587,7 +588,7 @@ main() {
     verify_installation
     show_final_info
     
-    print_warning "If NVIDIA drivers were installed, please reboot the system: reboot"
+    print_success "Deployment completed! No reboot needed since NVIDIA was already installed."
 }
 
 # Run main function
