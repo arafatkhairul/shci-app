@@ -1447,10 +1447,10 @@ export default function VoiceAgent() {
         isPlayingAudioRef.current = true;
 
         // Highlight the text being spoken
-        if (src.text) {
-            setCurrentSpeakingText(src.text);
-            setHighlightedText(src.text);
-            speakingTextRef.current = src.text;
+        if ((src as any).text) {
+            setCurrentSpeakingText((src as any).text);
+            setHighlightedText((src as any).text);
+            speakingTextRef.current = (src as any).text;
         }
 
         src.onended = () => {
