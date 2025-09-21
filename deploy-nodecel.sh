@@ -1084,10 +1084,18 @@ hard_reset_deployment() {
     systemctl reload nginx 2>/dev/null || true
     log_success "Nginx configuration removed"
     
+    # Remove old Node.js to ensure clean installation
+    log_step "Removing old Node.js installation..."
+    apt remove -y nodejs npm 2>/dev/null || true
+    rm -rf /usr/lib/node_modules
+    rm -rf /usr/local/lib/node_modules
+    rm -rf ~/.npm
+    log_success "Old Node.js removed"
+    
     # Clean apt cache to fix apt_pkg error
     log_step "Cleaning apt cache to fix apt_pkg error..."
     apt clean
-    apt update --fix-missing
+    apt update --fix-missing 2>/dev/null || true
     log_success "Apt cache cleaned"
     
     log_success "Hard reset completed - ready for fresh deployment"
@@ -1103,11 +1111,6 @@ main() {
     log_message "Project directory: $PROJECT_DIR"
     log_message "Repository: $REPO_URL"
     log_message "Branch: $BRANCH"
-    
-    # Check if hard reset is requested
-    if [ "$1" = "--hard-reset" ] || [ "$1" = "-r" ]; then
-        hard_reset_deployment
-    fi
     
     # Pre-flight checks
     check_root
@@ -1188,6 +1191,13 @@ show_help() {
 if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
     show_help
     exit 0
+fi
+
+# Check for hard reset option and execute it first
+if [ "$1" = "--hard-reset" ] || [ "$1" = "-r" ]; then
+    echo "Performing hard reset deployment..."
+    hard_reset_deployment
+    echo "Hard reset completed. Starting fresh deployment..."
 fi
 
 # Run main function
