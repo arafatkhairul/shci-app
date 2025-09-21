@@ -1403,7 +1403,7 @@ export default function VoiceAgent() {
             
             // Store text for highlighting
             if (text) {
-                src.text = text;
+                (src as any).text = text;
             }
             
             // Add to queue instead of playing immediately

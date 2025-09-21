@@ -613,7 +613,7 @@ EOF
     
     # Build frontend
     log_step "Building Next.js frontend..."
-    npm run build
+    NODE_ENV=production npm run build
     log_success "Frontend built successfully"
 }
 
