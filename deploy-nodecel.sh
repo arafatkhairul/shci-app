@@ -670,10 +670,10 @@ Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_GROUP
 WorkingDirectory=$PROJECT_DIR/fastapi-backend
-Environment=PATH=$PROJECT_DIR/fastapi-backend/venv/bin
-Environment=PYTHONPATH=$PROJECT_DIR/fastapi-backend
-EnvironmentFile=$PROJECT_DIR/fastapi-backend/.env
-ExecStart=$PROJECT_DIR/fastapi-backend/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+        Environment=PATH=$PROJECT_DIR/fastapi-backend/venv/bin
+        Environment=PYTHONPATH=$PROJECT_DIR/fastapi-backend:$PROJECT_DIR/fastapi-backend/app:.
+        EnvironmentFile=$PROJECT_DIR/fastapi-backend/.env
+        ExecStart=$PROJECT_DIR/fastapi-backend/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 Restart=always
 RestartSec=10
 StandardOutput=journal
