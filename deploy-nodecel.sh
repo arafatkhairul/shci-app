@@ -11,6 +11,9 @@
 
 set -e
 
+# Set up error handling
+trap 'handle_error $LINENO' ERR
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -26,6 +29,9 @@ REPO_URL="https://github.com/arafatkhairul/shci-app.git"
 BRANCH="tts-medium-variants"
 SERVICE_USER="root"
 SERVICE_GROUP="root"
+LOG_FILE="/var/log/shci-deployment.log"
+BACKUP_DIR="/var/backups/shci"
+DEPLOYMENT_DATE=$(date +"%Y%m%d_%H%M%S")
 
 # Helper functions
 print_header() {
@@ -48,6 +54,171 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}❌ $1${NC}"
+}
+
+# Logging functions
+log_message() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
+}
+
+log_step() {
+    local message="$1"
+    print_step "$message"
+    log_message "STEP: $message"
+}
+
+log_success() {
+    local message="$1"
+    print_success "$message"
+    log_message "SUCCESS: $message"
+}
+
+log_warning() {
+    local message="$1"
+    print_warning "$message"
+    log_message "WARNING: $message"
+}
+
+log_error() {
+    local message="$1"
+    print_error "$message"
+    log_message "ERROR: $message"
+}
+
+# Backup functions
+create_backup() {
+    local backup_name="$1"
+    local source_path="$2"
+    local backup_path="$BACKUP_DIR/$DEPLOYMENT_DATE/$backup_name"
+    
+    log_step "Creating backup: $backup_name"
+    
+    # Create backup directory
+    mkdir -p "$backup_path"
+    
+    # Create backup
+    if [ -d "$source_path" ]; then
+        cp -r "$source_path" "$backup_path/"
+        log_success "Backup created: $backup_path"
+    else
+        log_warning "Source path does not exist: $source_path"
+    fi
+}
+
+# System monitoring functions
+check_system_resources() {
+    log_step "Checking system resources..."
+    
+    # Check disk space
+    local disk_usage=$(df / | awk 'NR==2 {print $5}' | sed 's/%//')
+    if [ "$disk_usage" -gt 80 ]; then
+        log_warning "Disk usage is high: ${disk_usage}%"
+    else
+        log_success "Disk usage is acceptable: ${disk_usage}%"
+    fi
+    
+    # Check memory
+    local memory_usage=$(free | awk 'NR==2{printf "%.0f", $3*100/$2}')
+    if [ "$memory_usage" -gt 90 ]; then
+        log_warning "Memory usage is high: ${memory_usage}%"
+    else
+        log_success "Memory usage is acceptable: ${memory_usage}%"
+    fi
+    
+    # Check CPU load
+    local cpu_load=$(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}' | sed 's/,//')
+    local cpu_cores=$(nproc)
+    local cpu_usage=$(echo "$cpu_load $cpu_cores" | awk '{printf "%.0f", $1*100/$2}')
+    
+    if [ "$cpu_usage" -gt 80 ]; then
+        log_warning "CPU load is high: ${cpu_usage}%"
+    else
+        log_success "CPU load is acceptable: ${cpu_usage}%"
+    fi
+}
+
+# Cleanup functions
+cleanup_old_backups() {
+    log_step "Cleaning up old backups..."
+    
+    # Keep only last 5 backups
+    if [ -d "$BACKUP_DIR" ]; then
+        cd "$BACKUP_DIR"
+        ls -t | tail -n +6 | xargs -r rm -rf
+        log_success "Old backups cleaned up"
+    fi
+}
+
+# Health check functions
+check_service_health() {
+    local service_name="$1"
+    local max_attempts=30
+    local attempt=1
+    
+    log_step "Checking health of $service_name..."
+    
+    while [ $attempt -le $max_attempts ]; do
+        if systemctl is-active --quiet "$service_name"; then
+            log_success "$service_name is healthy"
+            return 0
+        fi
+        
+        log_warning "Attempt $attempt/$max_attempts: $service_name not ready yet..."
+        sleep 2
+        ((attempt++))
+    done
+    
+    log_error "$service_name failed health check after $max_attempts attempts"
+    return 1
+}
+
+# Rollback function
+rollback_deployment() {
+    log_error "Deployment failed! Starting rollback process..."
+    
+    # Stop services
+    systemctl stop shci-backend shci-frontend 2>/dev/null || true
+    
+    # Restore from backup if available
+    local latest_backup=$(ls -t "$BACKUP_DIR" 2>/dev/null | head -1)
+    if [ -n "$latest_backup" ] && [ -d "$BACKUP_DIR/$latest_backup" ]; then
+        log_step "Restoring from backup: $latest_backup"
+        
+        # Restore project
+        if [ -d "$BACKUP_DIR/$latest_backup/project_backup" ]; then
+            rm -rf "$PROJECT_DIR"
+            cp -r "$BACKUP_DIR/$latest_backup/project_backup" "$PROJECT_DIR"
+            log_success "Project restored from backup"
+        fi
+        
+        # Restore nginx config
+        if [ -f "$BACKUP_DIR/$latest_backup/nginx_config/shci" ]; then
+            cp "$BACKUP_DIR/$latest_backup/nginx_config/shci" "/etc/nginx/sites-available/"
+            nginx -t && systemctl reload nginx
+            log_success "Nginx configuration restored"
+        fi
+        
+        # Restore systemd services
+        if [ -d "$BACKUP_DIR/$latest_backup/systemd_services" ]; then
+            cp "$BACKUP_DIR/$latest_backup/systemd_services"/*.service "/etc/systemd/system/"
+            systemctl daemon-reload
+            systemctl start shci-backend shci-frontend
+            log_success "Systemd services restored"
+        fi
+    else
+        log_warning "No backup found for rollback"
+    fi
+    
+    log_error "Rollback completed. Please check the logs and fix issues before retrying."
+    exit 1
+}
+
+# Error handling
+handle_error() {
+    local exit_code=$?
+    log_error "Script failed with exit code: $exit_code"
+    log_error "Error occurred at line: $1"
+    rollback_deployment
 }
 
 # Check if running as root
@@ -541,13 +712,66 @@ show_final_info() {
     echo -e "\n${GREEN}🚀 Your SHCI Voice Assistant is ready!${NC}\n"
 }
 
+# Deployment summary
+show_deployment_summary() {
+    print_header "📊 Deployment Summary"
+    
+    echo -e "${GREEN}✅ Deployment Details:${NC}"
+    echo -e "   • Deployment Date: $DEPLOYMENT_DATE"
+    echo -e "   • Project Directory: $PROJECT_DIR"
+    echo -e "   • Repository: $REPO_URL"
+    echo -e "   • Branch: $BRANCH"
+    echo -e "   • Log File: $LOG_FILE"
+    echo -e "   • Backup Directory: $BACKUP_DIR/$DEPLOYMENT_DATE"
+    
+    echo -e "\n${BLUE}🔧 System Status:${NC}"
+    echo -e "   • Backend Service: $(systemctl is-active shci-backend 2>/dev/null || echo 'inactive')"
+    echo -e "   • Frontend Service: $(systemctl is-active shci-frontend 2>/dev/null || echo 'inactive')"
+    echo -e "   • Nginx Service: $(systemctl is-active nginx 2>/dev/null || echo 'inactive')"
+    
+    echo -e "\n${YELLOW}📈 Resource Usage:${NC}"
+    echo -e "   • Disk Usage: $(df / | awk 'NR==2 {print $5}')"
+    echo -e "   • Memory Usage: $(free | awk 'NR==2{printf "%.1f%%", $3*100/$2}')"
+    echo -e "   • CPU Load: $(uptime | awk -F'load average:' '{print $2}' | awk '{print $1}')"
+    
+    echo -e "\n${PURPLE}🔗 Quick Links:${NC}"
+    echo -e "   • View Logs: tail -f $LOG_FILE"
+    echo -e "   • Check Services: systemctl status shci-backend shci-frontend nginx"
+    echo -e "   • Restart Services: systemctl restart shci-backend shci-frontend"
+    echo -e "   • View Backups: ls -la $BACKUP_DIR"
+    
+    echo -e "\n${CYAN}🆘 Troubleshooting:${NC}"
+    echo -e "   • If services fail: Check logs with journalctl -u service-name"
+    echo -e "   • If rollback needed: Run the script again (it will auto-rollback)"
+    echo -e "   • If SSL issues: Check certbot certificates"
+    echo -e "   • If port conflicts: Check netstat -tlnp | grep :8000"
+}
+
 # Main execution
 main() {
     print_header "SHCI Voice Assistant - Nodecel.com Production Deployment"
     
+    # Initialize logging
+    log_message "Starting SHCI deployment process"
+    log_message "Deployment date: $DEPLOYMENT_DATE"
+    log_message "Project directory: $PROJECT_DIR"
+    log_message "Repository: $REPO_URL"
+    log_message "Branch: $BRANCH"
+    
     # Pre-flight checks
     check_root
     check_sudo
+    check_system_resources
+    
+    # Create backup directory
+    mkdir -p "$BACKUP_DIR"
+    
+    # Create backups if project exists
+    if [ -d "$PROJECT_DIR" ]; then
+        create_backup "project_backup" "$PROJECT_DIR"
+        create_backup "nginx_config" "/etc/nginx/sites-available/shci"
+        create_backup "systemd_services" "/etc/systemd/system/shci-*.service"
+    fi
     
     # Installation steps
     update_system
@@ -564,8 +788,23 @@ main() {
     configure_firewall
     optimize_system
     start_services
+    
+    # Enhanced verification with health checks
+    log_step "Performing comprehensive health checks..."
+    check_service_health "shci-backend"
+    check_service_health "shci-frontend"
+    check_service_health "nginx"
+    
     verify_installation
     show_final_info
+    show_deployment_summary
+    
+    # Cleanup old backups
+    cleanup_old_backups
+    
+    log_success "Deployment completed successfully!"
+    log_message "Deployment log saved to: $LOG_FILE"
+    log_message "Backups saved to: $BACKUP_DIR/$DEPLOYMENT_DATE"
     
     print_success "Deployment completed! No reboot needed since NVIDIA was already installed."
 }
