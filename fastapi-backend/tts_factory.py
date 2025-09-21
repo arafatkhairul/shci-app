@@ -80,53 +80,34 @@ class PiperTTSProvider(TTSInterface):
         
         # Voice configuration with multiple models
         self.voice_configs = {
-            "en_US-hfc_male-medium": {
-                "name": "Ryan (Male)",
-                "gender": "male",
-                "quality": "medium",
-                "model_path": "en_US-hfc_male-medium.onnx",
-                "config_path": "en_US-hfc_male-medium.onnx.json",
-                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/hfc_male/medium/en_US-hfc_male-medium.onnx",
-                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/hfc_male/medium/en_US-hfc_male-medium.onnx.json"
-            },
-            "en_US-ryan-medium": {
-                "name": "Ryan (Male)",
-                "gender": "male",
-                "quality": "medium",
-                "model_path": "en_US-ryan-medium.onnx",
-                "config_path": "en_US-ryan-medium.onnx.json",
-                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/en_US-ryan-medium.onnx",
-                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/medium/en_US-ryan-medium.onnx.json"
-            },
-            "en_US-libritts_r-medium": {
-                "name": "Sarah (Female)",
+            "en_GB-cori-medium": {
+                "name": "Cori (Female)",
                 "gender": "female",
                 "quality": "medium",
-                "model_path": "en_US-libritts_r-medium.onnx",
-                "config_path": "en_US-libritts_r-medium.onnx.json",
-                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx",
-                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/libritts_r/medium/en_US-libritts_r-medium.onnx.json"
+                "model_path": "en_GB-cori-medium.onnx",
+                "config_path": "en_GB-cori-medium.onnx.json",
+                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/cori/medium/en_GB-cori-medium.onnx",
+                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/cori/medium/en_GB-cori-medium.onnx.json"
             },
-            "en_US-ljspeech-medium": {
-                "name": "David (Female)",
-                "gender": "female",
+            "en_GB-northern_english_male-medium": {
+                "name": "Northern English Male",
+                "gender": "male",
                 "quality": "medium",
-                "model_path": "en_US-ljspeech-medium.onnx",
-                "config_path": "en_US-ljspeech-medium.onnx.json",
-                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx",
-                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx.json"
+                "model_path": "en_GB-northern_english_male-medium.onnx",
+                "config_path": "en_GB-northern_english_male-medium.onnx.json",
+                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx",
+                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium.onnx.json"
             }
         }
         
         # Voice mapping - Map high quality requests to medium quality
         self.voice_mapping = {
-            "en_US-ljspeech-high": "en_US-ljspeech-medium",
-            "en_US-libritts_r-high": "en_US-libritts_r-medium",
-            "en_US-ryan-high": "en_US-ryan-medium"
+            "en_GB-cori-high": "en_GB-cori-medium",
+            "en_GB-northern_english_male-high": "en_GB-northern_english_male-medium"
         }
         
         # Default voice selection
-        self.current_voice = os.getenv("PIPER_VOICE", "en_US-libritts_r-medium")
+        self.current_voice = os.getenv("PIPER_VOICE", "en_GB-cori-medium")
         self.model_path = self.voice_configs[self.current_voice]["model_path"]
         self.config_path = self.voice_configs[self.current_voice]["config_path"]
         
@@ -409,7 +390,7 @@ class PiperTTSProvider(TTSInterface):
         
         if voice_id not in self.voice_configs:
             log.warning(f"Voice {voice_id} not found, using default")
-            voice_id = "en_US-libritts_r-medium"
+            voice_id = "en_GB-cori-medium"
         
         if voice_id != self.current_voice:
             log.info(f"🎤 Switching voice from {self.current_voice} to {voice_id}")

@@ -21,7 +21,7 @@ class SessionMemory:
         self.history: List[Dict[str, str]] = []
         self.greeted: bool = False
         self.language: str = language
-        self.voice: str = "en_US-libritts_r-medium"  # Default voice
+        self.voice: str = "en_GB-cori-medium"  # Default voice
         self.client_id: Optional[str] = None
         self.level: str = "medium"
         
@@ -183,7 +183,7 @@ class SessionMemory:
         self.history = data.get("history", [])
         self.greeted = data.get("greeted", False)
         self.language = data.get("language", "en")
-        self.voice = data.get("voice", "en_US-libritts_r-medium")
+        self.voice = data.get("voice", "en_GB-cori-medium")
         self.level = data.get("level", "medium")
         
         # Enhanced conversation memory

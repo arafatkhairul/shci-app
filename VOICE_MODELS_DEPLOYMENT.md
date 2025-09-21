@@ -13,15 +13,13 @@ The SHCI voice system automatically handles voice model files on the server with
 
 ### 📁 **Voice Model Files**
 
-The system uses 4 voice models:
+The system uses 2 voice models:
 
 #### **Male Voices**:
-- `en_US-hfc_male-medium.onnx` (60.27 MB) - Ryan (Male) Medium
-- `en_US-ryan-high.onnx` (115.19 MB) - Ryan (Male) High
+- `en_GB-northern_english_male-medium.onnx` - Northern English Male (Medium)
 
 #### **Female Voices**:
-- `en_US-libritts_r-medium.onnx` (60.27 MB) - Sarah (Female) Medium  
-- `en_US-ljspeech-high.onnx` (108.91 MB) - David (Female) High
+- `en_GB-cori-medium.onnx` - Cori (Female) Medium
 
 #### **Configuration Files**:
 - `*.onnx.json` - Model configuration files (~1-2 KB each)
@@ -91,7 +89,7 @@ All models are downloaded from Hugging Face:
 #### **Environment Variables**:
 ```bash
 # Optional: Override default voice
-PIPER_VOICE=en_US-libritts_r-medium
+PIPER_VOICE=en_GB-cori-medium
 
 # Optional: Override speech speed
 PIPER_LENGTH_SCALE=0.8
@@ -101,7 +99,7 @@ PIPER_FORCE_CPU=true
 ```
 
 #### **Default Settings**:
-- **Default Voice**: Sarah (Female) - `en_US-libritts_r-medium`
+- **Default Voice**: Cori (Female) - `en_GB-cori-medium`
 - **Speech Speed**: 0.8 (faster than default 1.5)
 - **Device**: Auto-detects GPU/CPU
 
@@ -117,7 +115,7 @@ python -c "from tts_factory import TTSFactory; print(TTSFactory().get_info())"
 ```bash
 python -c "
 from tts_factory import synthesize_text
-audio = synthesize_text('Hello world!', 'en', 'en_US-libritts_r-medium')
+audio = synthesize_text('Hello world!', 'en', 'en_GB-cori-medium')
 print(f'Generated {len(audio)} bytes of audio')
 "
 ```

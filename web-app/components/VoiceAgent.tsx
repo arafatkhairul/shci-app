@@ -255,16 +255,12 @@ export default function VoiceAgent() {
     // ---------- Voice Configuration ----------
     const voiceConfig = {
         en: [
-            { id: "en_US-hfc_male-medium", name: "Ryan (Male)", gender: "male", quality: "medium" },
-            { id: "en_US-ryan-high", name: "Ryan (Male)", gender: "male", quality: "high" },
-            { id: "en_US-libritts_r-medium", name: "Sarah (Female)", gender: "female", quality: "medium" },
-            { id: "en_US-ljspeech-high", name: "David (Female)", gender: "female", quality: "high" }
+            { id: "en_GB-cori-medium", name: "Cori (Female)", gender: "female", quality: "medium" },
+            { id: "en_GB-northern_english_male-medium", name: "Northern English Male", gender: "male", quality: "medium" }
         ],
         it: [
-            { id: "en_US-hfc_male-medium", name: "Ryan (Male)", gender: "male", quality: "medium" },
-            { id: "en_US-ryan-high", name: "Ryan (Male)", gender: "male", quality: "high" },
-            { id: "en_US-libritts_r-medium", name: "Sarah (Female)", gender: "female", quality: "medium" },
-            { id: "en_US-ljspeech-high", name: "David (Female)", gender: "female", quality: "high" }
+            { id: "en_GB-cori-medium", name: "Cori (Female)", gender: "female", quality: "medium" },
+            { id: "en_GB-northern_english_male-medium", name: "Northern English Male", gender: "male", quality: "medium" }
         ]
     };
 

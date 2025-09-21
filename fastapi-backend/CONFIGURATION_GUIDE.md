@@ -40,7 +40,7 @@ TTS_SYSTEM=piper              # piper/fallback
 
 ### 🎯 Piper TTS Configuration
 ```bash
-PIPER_MODEL_NAME=en_US-ljspeech-medium
+PIPER_MODEL_NAME=en_GB-cori-medium
 PIPER_LENGTH_SCALE=1.5        # Speech speed (1.0 = normal)
 PIPER_NOISE_SCALE=3.0       # Voice clarity
 PIPER_NOISE_W=0.8             # Voice stability
@@ -120,7 +120,7 @@ PIPER_FORCE_CPU=true          # Force CPU even in production
 ```bash
 TTS_ENVIRONMENT=local
 TTS_SYSTEM=piper
-PIPER_MODEL_NAME=en_US-ljspeech-medium
+PIPER_MODEL_NAME=en_GB-cori-medium
 DEFAULT_LANGUAGE=en
 ```
 
@@ -128,7 +128,7 @@ DEFAULT_LANGUAGE=en
 ```bash
 TTS_ENVIRONMENT=production
 TTS_SYSTEM=piper
-PIPER_MODEL_NAME=en_US-ljspeech-medium
+PIPER_MODEL_NAME=en_GB-cori-medium
 DEFAULT_LANGUAGE=en
 # GPU will be used automatically if available
 ```
@@ -199,7 +199,7 @@ The application logs all configuration on startup:
 🔧 Environment: local (development)
 🤖 LLM: http://69.197.183.130:11434/v1/chat/completions (model=qwen2.5-14b-gpu)
 🎵 TTS System: piper
-🎯 Piper TTS: en_US-ljspeech-medium (length=1.5, noise=0.667, w=0.8)
+🎯 Piper TTS: en_GB-cori-medium (length=1.5, noise=0.667, w=0.8)
 🔊 Audio: wav @ 22050Hz, language=en
 👤 Assistant: Self Hosted Conversational Interface by NZR DEV
 🎤 VAD: trigger=2, silence=250ms, max=7000ms

@@ -42,7 +42,7 @@ LLM_RETRIES   = int(os.getenv("LLM_RETRIES", "1"))  # Reduced retries for faster
 TTS_SYSTEM = os.getenv("TTS_SYSTEM", "piper").lower()
 
 # ---- Piper TTS Configuration ----
-PIPER_MODEL_NAME = os.getenv("PIPER_MODEL_NAME", "en_US-ljspeech-medium").strip()
+PIPER_MODEL_NAME = os.getenv("PIPER_MODEL_NAME", "en_GB-cori-medium").strip()
 PIPER_LENGTH_SCALE = float(os.getenv("PIPER_LENGTH_SCALE", "1.5"))
 PIPER_NOISE_SCALE = float(os.getenv("PIPER_NOISE_SCALE", "1.0"))
 PIPER_NOISE_W = float(os.getenv("PIPER_NOISE_W", "0.8"))
@@ -425,7 +425,7 @@ class SessionMemory:
         self.history: List[Dict[str, str]] = []
         self.greeted: bool = False
         self.language: str = language
-        self.voice: str = "en_US-libritts_r-medium"  # Default voice
+        self.voice: str = "en_GB-cori-medium"  # Default voice
         self.client_id: Optional[str] = None
         self.level: str = "medium"
         self._recent_level_change_ts: float = 0.0  # NEW: for context trim on level change
@@ -986,7 +986,7 @@ async def root():
     return {"message": "Voice Agent Backend is running."}
 
 @app.get("/test-tts")
-async def test_tts(text: str = "Hello, this is a test of the Piper TTS system.", lang: str = "en", voice: str = "en_US-libritts_r-medium"):
+async def test_tts(text: str = "Hello, this is a test of the Piper TTS system.", lang: str = "en", voice: str = "en_GB-cori-medium"):
     try:
         audio_bytes = await tts_bytes_async(text, lang, voice)
         

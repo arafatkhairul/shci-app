@@ -26,7 +26,7 @@ TTS_SYSTEM=piper
 TTS_ENVIRONMENT=local  # or production
 
 # Piper TTS Model Configuration
-PIPER_MODEL_NAME=en_US-libritts_r-medium
+PIPER_MODEL_NAME=en_GB-cori-medium
 PIPER_LENGTH_SCALE=1.5
 PIPER_NOISE_SCALE=3.0
 PIPER_NOISE_W=0.8
@@ -39,8 +39,8 @@ TTS_FORMAT=wav
 ### Model Configuration
 
 Piper TTS স্বয়ংক্রিয়ভাবে প্রয়োজনীয় মডেল ডাউনলোড করে:
-- **Model**: `en_US-libritts_r-medium.onnx`
-- **Config**: `en_US-libritts_r-medium.onnx.json`
+- **Model**: `en_GB-cori-medium.onnx`
+- **Config**: `en_GB-cori-medium.onnx.json`
 - **Source**: Hugging Face (rhasspy/piper-voices)
 
 ## ব্যবহার
@@ -189,7 +189,7 @@ print(f"Sample Rate: {info['sample_rate']}")
 ```bash
 export TTS_ENVIRONMENT=local
 export TTS_SYSTEM=piper
-export PIPER_MODEL_NAME=en_US-libritts_r-medium
+export PIPER_MODEL_NAME=en_GB-cori-medium
 ```
 
 ### Production
@@ -197,7 +197,7 @@ export PIPER_MODEL_NAME=en_US-libritts_r-medium
 ```bash
 export TTS_ENVIRONMENT=production
 export TTS_SYSTEM=piper
-export PIPER_MODEL_NAME=en_US-libritts_r-medium
+export PIPER_MODEL_NAME=en_GB-cori-medium
 ```
 
 ## Testing
