@@ -19,7 +19,7 @@ class Settings:
     LLM_API_URL = os.getenv("LLM_API_URL", "http://69.197.183.130:11434/v1/chat/completions").strip()
     LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5-14b-gpu").strip()
     LLM_API_KEY = os.getenv("LLM_API_KEY", "").strip()
-    LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "10.0"))
+    LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60.0"))
     LLM_RETRIES = int(os.getenv("LLM_RETRIES", "1"))
     
     # ---- TTS System Configuration ----

@@ -118,6 +118,13 @@ class PiperTTSProvider(TTSInterface):
             }
         }
         
+        # Voice mapping - Map high quality requests to medium quality
+        self.voice_mapping = {
+            "en_US-ljspeech-high": "en_US-ljspeech-medium",
+            "en_US-libritts_r-high": "en_US-libritts_r-medium",
+            "en_US-ryan-high": "en_US-ryan-medium"
+        }
+        
         # Default voice selection
         self.current_voice = os.getenv("PIPER_VOICE", "en_US-libritts_r-medium")
         self.model_path = self.voice_configs[self.current_voice]["model_path"]
@@ -357,6 +364,12 @@ class PiperTTSProvider(TTSInterface):
     
     def set_voice(self, voice_id: str):
         """Switch to a different voice model."""
+        # Map high quality voices to medium quality
+        if voice_id in self.voice_mapping:
+            mapped_voice = self.voice_mapping[voice_id]
+            log.info(f"🎤 Mapping {voice_id} to {mapped_voice} (high quality not available)")
+            voice_id = mapped_voice
+        
         if voice_id not in self.voice_configs:
             log.warning(f"Voice {voice_id} not found, using default")
             voice_id = "en_US-libritts_r-medium"

@@ -183,7 +183,7 @@ class ChatHandler:
             mem.add_history("user", transcript)
             
             # Generate AI response
-            await self.generate_and_send_response(websocket, transcript, mem, conn_id)
+            await self.generate_and_send_response(websocket, transcript, mem, mem_store, conn_id)
             
             # Save memory
             if mem_store:
@@ -265,7 +265,7 @@ class ChatHandler:
         pass
 
     async def generate_and_send_response(self, websocket: WebSocket, transcript: str, 
-                                       mem: SessionMemory, conn_id: str):
+                                       mem: SessionMemory, mem_store: Optional[MemoryStore], conn_id: str):
         """Generate AI response with real-time streaming TTS"""
         try:
             # Get language configuration
