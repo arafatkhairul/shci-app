@@ -66,6 +66,15 @@ check_sudo() {
 # Update system packages
 update_system() {
     print_step "Updating system packages..."
+    
+    # Remove problematic NVIDIA repositories
+    rm -f /etc/apt/sources.list.d/nvidia-*
+    rm -f /etc/apt/sources.list.d/libnvidia-container-*
+    rm -f /etc/apt/sources.list.d/nvidia-container-runtime-*
+    rm -f /etc/apt/sources.list.d/nvidia-docker-*
+    
+    # Clean apt cache
+    apt clean
     apt update && apt upgrade -y
     apt install -y curl wget git build-essential software-properties-common apt-transport-https ca-certificates gnupg lsb-release
     print_success "System packages updated"
