@@ -903,6 +903,17 @@ EOF
     log_success "Nginx configured successfully"
 }
 
+# Check SSL rate limits
+check_ssl_rate_limit() {
+    local domain="$1"
+    local rate_limit_check=$(certbot certificates --domain "$domain" 2>&1 | grep -c "rateLimited\|too many requests")
+    if [ "$rate_limit_check" -gt 0 ]; then
+        return 0  # Rate limit hit
+    else
+        return 1  # No rate limit
+    fi
+}
+
 # Configure SSL
 configure_ssl() {
     log_step "Configuring SSL for nodecel.com..."
@@ -943,28 +954,47 @@ configure_ssl() {
             log_success "SSL certificate is working correctly"
         else
             log_warning "SSL certificate exists but not working, attempting to fix..."
-            certbot renew --force-renewal --nginx --non-interactive --quiet
-            systemctl reload nginx
-            sleep 5
-            if curl -s -I https://nodecel.com 2>/dev/null | grep -q "200 OK\|HTTP/2 200"; then
-                log_success "SSL fixed and working"
+            
+            # Check if we're hitting rate limits
+            if certbot renew --force-renewal --nginx --non-interactive --quiet 2>&1 | grep -q "rateLimited"; then
+                log_warning "Rate limit hit, using existing certificate..."
+                # Just reload nginx with existing certificate
+                systemctl reload nginx
+                sleep 5
+                if curl -s -I https://nodecel.com 2>/dev/null | grep -q "200 OK\|HTTP/2 200"; then
+                    log_success "SSL working with existing certificate"
+                else
+                    log_warning "SSL configuration needs manual intervention"
+                fi
             else
-                log_warning "SSL configuration needs manual intervention"
+                systemctl reload nginx
+                sleep 5
+                if curl -s -I https://nodecel.com 2>/dev/null | grep -q "200 OK\|HTTP/2 200"; then
+                    log_success "SSL fixed and working"
+                else
+                    log_warning "SSL configuration needs manual intervention"
+                fi
             fi
         fi
     else
         log_step "Obtaining SSL certificate..."
         
-        # Ensure Nginx is running and accessible
-        systemctl start nginx
-        sleep 2
-        
-        # Get SSL certificate with better error handling
-        if certbot --nginx -d nodecel.com -d www.nodecel.com --non-interactive --agree-tos --email admin@nodecel.com --quiet; then
-            log_success "SSL certificate obtained"
-            systemctl reload nginx
+        # Check rate limits before attempting certificate
+        if check_ssl_rate_limit "nodecel.com"; then
+            log_warning "Rate limit detected, skipping SSL certificate installation"
+            log_message "SSL will be configured manually later when rate limit resets"
         else
-            log_warning "SSL certificate installation failed, but continuing..."
+            # Ensure Nginx is running and accessible
+            systemctl start nginx
+            sleep 2
+            
+            # Get SSL certificate with better error handling
+            if certbot --nginx -d nodecel.com -d www.nodecel.com --non-interactive --agree-tos --email admin@nodecel.com --quiet; then
+                log_success "SSL certificate obtained"
+                systemctl reload nginx
+            else
+                log_warning "SSL certificate installation failed, but continuing..."
+            fi
         fi
     fi
     
