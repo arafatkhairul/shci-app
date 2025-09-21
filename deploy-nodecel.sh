@@ -357,6 +357,37 @@ install_python() {
     fi
 }
 
+# Configure GPU for TTS
+configure_gpu() {
+    log_step "Configuring GPU for TTS..."
+    
+    # Check if NVIDIA GPU is available
+    if command -v nvidia-smi &> /dev/null; then
+        log_success "NVIDIA GPU detected"
+        
+        # Show GPU information
+        local gpu_info=$(nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader,nounits 2>/dev/null | head -1)
+        if [ -n "$gpu_info" ]; then
+            log_success "GPU Info: $gpu_info"
+        fi
+        
+        # Set GPU environment variables
+        export CUDA_VISIBLE_DEVICES=0
+        export TORCH_DEVICE=cuda
+        export TTS_DEVICE=cuda
+        export PIPER_DEVICE=cuda
+        export PIPER_FORCE_CUDA=true
+        
+        log_success "GPU configuration completed"
+    else
+        log_warning "NVIDIA GPU not detected, using CPU for TTS"
+        export TORCH_DEVICE=cpu
+        export TTS_DEVICE=cpu
+        export PIPER_DEVICE=cpu
+        export PIPER_FORCE_CUDA=false
+    fi
+}
+
 # Install Node.js 24.1.0
 install_nodejs() {
     log_step "Checking Node.js installation..."
@@ -585,11 +616,15 @@ setup_backend() {
         cat > .env << 'EOF'
 # Environment
 TTS_ENVIRONMENT=production
-PIPER_DEVICE=cpu
-PIPER_FORCE_CUDA=false
+PIPER_DEVICE=cuda
+PIPER_FORCE_CUDA=true
 
 # TTS Configuration
-TTS_DEVICE=cpu
+TTS_DEVICE=cuda
+
+# GPU Configuration
+CUDA_VISIBLE_DEVICES=0
+TORCH_DEVICE=cuda
 
 # API Configuration
 OPENAI_API_KEY=your_openai_key_here
@@ -621,6 +656,10 @@ PYTHONDONTWRITEBYTECODE=1
 MALLOC_TRIM_THRESHOLD_=131072
 MALLOC_MMAP_THRESHOLD_=131072
 
+# CUDA Optimization
+TORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+CUDA_CACHE_DISABLE=0
+CUDA_LAUNCH_BLOCKING=0
 EOF
     fi
     
@@ -868,48 +907,65 @@ EOF
 configure_ssl() {
     log_step "Configuring SSL for nodecel.com..."
     
+    # Ensure Nginx is running
+    systemctl start nginx
+    systemctl enable nginx
+    
     # Check if SSL certificate already exists
     if [ -d "/etc/letsencrypt/live/nodecel.com" ]; then
         log_success "SSL certificate already exists for nodecel.com"
         
         # Check if certificate is valid and not expired
-        local cert_expiry=$(openssl x509 -enddate -noout -in /etc/letsencrypt/live/nodecel.com/cert.pem | cut -d= -f2)
-        local cert_expiry_epoch=$(date -d "$cert_expiry" +%s)
-        local current_epoch=$(date +%s)
-        local days_until_expiry=$(( (cert_expiry_epoch - current_epoch) / 86400 ))
-        
-        if [ "$days_until_expiry" -gt 30 ]; then
-            log_success "SSL certificate is valid for $days_until_expiry more days"
+        local cert_expiry=$(openssl x509 -enddate -noout -in /etc/letsencrypt/live/nodecel.com/cert.pem 2>/dev/null | cut -d= -f2)
+        if [ -n "$cert_expiry" ]; then
+            local cert_expiry_epoch=$(date -d "$cert_expiry" +%s 2>/dev/null)
+            local current_epoch=$(date +%s)
+            local days_until_expiry=$(( (cert_expiry_epoch - current_epoch) / 86400 ))
+            
+            if [ "$days_until_expiry" -gt 30 ]; then
+                log_success "SSL certificate is valid for $days_until_expiry more days"
+            else
+                log_warning "SSL certificate expires in $days_until_expiry days. Renewing..."
+                certbot renew --nginx --non-interactive --quiet
+                systemctl reload nginx
+                log_success "SSL certificate renewed"
+            fi
         else
-            log_warning "SSL certificate expires in $days_until_expiry days. Renewing..."
-            certbot renew --nginx --non-interactive
-            log_success "SSL certificate renewed"
+            log_warning "Could not read certificate expiry, attempting renewal..."
+            certbot renew --nginx --non-interactive --quiet
+            systemctl reload nginx
         fi
         
         # Test SSL certificate
         log_step "Testing SSL certificate..."
-        if curl -s -I https://nodecel.com | grep -q "200 OK"; then
+        sleep 3
+        if curl -s -I https://nodecel.com 2>/dev/null | grep -q "200 OK\|HTTP/2 200"; then
             log_success "SSL certificate is working correctly"
         else
             log_warning "SSL certificate exists but not working, attempting to fix..."
-            certbot renew --force-renewal
+            certbot renew --force-renewal --nginx --non-interactive --quiet
             systemctl reload nginx
             sleep 5
-            if curl -s -I https://nodecel.com | grep -q "200 OK"; then
+            if curl -s -I https://nodecel.com 2>/dev/null | grep -q "200 OK\|HTTP/2 200"; then
                 log_success "SSL fixed and working"
             else
-                log_error "SSL configuration failed"
+                log_warning "SSL configuration needs manual intervention"
             fi
         fi
     else
         log_step "Obtaining SSL certificate..."
         
-        # Start Nginx first
+        # Ensure Nginx is running and accessible
         systemctl start nginx
+        sleep 2
         
-        # Get SSL certificate
-        certbot --nginx -d nodecel.com -d www.nodecel.com --non-interactive --agree-tos --email admin@nodecel.com
-        log_success "SSL certificate obtained"
+        # Get SSL certificate with better error handling
+        if certbot --nginx -d nodecel.com -d www.nodecel.com --non-interactive --agree-tos --email admin@nodecel.com --quiet; then
+            log_success "SSL certificate obtained"
+            systemctl reload nginx
+        else
+            log_warning "SSL certificate installation failed, but continuing..."
+        fi
     fi
     
     log_success "SSL configuration completed"
@@ -1213,6 +1269,7 @@ main() {
     update_system
     install_python
     install_nodejs
+    configure_gpu
     install_nginx
     clone_repository
     setup_backend
