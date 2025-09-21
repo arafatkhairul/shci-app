@@ -162,12 +162,10 @@ class PiperTTSProvider(TTSInterface):
             log.warning("❌ Piper TTS not available")
     
     def _detect_device_config(self):
-        """Detect and configure GPU/CPU for Piper TTS."""
+        """Detect and configure GPU/CPU for Piper TTS - Auto-detect CUDA."""
         
-        # Check environment variables first
+        # Check if CPU is explicitly forced
         force_cpu = os.environ.get("PIPER_FORCE_CPU", "").lower() == "true"
-        force_cuda = os.environ.get("PIPER_FORCE_CUDA", "").lower() == "true"
-        device_preference = os.environ.get("PIPER_DEVICE", "").lower()
         
         # Check if CUDA is available
         cuda_available = False
@@ -181,47 +179,33 @@ class PiperTTSProvider(TTSInterface):
                 cuda_device_count = torch.cuda.device_count()
                 if cuda_device_count > 0:
                     gpu_name = torch.cuda.get_device_name(0)
+                    log.info(f"🔍 Detected GPU: {gpu_name}")
         except ImportError:
             log.warning("PyTorch not available for CUDA detection")
         except Exception as e:
             log.warning(f"CUDA detection failed: {e}")
         
-        # Determine device configuration
-        use_cuda = False
-        device_type = "CPU"
-        device_name = "CPU"
-        gpu_id = 0
-        
+        # Auto-detect: Use CUDA if available, unless forced to CPU
         if force_cpu:
             log.info("🔧 CPU forced by environment variable")
             use_cuda = False
             device_type = "CPU"
             device_name = "CPU (Forced)"
-        elif force_cuda and cuda_available:
-            log.info("🔧 CUDA forced by environment variable")
-            use_cuda = True
-            device_type = "GPU"
-            device_name = f"GPU (Forced): {gpu_name}"
             gpu_id = 0
-        elif device_preference == "cuda" and cuda_available:
-            log.info("🔧 CUDA preferred and available")
-            use_cuda = True
-            device_type = "GPU"
-            device_name = f"GPU: {gpu_name}"
-            gpu_id = 0
-        elif cuda_available and not force_cpu:
-            log.info("🔧 CUDA detected and available")
+        elif cuda_available:
+            log.info("🚀 CUDA detected - Using GPU acceleration")
             use_cuda = True
             device_type = "GPU"
             device_name = f"GPU: {gpu_name}"
             gpu_id = 0
         else:
-            log.info("🔧 Using CPU (CUDA not available or disabled)")
+            log.info("🔧 CUDA not available - Using CPU")
             use_cuda = False
             device_type = "CPU"
             device_name = "CPU"
+            gpu_id = 0
         
-        # Set environment variables based on detection
+        # Set environment variables for consistency
         if use_cuda:
             os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
             os.environ["PIPER_DEVICE"] = "cuda"
