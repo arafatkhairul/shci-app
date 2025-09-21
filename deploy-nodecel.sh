@@ -1071,6 +1071,11 @@ hard_reset_deployment() {
         log_success "Project directory removed"
     fi
     
+    # Change to parent directory before cloning
+    log_step "Changing to parent directory..."
+    cd /var/www
+    log_success "Changed to /var/www"
+    
     # Clone fresh repository
     log_step "Cloning fresh repository..."
     git clone -b "$BRANCH" "$REPO_URL" "$PROJECT_DIR"
