@@ -26,7 +26,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 PROJECT_DIR="/var/www/shci-app"
-REPO_URL="https://github.com/arafatkhairul/shci-app.git"
+REPO_URL="git@github.com:arafatkhairul/shci-app.git"
 BRANCH="feature/tts-medium-variants"
 SERVICE_USER="root"
 SERVICE_GROUP="root"
@@ -253,6 +253,27 @@ check_command_exists() {
     else
         return 1  # Command doesn't exist
     fi
+}
+
+# Configure Git to use SSH
+configure_git_ssh() {
+    log_step "Configuring Git to use SSH..."
+    
+    # Check if SSH key exists
+    if [ -f ~/.ssh/id_rsa ] || [ -f ~/.ssh/id_ed25519 ]; then
+        log_success "SSH key found"
+    else
+        log_warning "No SSH key found, generating one..."
+        ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N "" -C "root@$(hostname)"
+        log_success "SSH key generated"
+    fi
+    
+    # Configure Git to use SSH
+    git config --global url."git@github.com:".insteadOf "https://github.com/"
+    git config --global user.name "arafatkhairul"
+    git config --global user.email "arafatkhairul@users.noreply.github.com"
+    
+    log_success "Git configured to use SSH"
 }
 
 # Update system packages
@@ -1127,6 +1148,7 @@ main() {
     check_root
     check_sudo
     check_system_resources
+    configure_git_ssh
     
     # Create backup directory
     mkdir -p "$BACKUP_DIR"
