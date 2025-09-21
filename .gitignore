@@ -216,7 +216,7 @@ tmp/
 
 # Model files (if large)
 Models/
-models/
+# models/  # Commented out to allow tracking of app/models directory
 *.pth
 *.pt
 *.bin
