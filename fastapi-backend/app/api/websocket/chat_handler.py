@@ -29,6 +29,7 @@ class ChatHandler:
         self.llm_service = llm_service
         self.tts_service = tts_service
         self.db_service = db_service
+        self.in_grammar_correction = False  # Track if we're currently in a grammar correction section
 
     async def handle_websocket(self, websocket: WebSocket):
         """Handle WebSocket connection with persistent session memory"""
@@ -283,6 +284,7 @@ class ChatHandler:
             is_first_chunk = True
             text_buffer = ""
             word_count = 0
+            self.in_grammar_correction = False  # Reset grammar correction state
             
             # Send audio start signal
             await self.send_json(websocket, {
@@ -357,6 +359,14 @@ If the input is grammatically correct, respond normally without any grammar corr
                     full_response += text_chunk
                     text_buffer += text_chunk
                     
+                    # Update grammar correction state
+                    if "GRAMMAR_CORRECTION_START" in text_chunk:
+                        self.in_grammar_correction = True
+                        log.info(f"[{conn_id}] 🔍 Grammar correction started")
+                    elif "GRAMMAR_CORRECTION_END" in text_chunk:
+                        self.in_grammar_correction = False
+                        log.info(f"[{conn_id}] 🔍 Grammar correction ended")
+                    
                     # Send text chunk to frontend for real-time display
                     await self.send_json(websocket, {
                         "type": "ai_text_chunk", 
@@ -366,6 +376,11 @@ If the input is grammatically correct, respond normally without any grammar corr
                     })
                     is_first_chunk = False
                     
+                    # Skip audio generation if we're in grammar correction section
+                    if self.in_grammar_correction:
+                        log.info(f"[{conn_id}] 🔍 Skipping audio generation - in grammar correction section")
+                        continue
+                    
                     # Generate audio for text chunk if it contains complete sentences
                     if self.should_generate_audio_chunk(text_buffer):
                         # Clean up text for better speech
@@ -373,36 +388,46 @@ If the input is grammatically correct, respond normally without any grammar corr
                         # Remove extra spaces and normalize text
                         clean_text = ' '.join(clean_text.split())
                         
+                        # Extract TTS text (exclude grammar correction)
+                        tts_text = self.extract_ai_response_for_tts(clean_text)
+                        
                         audio_chunk = await self.generate_audio_for_text_chunk(
                             clean_text, mem, conn_id
                         )
                         if audio_chunk:
                             await self.send_json(websocket, {
                                 "type": "ai_audio_chunk",
-                                "text": clean_text,
+                                "text": clean_text,  # Send original text for display
                                 "audio_base64": audio_chunk,
                                 "audio_size": len(audio_chunk),
                                 "is_final": False
                             })
                             text_buffer = ""  # Clear buffer after generating audio
             
-            # Generate audio for any remaining text
-            if text_buffer.strip():
+            # Generate audio for any remaining text (only if not in grammar correction)
+            if text_buffer.strip() and not self.in_grammar_correction:
                 # Clean up final text for better speech
                 clean_text = text_buffer.strip()
                 clean_text = ' '.join(clean_text.split())
                 
-                audio_chunk = await self.generate_audio_for_text_chunk(
-                    clean_text, mem, conn_id
-                )
-                if audio_chunk:
-                    await self.send_json(websocket, {
-                        "type": "ai_audio_chunk",
-                        "text": clean_text,
-                        "audio_base64": audio_chunk,
-                        "audio_size": len(audio_chunk),
-                        "is_final": False
-                    })
+                # Extract TTS text (exclude grammar correction)
+                tts_text = self.extract_ai_response_for_tts(clean_text)
+                
+                # Only generate audio if we have valid TTS text
+                if tts_text.strip():
+                    audio_chunk = await self.generate_audio_for_text_chunk(
+                        clean_text, mem, conn_id
+                    )
+                    if audio_chunk:
+                        await self.send_json(websocket, {
+                            "type": "ai_audio_chunk",
+                            "text": clean_text,  # Send original text for display
+                            "audio_base64": audio_chunk,
+                            "audio_size": len(audio_chunk),
+                            "is_final": False
+                        })
+            elif self.in_grammar_correction:
+                log.info(f"[{conn_id}] 🔍 Skipping final audio generation - still in grammar correction section")
             
             if full_response:
                 # Send final complete text
@@ -457,12 +482,73 @@ If the input is grammatically correct, respond normally without any grammar corr
         except Exception as e:
             log_exception(log, f"[{conn_id}] send_conversation_context", e)
 
+    def extract_ai_response_for_tts(self, text: str) -> str:
+        """Extract only the AI response part for TTS, excluding grammar correction"""
+        if not text.strip():
+            return text
+            
+        # Check if grammar correction markers are present
+        if "GRAMMAR_CORRECTION_START" in text:
+            start_marker = "GRAMMAR_CORRECTION_START"
+            end_marker = "GRAMMAR_CORRECTION_END"
+            
+            start_index = text.find(start_marker)
+            
+            if start_index != -1:
+                # If we have the start marker but not the end marker, skip audio generation
+                if "GRAMMAR_CORRECTION_END" not in text:
+                    log.info(f"🔍 Grammar correction start detected but no end marker, skipping TTS")
+                    return ""
+                
+                # If we have both markers, extract only the AI response part
+                end_index = text.find(end_marker)
+                if end_index != -1:
+                    ai_response = text[end_index + len(end_marker):].strip()
+                    log.info(f"🔍 Grammar correction detected, extracted AI response: '{ai_response[:100]}...'")
+                    return ai_response
+                else:
+                    # Fallback: remove grammar correction markers
+                    cleaned_text = text.replace("GRAMMAR_CORRECTION_START", "").replace("GRAMMAR_CORRECTION_END", "").strip()
+                    log.info(f"⚠️ Fallback: Removed grammar markers from TTS text")
+                    return cleaned_text
+            else:
+                # Fallback: remove grammar correction markers
+                cleaned_text = text.replace("GRAMMAR_CORRECTION_START", "").replace("GRAMMAR_CORRECTION_END", "").strip()
+                log.info(f"⚠️ Fallback: Removed grammar markers from TTS text")
+                return cleaned_text
+        
+        return text
+
     def should_generate_audio_chunk(self, text_buffer: str) -> bool:
         """Determine if we should generate audio for the current text buffer"""
         if not text_buffer.strip():
             return False
         
-        # Generate audio only for complete sentences to sound natural
+        # If grammar correction is detected anywhere in the buffer, be more careful
+        if "GRAMMAR_CORRECTION_START" in text_buffer:
+            # Extract AI response part for TTS (exclude grammar correction)
+            tts_text = self.extract_ai_response_for_tts(text_buffer)
+            
+            # If no AI response after grammar correction, don't generate audio
+            if not tts_text.strip():
+                log.info(f"🔍 Grammar correction detected, skipping audio generation")
+                return False
+            
+            # Only generate audio if we have a complete AI response
+            words = tts_text.split()
+            sentence_endings = ['.', '!', '?', ';', ':', '\n']
+            
+            # Check for sentence endings - this is the main trigger for natural speech
+            if any(tts_text.rstrip().endswith(ending) for ending in sentence_endings):
+                return True
+            
+            # Only generate audio for longer phrases (8+ words) to avoid robotic word-by-word playback
+            if len(words) >= 8:
+                return True
+                
+            return False
+        
+        # Normal processing for text without grammar correction
         words = text_buffer.split()
         sentence_endings = ['.', '!', '?', ';', ':', '\n']
         
@@ -471,7 +557,6 @@ If the input is grammatically correct, respond normally without any grammar corr
             return True
         
         # Only generate audio for longer phrases (8+ words) to avoid robotic word-by-word playback
-        # This ensures natural human-like speech flow
         if len(words) >= 8:
             return True
             
@@ -501,10 +586,18 @@ If the input is grammatically correct, respond normally without any grammar corr
         try:
             if not text.strip():
                 return None
+            
+            # Extract AI response part for TTS (exclude grammar correction)
+            tts_text = self.extract_ai_response_for_tts(text)
+            
+            # If no AI response after grammar correction, don't generate audio
+            if not tts_text.strip():
+                log.info(f"[{conn_id}] ⚠️ No AI response after grammar correction, skipping audio generation")
+                return None
                 
             # Generate audio using TTS service
             audio_data = await self.tts_service.synthesize_text(
-                text=text,
+                text=tts_text,
                 language=mem.language,
                 voice=mem.voice,
                 length_scale=self.tts_service.length_scale * self.tts_service.adjust_speed_for_level(mem.level)
@@ -514,7 +607,8 @@ If the input is grammatically correct, respond normally without any grammar corr
                 # Convert to base64
                 import base64
                 audio_b64 = base64.b64encode(audio_data).decode("utf-8")
-                log.info(f"[{conn_id}] 🔊 Generated audio for text chunk: '{text[:50]}...' ({len(audio_data)} bytes)")
+                log.info(f"[{conn_id}] 🔊 Generated audio for TTS text: '{tts_text[:50]}...' ({len(audio_data)} bytes)")
+                log.info(f"[{conn_id}] 🔍 Original text: '{text[:100]}...'")
                 return audio_b64
             else:
                 log.warning(f"[{conn_id}] Failed to generate audio for text chunk")

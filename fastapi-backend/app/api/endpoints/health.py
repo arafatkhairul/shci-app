@@ -110,3 +110,69 @@ async def get_session_stats():
             "status": "error",
             "error": str(e)
         }
+
+@router.get("/test-grammar-extraction")
+async def test_grammar_extraction():
+    """Test grammar correction text extraction for TTS"""
+    try:
+        # Test text with grammar correction
+        test_text = """GRAMMAR_CORRECTION_START
+INCORRECT: what your name
+CORRECT: What is your name?
+GRAMMAR_CORRECTION_END
+
+My name is SHCI. How can I help you today?"""
+        
+        # Test text with partial grammar correction (start only)
+        partial_grammar_text = """GRAMMAR_CORRECTION_START
+INCORRECT: what your name
+CORRECT: What is your name?"""
+        
+        # Test text without grammar correction
+        normal_text = "Hello! How can I assist you today?"
+        
+        # Create a chat handler instance to test the extraction
+        from app.api.websocket.chat_handler import ChatHandler
+        from app.services.llm_service import LLMService
+        from app.services.tts_service import TTSService
+        from app.services.database_service import DatabaseService
+        
+        # Initialize services (minimal setup for testing)
+        llm_service = LLMService()
+        tts_service = TTSService()
+        db_service = DatabaseService()
+        
+        chat_handler = ChatHandler(llm_service, tts_service, db_service)
+        
+        # Test extraction
+        tts_text_with_grammar = chat_handler.extract_ai_response_for_tts(test_text)
+        tts_text_partial = chat_handler.extract_ai_response_for_tts(partial_grammar_text)
+        tts_text_normal = chat_handler.extract_ai_response_for_tts(normal_text)
+        
+        return {
+            "status": "success",
+            "test_with_grammar": {
+                "original_text": test_text,
+                "extracted_tts_text": tts_text_with_grammar,
+                "has_grammar_correction": "GRAMMAR_CORRECTION_START" in test_text,
+                "will_generate_audio": bool(tts_text_with_grammar.strip())
+            },
+            "test_partial_grammar": {
+                "original_text": partial_grammar_text,
+                "extracted_tts_text": tts_text_partial,
+                "has_grammar_correction": "GRAMMAR_CORRECTION_START" in partial_grammar_text,
+                "will_generate_audio": bool(tts_text_partial.strip())
+            },
+            "test_normal": {
+                "original_text": normal_text,
+                "extracted_tts_text": tts_text_normal,
+                "has_grammar_correction": "GRAMMAR_CORRECTION_START" in normal_text,
+                "will_generate_audio": bool(tts_text_normal.strip())
+            }
+        }
+    except Exception as e:
+        log.error(f"Error testing grammar extraction: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
