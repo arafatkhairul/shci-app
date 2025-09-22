@@ -46,6 +46,12 @@ export class WebkitVADService {
   private isSupported: boolean = false;
   private websocket: WebSocket | null = null;
   
+  // Mobile-specific fixes
+  private isMobile: boolean = false;
+  private lastProcessedTranscript: string = '';
+  private lastProcessedTime: number = 0;
+  private processingTimeout: number | null = null;
+  
   // Voice Level Monitoring
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -66,6 +72,7 @@ export class WebkitVADService {
     };
     
     this.callbacks = callbacks;
+    this.isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     this.checkSupport();
   }
 
@@ -225,6 +232,25 @@ export class WebkitVADService {
   }
 
   /**
+   * Process final transcript (extracted for mobile debouncing)
+   */
+  private processFinalTranscript(transcript: string, confidence: number): void {
+    const speechResult: SpeechResult = {
+      transcript: transcript,
+      isFinal: true,
+      confidence: confidence,
+      timestamp: Date.now()
+    };
+
+    // Call all relevant callbacks
+    this.callbacks.onSpeechResult?.(speechResult.transcript, true, speechResult.confidence);
+    this.callbacks.onFinalResult?.(speechResult.transcript, speechResult.confidence);
+    
+    // Send individual transcript to WebSocket immediately for instant processing
+    this.sendToWebSocket('final_transcript', speechResult.transcript, speechResult.confidence);
+  }
+
+  /**
    * Handle speech recognition results
    */
   private handleResult(event: any): void {
@@ -256,20 +282,33 @@ export class WebkitVADService {
       this.clearSilenceTimer();
       this.startSpeechTimeout();
 
-      // Send individual final transcript (not accumulated)
-      const speechResult: SpeechResult = {
-        transcript: finalTranscript.trim(), // Send individual transcript
-        isFinal: true,
-        confidence: maxConfidence,
-        timestamp: Date.now()
-      };
-
-      // Call all relevant callbacks
-      this.callbacks.onSpeechResult?.(speechResult.transcript, true, speechResult.confidence);
-      this.callbacks.onFinalResult?.(speechResult.transcript, speechResult.confidence);
-      
-      // Send individual transcript to WebSocket immediately for instant processing
-      this.sendToWebSocket('final_transcript', speechResult.transcript, speechResult.confidence);
+      // Mobile-specific debouncing to prevent duplicate processing
+      if (this.isMobile) {
+        const trimmedTranscript = finalTranscript.trim();
+        const currentTime = Date.now();
+        
+        // Check if this is a duplicate transcript within 2 seconds
+        if (trimmedTranscript === this.lastProcessedTranscript && 
+            currentTime - this.lastProcessedTime < 2000) {
+          console.log('Mobile: Ignoring duplicate transcript:', trimmedTranscript);
+          return;
+        }
+        
+        // Clear any existing processing timeout
+        if (this.processingTimeout) {
+          clearTimeout(this.processingTimeout);
+        }
+        
+        // Set processing timeout to prevent rapid duplicates
+        this.processingTimeout = setTimeout(() => {
+          this.processFinalTranscript(trimmedTranscript, maxConfidence);
+          this.lastProcessedTranscript = trimmedTranscript;
+          this.lastProcessedTime = currentTime;
+        }, 100); // 100ms delay for mobile
+      } else {
+        // Desktop: process immediately
+        this.processFinalTranscript(finalTranscript.trim(), maxConfidence);
+      }
     }
 
     // Handle interim results - send immediately for instant feedback

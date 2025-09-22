@@ -34,6 +34,10 @@ export default function VoiceAgent() {
     // ---------- State ----------
     const [connected, setConnected] = useState(false);
     const [listening, setListening] = useState(false);
+    
+    // Mobile-specific state
+    const [isMobile, setIsMobile] = useState(false);
+    const [isProcessingAudio, setIsProcessingAudio] = useState(false);
 
     // Default: server TTS ON (local TTS OFF)
     const [useLocalTTS, setUseLocalTTS] = useState(false);
@@ -235,6 +239,13 @@ export default function VoiceAgent() {
     const currentAudioRef = useRef<HTMLAudioElement | null>(null);
     const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
     const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // ---------- Mobile Detection ----------
+    useEffect(() => {
+        const mobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        setIsMobile(mobile);
+        console.log('Device type:', mobile ? 'Mobile' : 'Desktop');
+    }, []);
 
     // ---------- Stable client_id ----------
     const getClientId = () => {
@@ -1292,6 +1303,16 @@ export default function VoiceAgent() {
 
     // ---------- Helpers: Server TTS (MP3 base64) ----------
     const playServerMp3 = async (base64: string) => {
+        // Mobile-specific: prevent double audio playback
+        if (isMobile && isProcessingAudio) {
+            console.log('Mobile: Ignoring duplicate audio request');
+            return;
+        }
+        
+        if (isMobile) {
+            setIsProcessingAudio(true);
+        }
+        
         try {
             if (currentAudioRef.current) {
                 currentAudioRef.current.pause();
@@ -1322,6 +1343,11 @@ export default function VoiceAgent() {
                 setAiSpeaking(false);
                 setFinalTranscript(""); // Clear transcript to prevent waiting state
                 setIsWaitingForResponse(false); // Clear waiting state when audio ends
+                
+                // Mobile-specific: reset processing flag
+                if (isMobile) {
+                    setIsProcessingAudio(false);
+                }
             };
 
             currentSourceRef.current = src;
@@ -1340,6 +1366,11 @@ export default function VoiceAgent() {
                 setAiSpeaking(false);
                 setFinalTranscript(""); // Clear transcript to prevent waiting state
                 setIsWaitingForResponse(false); // Clear waiting state when audio ends
+                
+                // Mobile-specific: reset processing flag
+                if (isMobile) {
+                    setIsProcessingAudio(false);
+                }
             };
             setAiSpeaking(true);
             setIsWaitingForResponse(false); // Clear waiting state when audio starts
@@ -1583,6 +1614,11 @@ export default function VoiceAgent() {
                                 setIsProcessing(false);
                                 // Don't clear waiting state here - let playServerMp3 handle it when audio actually starts
                                 if (!useLocalTTS && data.audio_base64) {
+                                    // Mobile-specific: prevent duplicate audio processing
+                                    if (isMobile && isProcessingAudio) {
+                                        console.log('Mobile: Ignoring duplicate ai_audio request');
+                                        break;
+                                    }
                                     await playServerMp3(data.audio_base64);
                                 }
                                 break;
