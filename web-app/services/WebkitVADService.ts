@@ -50,7 +50,7 @@ export class WebkitVADService {
   private isMobile: boolean = false;
   private lastProcessedTranscript: string = '';
   private lastProcessedTime: number = 0;
-  private processingTimeout: number | null = null;
+  private processingTimeout: NodeJS.Timeout | null = null;
   
   // Voice Level Monitoring
   private audioContext: AudioContext | null = null;
