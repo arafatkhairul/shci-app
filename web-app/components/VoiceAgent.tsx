@@ -888,6 +888,10 @@ export default function VoiceAgent() {
         } else {
             // CRITICAL: Restart VAD services after audio playback with longer delay to prevent audio loop
             console.log('🔊 Scheduling VAD restart after AI speaking ends');
+            
+            // Mobile-specific: Longer delay and better error handling
+            const restartDelay = isMobile ? 3000 : 2000; // 3 seconds for mobile, 2 for desktop
+            
             setTimeout(() => {
                 if (listening && !aiSpeaking) {
                     console.log('🔊 Restarting VAD services after audio playback');
@@ -909,7 +913,7 @@ export default function VoiceAgent() {
                                         startVAD();
                                     }
                                 });
-                            }, 2000);
+                            }, isMobile ? 3000 : 2000); // Longer delay for mobile
                         }
                     }
 
@@ -926,13 +930,13 @@ export default function VoiceAgent() {
                                         startFallbackVAD();
                                     }
                                 });
-                            }, 2000);
+                            }, isMobile ? 3000 : 2000); // Longer delay for mobile
                         }
                     }
                 }
-            }, 2000); // Increased delay to 2 seconds to ensure audio has completely stopped
+            }, restartDelay);
         }
-    }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized]);
+    }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized, isMobile]);
 
     // VAD Health Check - Ensure speech recognition continues working
     useEffect(() => {
@@ -1399,9 +1403,15 @@ export default function VoiceAgent() {
 
     // ---------- Helpers: Server TTS (MP3 base64) ----------
     const playServerMp3 = async (base64: string) => {
-        // Mobile-specific: prevent double audio playback
+        // Mobile-specific: prevent double audio playback with better validation
         if (isMobile && isProcessingAudio) {
-            console.log('Mobile: Ignoring duplicate audio request');
+            console.log('Mobile: Ignoring duplicate audio request - already processing');
+            return;
+        }
+        
+        // Mobile-specific: prevent audio if already speaking
+        if (isMobile && aiSpeaking) {
+            console.log('Mobile: Ignoring audio request - AI already speaking');
             return;
         }
         
@@ -1416,6 +1426,8 @@ export default function VoiceAgent() {
         
         if (isMobile) {
             setIsProcessingAudio(true);
+            // Mobile-specific: Set speaking state immediately to prevent duplicate requests
+            setAiSpeaking(true);
         }
         
         try {
@@ -1445,13 +1457,17 @@ export default function VoiceAgent() {
             // Audio playback rate removed - now controlled by backend noise_scale
             src.connect(audioCtx.current.destination);
             src.onended = () => {
+                console.log('🔊 Audio playback ended');
                 setAiSpeaking(false);
                 setFinalTranscript(""); // Clear transcript to prevent waiting state
                 setIsWaitingForResponse(false); // Clear waiting state when audio ends
                 
-                // Mobile-specific: reset processing flag
+                // Mobile-specific: reset processing flag with delay
                 if (isMobile) {
-                    setIsProcessingAudio(false);
+                    setTimeout(() => {
+                        setIsProcessingAudio(false);
+                        console.log('Mobile: Audio processing flag reset');
+                    }, 500); // Small delay to prevent immediate duplicate requests
                 }
             };
 
@@ -1468,13 +1484,17 @@ export default function VoiceAgent() {
             }
             currentAudioRef.current = el;
             el.onended = () => {
+                console.log('🔊 Fallback audio playback ended');
                 setAiSpeaking(false);
                 setFinalTranscript(""); // Clear transcript to prevent waiting state
                 setIsWaitingForResponse(false); // Clear waiting state when audio ends
                 
-                // Mobile-specific: reset processing flag
+                // Mobile-specific: reset processing flag with delay
                 if (isMobile) {
-                    setIsProcessingAudio(false);
+                    setTimeout(() => {
+                        setIsProcessingAudio(false);
+                        console.log('Mobile: Fallback audio processing flag reset');
+                    }, 500); // Small delay to prevent immediate duplicate requests
                 }
             };
             setAiSpeaking(true);
@@ -1519,6 +1539,12 @@ export default function VoiceAgent() {
     // ---------- Helpers: Real-time Audio Chunk Playback ----------
     const playAudioChunk = async (base64: string, text?: string) => {
         try {
+            // Mobile-specific: prevent duplicate audio chunk processing
+            if (isMobile && (isProcessingAudio || aiSpeaking)) {
+                console.log('Mobile: Ignoring duplicate audio chunk request');
+                return;
+            }
+
             // CRITICAL: Immediately pause VAD services to prevent audio loop
             console.log('🔇 Pausing VAD services before audio playback to prevent loop');
             if (useWebkitVAD && vadService.current) {
@@ -1547,6 +1573,11 @@ export default function VoiceAgent() {
                 (src as any).text = text;
             }
             
+            // Mobile-specific: Set processing flag
+            if (isMobile) {
+                setIsProcessingAudio(true);
+            }
+            
             // Add to queue instead of playing immediately
             audioQueueRef.current.push(src);
             console.log(`🎵 Audio chunk added to queue (${audioQueueRef.current.length} in queue)`);
@@ -1562,6 +1593,10 @@ export default function VoiceAgent() {
             
         } catch (error) {
             console.error("Error playing audio chunk:", error);
+            // Mobile-specific: reset processing flag on error
+            if (isMobile) {
+                setIsProcessingAudio(false);
+            }
         }
     };
 
@@ -1573,6 +1608,14 @@ export default function VoiceAgent() {
             setIsWaitingForResponse(false);
             setHighlightedText("");
             setCurrentSpeakingText("");
+            
+            // Mobile-specific: reset processing flag when queue is empty
+            if (isMobile) {
+                setTimeout(() => {
+                    setIsProcessingAudio(false);
+                    console.log('Mobile: Audio processing flag reset - queue empty');
+                }, 500);
+            }
             return;
         }
 
@@ -1601,10 +1644,13 @@ export default function VoiceAgent() {
             // Clear highlighting for this chunk
             setHighlightedText("");
             
-            // Play next audio in queue after a short delay
+            // Mobile-specific: longer delay for mobile to prevent audio overlap
+            const nextDelay = isMobile ? 200 : 50; // 200ms for mobile, 50ms for desktop
+            
+            // Play next audio in queue after a delay
             setTimeout(() => {
                 playNextAudioInQueue();
-            }, 50); // Small delay to prevent overlap
+            }, nextDelay);
         };
 
         src.start(0);
@@ -1719,7 +1765,22 @@ export default function VoiceAgent() {
                                 setIsProcessing(false);
                                 // Play audio chunk immediately for real-time experience
                                 if (!useLocalTTS && data.audio_base64) {
-                                    await playAudioChunk(data.audio_base64, data.text);
+                                    // Mobile-specific: prevent duplicate audio chunk processing
+                                    if (isMobile && (isProcessingAudio || aiSpeaking)) {
+                                        console.log('Mobile: Ignoring duplicate ai_audio_chunk request');
+                                        break;
+                                    }
+                                    
+                                    // Mobile-specific: Add small delay to prevent race conditions
+                                    if (isMobile) {
+                                        setTimeout(async () => {
+                                            if (!isProcessingAudio && !aiSpeaking) {
+                                                await playAudioChunk(data.audio_base64, data.text);
+                                            }
+                                        }, 50);
+                                    } else {
+                                        await playAudioChunk(data.audio_base64, data.text);
+                                    }
                                 }
                                 break;
 
@@ -1728,12 +1789,22 @@ export default function VoiceAgent() {
                                 setIsProcessing(false);
                                 // Don't clear waiting state here - let playServerMp3 handle it when audio actually starts
                                 if (!useLocalTTS && data.audio_base64) {
-                                    // Mobile-specific: prevent duplicate audio processing
-                                    if (isMobile && isProcessingAudio) {
-                                        console.log('Mobile: Ignoring duplicate ai_audio request');
+                                    // Mobile-specific: prevent duplicate audio processing with better validation
+                                    if (isMobile && (isProcessingAudio || aiSpeaking)) {
+                                        console.log('Mobile: Ignoring duplicate ai_audio request - already processing or speaking');
                                         break;
                                     }
-                                    await playServerMp3(data.audio_base64);
+                                    
+                                    // Mobile-specific: Add small delay to prevent race conditions
+                                    if (isMobile) {
+                                        setTimeout(async () => {
+                                            if (!isProcessingAudio && !aiSpeaking) {
+                                                await playServerMp3(data.audio_base64);
+                                            }
+                                        }, 100);
+                                    } else {
+                                        await playServerMp3(data.audio_base64);
+                                    }
                                 }
                                 break;
 
@@ -1928,7 +1999,17 @@ export default function VoiceAgent() {
             }
         }
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
+            // Mobile-specific: Enhanced audio constraints for better mobile performance
+            const audioConstraints = isMobile ? {
+                audio: {
+                    channelCount: 1,
+                    echoCancellation: true,  // Enable for mobile
+                    noiseSuppression: true,  // Enable for mobile
+                    autoGainControl: true,   // Enable for mobile
+                    sampleRate: 16000,      // Lower sample rate for mobile
+                    latency: 0.01,          // Low latency for mobile
+                },
+            } : {
                 audio: {
                     channelCount: 1,
                     echoCancellation: false,
@@ -1936,7 +2017,9 @@ export default function VoiceAgent() {
                     autoGainControl: false,
                     sampleRate: 48000,
                 },
-            });
+            };
+
+            const stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
             streamRef.current = stream;
 
             console.log("🎤 Microphone Access Granted:", {

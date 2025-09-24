@@ -294,10 +294,16 @@ export class WebkitVADService {
         const trimmedTranscript = finalTranscript.trim();
         const currentTime = Date.now();
         
-        // Check if this is a duplicate transcript within 2 seconds
+        // Check if this is a duplicate transcript within 3 seconds (increased for mobile)
         if (trimmedTranscript === this.lastProcessedTranscript && 
-            currentTime - this.lastProcessedTime < 2000) {
+            currentTime - this.lastProcessedTime < 3000) {
           console.log('Mobile: Ignoring duplicate transcript:', trimmedTranscript);
+          return;
+        }
+        
+        // Check for empty or very short transcripts on mobile
+        if (trimmedTranscript.length < 2) {
+          console.log('Mobile: Ignoring short transcript:', trimmedTranscript);
           return;
         }
         
@@ -306,12 +312,12 @@ export class WebkitVADService {
           clearTimeout(this.processingTimeout);
         }
         
-        // Set processing timeout to prevent rapid duplicates
+        // Set processing timeout to prevent rapid duplicates (increased delay for mobile)
         this.processingTimeout = setTimeout(() => {
           this.processFinalTranscript(trimmedTranscript, maxConfidence);
           this.lastProcessedTranscript = trimmedTranscript;
           this.lastProcessedTime = currentTime;
-        }, 100); // 100ms delay for mobile
+        }, 200); // 200ms delay for mobile (increased from 100ms)
       } else {
         // Desktop: process immediately
         this.processFinalTranscript(finalTranscript.trim(), maxConfidence);
