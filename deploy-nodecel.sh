@@ -599,9 +599,20 @@ setup_backend() {
     
     # Test Python imports to ensure everything works
     log_step "Testing Python imports..."
-    cd fastapi-backend
-    python test_imports.py
-    cd ..
+    log_info "Current directory: $(pwd)"
+    log_info "Contents: $(ls -la)"
+    if [ -d "fastapi-backend" ]; then
+        log_info "fastapi-backend directory found, changing to it..."
+        cd fastapi-backend
+        log_info "Now in: $(pwd)"
+        python test_imports.py
+        cd ..
+        log_info "Back to: $(pwd)"
+    else
+        log_error "fastapi-backend directory not found in $(pwd)"
+        log_error "Available directories: $(ls -d */)"
+        exit 1
+    fi
     if [ $? -eq 0 ]; then
         log_success "Python imports test passed"
     else
