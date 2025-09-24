@@ -68,6 +68,12 @@ log_step() {
     log_message "STEP: $message"
 }
 
+log_info() {
+    local message="$1"
+    echo -e "${BLUE}ℹ${NC} ${message}"
+    log_message "INFO: $message"
+}
+
 log_success() {
     local message="$1"
     print_success "$message"
