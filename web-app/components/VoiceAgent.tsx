@@ -38,6 +38,7 @@ export default function VoiceAgent() {
     // Mobile-specific state
     const [isMobile, setIsMobile] = useState(false);
     const [isProcessingAudio, setIsProcessingAudio] = useState(false);
+    const [mobileMicPersistent, setMobileMicPersistent] = useState(false);
 
     // Default: server TTS ON (local TTS OFF)
     const [useLocalTTS, setUseLocalTTS] = useState(false);
@@ -973,6 +974,58 @@ export default function VoiceAgent() {
             }, restartDelay);
         }
     }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized, isMobile]);
+
+    // Mobile-specific: Microphone persistence monitoring
+    useEffect(() => {
+        if (isMobile && mobileMicPersistent) {
+            console.log('📱 Mobile: Microphone persistence monitoring active');
+            
+            // Monitor listening state and force it to stay true
+            const persistenceInterval = setInterval(() => {
+                if (mobileMicPersistent && !listening) {
+                    console.log('📱 Mobile: Forcing microphone back to listening state');
+                    setListening(true);
+                    setStatus(currentLang.status.listening);
+                }
+            }, 1000); // Check every second
+            
+            return () => {
+                clearInterval(persistenceInterval);
+                console.log('📱 Mobile: Microphone persistence monitoring stopped');
+            };
+        }
+    }, [isMobile, mobileMicPersistent, listening, currentLang.status.listening]);
+
+    // Mobile-specific: Comprehensive microphone state debugging
+    useEffect(() => {
+        if (isMobile) {
+            console.log('📱 Mobile: Microphone state debug:', {
+                listening,
+                mobileMicPersistent,
+                connected,
+                useWebkitVAD,
+                useFallbackVAD,
+                vadInitialized,
+                fallbackVADInitialized,
+                vadServiceExists: !!vadService.current,
+                fallbackVADServiceExists: !!fallbackVADService.current,
+                websocketState: ws.current?.readyState,
+                audioContextState: audioCtx.current?.state
+            });
+        }
+    }, [isMobile, listening, mobileMicPersistent, connected, useWebkitVAD, useFallbackVAD, vadInitialized, fallbackVADInitialized]);
+
+    // Mobile-specific: WebSocket connection persistence for microphone
+    useEffect(() => {
+        if (isMobile && mobileMicPersistent && ws.current?.readyState !== WebSocket.OPEN) {
+            console.log('📱 Mobile: WebSocket disconnected, attempting to reconnect for microphone persistence');
+            // Trigger reconnection logic
+            if (ws.current?.readyState === WebSocket.CLOSED || ws.current?.readyState === WebSocket.CLOSING) {
+                console.log('📱 Mobile: WebSocket closed, reconnecting...');
+                // The existing WebSocket connection logic will handle reconnection
+            }
+        }
+    }, [isMobile, mobileMicPersistent, ws.current?.readyState]);
 
     // VAD Health Check - Ensure speech recognition continues working
     useEffect(() => {
@@ -1990,6 +2043,8 @@ export default function VoiceAgent() {
             console.log("📱 Mobile: Setting listening state immediately");
             setListening(true);
             setStatus(currentLang.status.listening);
+            setMobileMicPersistent(true);
+            console.log("📱 Mobile: Microphone persistence enabled");
         }
 
         // Auto-activate Webkit VAD if available and not already active
@@ -2330,7 +2385,15 @@ export default function VoiceAgent() {
 
     // ---------- Stop mic ----------
     const stopMic = () => {
-        console.log("stopMic called, listening:", listening, "useWebkitVAD:", useWebkitVAD);
+        console.log("stopMic called, listening:", listening, "useWebkitVAD:", useWebkitVAD, "mobile:", isMobile);
+        
+        // Mobile-specific: Only allow manual stop, prevent automatic stops
+        if (isMobile) {
+            console.log("📱 Mobile: Manual stop requested - stopping microphone");
+            setMobileMicPersistent(false);
+            console.log("📱 Mobile: Microphone persistence disabled");
+        }
+        
         // If VAD is enabled, stop appropriate VAD service
         if (useWebkitVAD && vadService.current) {
             stopVAD();

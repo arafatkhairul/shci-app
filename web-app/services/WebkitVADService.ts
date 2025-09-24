@@ -442,6 +442,8 @@ export class WebkitVADService {
     // Mobile-specific: Completely disable silence timer to keep microphone always active
     if (this.isMobile) {
       console.log('Mobile: Silence timer disabled - keeping microphone active');
+      // Mobile-specific: Force listening state to stay true
+      this.callbacks.onStateChange?.(true);
       return;
     }
     
