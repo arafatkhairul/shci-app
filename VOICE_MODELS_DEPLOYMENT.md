@@ -19,7 +19,7 @@ The system uses 2 voice models:
 - `en_GB-northern_english_male-medium.onnx` - Northern English Male (Medium)
 
 #### **Female Voices**:
-- `en_GB-cori-medium.onnx` - Cori (Female) Medium
+- `en_US-libritts-high.onnx` - LibriTTS (High Quality)
 
 #### **Configuration Files**:
 - `*.onnx.json` - Model configuration files (~1-2 KB each)
@@ -89,7 +89,7 @@ All models are downloaded from Hugging Face:
 #### **Environment Variables**:
 ```bash
 # Optional: Override default voice
-PIPER_VOICE=en_GB-cori-medium
+PIPER_VOICE=en_US-libritts-high
 
 # Optional: Override speech speed
 PIPER_LENGTH_SCALE=0.8
@@ -99,7 +99,7 @@ PIPER_FORCE_CPU=true
 ```
 
 #### **Default Settings**:
-- **Default Voice**: Cori (Female) - `en_GB-cori-medium`
+- **Default Voice**: LibriTTS (High Quality) - `en_US-libritts-high`
 - **Speech Speed**: 0.8 (faster than default 1.5)
 - **Device**: Auto-detects GPU/CPU
 
@@ -115,7 +115,7 @@ python -c "from tts_factory import TTSFactory; print(TTSFactory().get_info())"
 ```bash
 python -c "
 from tts_factory import synthesize_text
-audio = synthesize_text('Hello world!', 'en', 'en_GB-cori-medium')
+audio = synthesize_text('Hello world!', 'en', 'en_US-libritts-high')
 print(f'Generated {len(audio)} bytes of audio')
 "
 ```

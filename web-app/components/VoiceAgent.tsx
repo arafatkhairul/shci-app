@@ -162,7 +162,7 @@ export default function VoiceAgent() {
     const [aiSpeaking, setAiSpeaking] = useState(false);
     const [selectedLanguage, setSelectedLanguage] = useState<"en" | "it">("en");
     const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
-    const [selectedVoice, setSelectedVoice] = useState<string>("en_US-ljspeech-high");
+    const [selectedVoice, setSelectedVoice] = useState<string>("en_US-libritts-high");
     const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
@@ -263,15 +263,97 @@ export default function VoiceAgent() {
     };
     const clientIdRef = useRef<string>(getClientId());
 
+
+    // ---------- Voice Selection Handler ----------
+    const handleVoiceSelection = (voice: any) => {
+        console.log('🎤 VOICE DEBUG: Voice selected:', voice.id, voice.name, voice.gender);
+        setSelectedVoice(voice.id);
+        setIsVoiceModalOpen(false);
+        
+        // Force send preferences immediately after voice selection
+        setTimeout(() => {
+            if (ws.current?.readyState === WebSocket.OPEN) {
+                const prefs = {
+                    type: "client_prefs",
+                    client_id: clientIdRef.current,
+                    level,
+                    use_local_tts: useLocalTTS,
+                    language: selectedLanguage,
+                    voice: voice.id,
+                    role_play_enabled: rolePlayEnabled,
+                    role_play_template: rolePlayTemplate,
+                    organization_name: organizationName,
+                    organization_details: organizationDetails,
+                    role_title: roleTitle,
+                    rag_context: userType === 'customer' ? organizationContext : "",
+                };
+                console.log('🎤 Sending immediate voice change:', prefs);
+                ws.current.send(JSON.stringify(prefs));
+            }
+        }, 100);
+    };
+
     // ---------- Voice Configuration ----------
     const voiceConfig = {
         en: [
-            { id: "en_GB-cori-medium", name: "Cori (Female)", gender: "female", quality: "medium" },
-            { id: "en_GB-northern_english_male-medium", name: "Northern English Male", gender: "male", quality: "medium" }
+            { 
+                id: "en_US-libritts-high", 
+                name: "Sarah (Female)",
+                fullName: "Sarah (Female)",
+                gender: "female", 
+                quality: "high"
+            },
+            { 
+                id: "en_GB-cori-medium", 
+                name: "Cori (Female)",
+                fullName: "Cori (Female)",
+                gender: "female", 
+                quality: "medium"
+            },
+            { 
+                id: "en_US-ryan-high", 
+                name: "Ryan (Male)",
+                fullName: "Ryan (Male)",
+                gender: "male", 
+                quality: "high"
+            },
+            { 
+                id: "en_GB-northern_english_male-medium", 
+                name: "Northern English Male",
+                fullName: "Northern English Male",
+                gender: "male", 
+                quality: "medium"
+            }
         ],
         it: [
-            { id: "en_GB-cori-medium", name: "Cori (Female)", gender: "female", quality: "medium" },
-            { id: "en_GB-northern_english_male-medium", name: "Northern English Male", gender: "male", quality: "medium" }
+            { 
+                id: "en_US-libritts-high", 
+                name: "Sarah (Female)",
+                fullName: "Sarah (Female)",
+                gender: "female", 
+                quality: "high"
+            },
+            { 
+                id: "en_GB-cori-medium", 
+                name: "Cori (Female)",
+                fullName: "Cori (Female)",
+                gender: "female", 
+                quality: "medium"
+            },
+            { 
+                id: "en_US-ryan-high", 
+                name: "Ryan (Male)",
+                fullName: "Ryan (Male)",
+                gender: "male", 
+                quality: "high"
+            },
+            { 
+                id: "en_GB-northern_english_male-medium", 
+                name: "Northern English Male",
+                fullName: "Northern English Male",
+                gender: "male", 
+                quality: "medium"
+            }
         ]
     };
 
@@ -641,6 +723,11 @@ export default function VoiceAgent() {
             };
 
             // Debug voice selection
+            console.log('🎤 Sending voice selection:', {
+                voice: selectedVoice,
+                language: selectedLanguage,
+                level: level
+            });
             ws.current.send(JSON.stringify(prefs));
         }
     }, [
@@ -788,17 +875,22 @@ export default function VoiceAgent() {
     // Monitor TTS speaking state - Ensure continuous speech recognition
     useEffect(() => {
         if (aiSpeaking) {
-            // Temporarily pause VAD services during audio playback to prevent feedback
+            // CRITICAL: Immediately pause VAD services during audio playback to prevent feedback
+            console.log('🔇 Pausing VAD services during AI speaking to prevent audio loop');
             if (useWebkitVAD && vadService.current) {
                 vadService.current.stop();
+                console.log('🔇 Webkit VAD paused');
             }
             if (useFallbackVAD && fallbackVADService.current) {
                 fallbackVADService.current.stop();
+                console.log('🔇 Fallback VAD paused');
             }
         } else {
-            // Restart VAD services after audio playback to ensure speech recognition continues
+            // CRITICAL: Restart VAD services after audio playback with longer delay to prevent audio loop
+            console.log('🔊 Scheduling VAD restart after AI speaking ends');
             setTimeout(() => {
                 if (listening && !aiSpeaking) {
+                    console.log('🔊 Restarting VAD services after audio playback');
 
                     if (useWebkitVAD && vadService.current && vadInitialized) {
                         try {
@@ -807,8 +899,10 @@ export default function VoiceAgent() {
                                 vadService.current.setWebSocket(ws.current);
                             }
                             vadService.current.start();
+                            console.log('🔊 Webkit VAD restarted');
                         } catch (error) {
                             // Try to reinitialize if restart fails
+                            console.log('Failed to restart VAD, reinitializing...');
                             setTimeout(() => {
                                 initializeVAD().then((success) => {
                                     if (success && listening) {
@@ -822,8 +916,10 @@ export default function VoiceAgent() {
                     if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized) {
                         try {
                             fallbackVADService.current.start();
+                            console.log('🔊 Fallback VAD restarted');
                         } catch (error) {
                             // Try to reinitialize if restart fails
+                            console.log('Failed to restart Fallback VAD, reinitializing...');
                             setTimeout(() => {
                                 initializeFallbackVAD().then((success) => {
                                     if (success && listening) {
@@ -834,7 +930,7 @@ export default function VoiceAgent() {
                         }
                     }
                 }
-            }, 1000); // 1 second delay to ensure audio has completely stopped
+            }, 2000); // Increased delay to 2 seconds to ensure audio has completely stopped
         }
     }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized]);
 
@@ -1309,6 +1405,15 @@ export default function VoiceAgent() {
             return;
         }
         
+        // CRITICAL: Immediately pause VAD services to prevent audio loop
+        console.log('🔇 Pausing VAD services before server MP3 playback to prevent loop');
+        if (useWebkitVAD && vadService.current) {
+            vadService.current.stop();
+        }
+        if (useFallbackVAD && fallbackVADService.current) {
+            fallbackVADService.current.stop();
+        }
+        
         if (isMobile) {
             setIsProcessingAudio(true);
         }
@@ -1414,6 +1519,15 @@ export default function VoiceAgent() {
     // ---------- Helpers: Real-time Audio Chunk Playback ----------
     const playAudioChunk = async (base64: string, text?: string) => {
         try {
+            // CRITICAL: Immediately pause VAD services to prevent audio loop
+            console.log('🔇 Pausing VAD services before audio playback to prevent loop');
+            if (useWebkitVAD && vadService.current) {
+                vadService.current.stop();
+            }
+            if (useFallbackVAD && fallbackVADService.current) {
+                fallbackVADService.current.stop();
+            }
+
             if (!audioCtx.current) {
                 audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
             }
@@ -3336,7 +3450,7 @@ export default function VoiceAgent() {
                                             >
                                                 <FaMicrophone className="h-4 w-4 text-purple-400" />
                                                 <span className="text-sm font-medium text-white">
-                                                    {voiceConfig[selectedLanguage]?.find(v => v.id === selectedVoice)?.name || "Select Voice"}
+                                                    {voiceConfig[selectedLanguage]?.find(v => v.id === selectedVoice)?.fullName || "Select Voice"}
                                                 </span>
                                                 <FaChevronDown className="h-3 w-3 text-zinc-400" />
                                             </button>
@@ -3766,11 +3880,7 @@ export default function VoiceAgent() {
                             {voiceConfig[selectedLanguage]?.map((voice) => (
                                 <button
                                     key={voice.id}
-                                    onClick={() => {
-                                        console.log('🎤 VOICE DEBUG: Voice selected:', voice.id, voice.name);
-                                        setSelectedVoice(voice.id);
-                                        setIsVoiceModalOpen(false);
-                                    }}
+                                    onClick={() => handleVoiceSelection(voice)}
                                     className={`w-full group relative p-3 rounded-xl transition-all duration-300 text-left border-2 ${selectedVoice === voice.id
                                             ? "bg-emerald-500/15 border-emerald-400/50 shadow-md shadow-emerald-500/10"
                                             : "bg-white/[0.05] border-white/10 hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:shadow-md hover:shadow-emerald-500/5"
@@ -3787,7 +3897,7 @@ export default function VoiceAgent() {
                                         </div>
                                         <div className="flex flex-col flex-1 min-w-0">
                                             <span className="text-sm font-semibold text-white">
-                                                {voice.name}
+                                                {voice.fullName}
                                             </span>
                                             <span className="text-xs text-zinc-400">
                                                 {voice.gender} • {voice.quality}

@@ -254,6 +254,13 @@ export class WebkitVADService {
    * Handle speech recognition results
    */
   private handleResult(event: any): void {
+    // CRITICAL: Check if we should ignore results (e.g., during AI speaking)
+    // This prevents audio loop where AI speech gets transcribed again
+    if (!this.isListening) {
+      console.log('VAD: Ignoring speech result - not listening');
+      return;
+    }
+
     let interimTranscript = '';
     let finalTranscript = '';
     let maxConfidence = 0;

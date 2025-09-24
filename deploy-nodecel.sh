@@ -629,7 +629,7 @@ TORCH_DEVICE=cuda
 # API Configuration
 OPENAI_API_KEY=your_openai_key_here
 LLM_API_URL=http://localhost:11434/v1/chat/completions
-LLM_MODEL=qwen2.5-14b-gpu
+LLM_MODEL=huihui-24b:Q4_K_M
 
 # Server Configuration
 HOST=0.0.0.0
