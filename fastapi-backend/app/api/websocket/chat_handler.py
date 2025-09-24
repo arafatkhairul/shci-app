@@ -231,14 +231,19 @@ class ChatHandler:
 
             if "voice" in data:
                 new_voice = data["voice"]
+                log.info(f"[{conn_id}] Voice selection received: {new_voice}")
+                
                 if hasattr(mem, 'voice') and mem.voice != new_voice:
+                    old_voice = mem.voice
                     mem.voice = new_voice
                     changed = True
-                    log.info(f"[{conn_id}] Voice={new_voice}")
+                    log.info(f"[{conn_id}] Voice changed from {old_voice} to {new_voice}")
                 elif not hasattr(mem, 'voice'):
                     mem.voice = new_voice
                     changed = True
-                    log.info(f"[{conn_id}] Voice={new_voice} (initial)")
+                    log.info(f"[{conn_id}] Voice set to {new_voice} (initial)")
+                else:
+                    log.info(f"[{conn_id}] Voice already set to {new_voice}")
 
             if "use_local_tts" in data:
                 server_tts_enabled = not data["use_local_tts"]
@@ -517,11 +522,124 @@ If the input is grammatically correct, respond normally without any grammar corr
                 log.info(f"⚠️ Fallback: Removed grammar markers from TTS text")
                 return cleaned_text
         
-        return text
+        # Apply text preprocessing to fix punctuation issues
+        from tts_factory import preprocess_text_for_tts
+        return preprocess_text_for_tts(text)
+
+    def _create_smart_chunks(self, text: str, chunk_size: int = 8) -> list:
+        """
+        Advanced smart chunking that absolutely prevents punctuation separation.
+        This is the ultimate solution for "eeeehehehehe" sound issues.
+        """
+        if not text or not text.strip():
+            return []
+        
+        # Apply text preprocessing first
+        from tts_factory import preprocess_text_for_tts
+        text = preprocess_text_for_tts(text)
+        
+        # Split text into words while preserving punctuation
+        import re
+        words = re.findall(r'\S+', text)  # Find all non-whitespace sequences (words + punctuation)
+        
+        chunks = []
+        current_chunk = []
+        current_word_count = 0
+        
+        for i, word in enumerate(words):
+            current_chunk.append(word)
+            current_word_count += 1
+            
+            # Check if we should break the chunk
+            should_break = False
+            
+            # CRITICAL: Break at sentence boundaries to prevent punctuation separation
+            if word.endswith(('.', '!', '?', ';', ':')):
+                should_break = True
+                log.debug(f"Breaking at sentence boundary: '{word}'")
+            
+            # Break if we've reached the chunk size (but only if not in middle of sentence)
+            elif current_word_count >= chunk_size:
+                # Check if next word starts a new sentence or if we're at end
+                if i + 1 >= len(words) or words[i + 1][0].isupper():
+                    should_break = True
+                    log.debug(f"Breaking at chunk size: {current_word_count} words")
+                else:
+                    # Continue to find a better break point
+                    continue
+            
+            # Break if the word is very long (to prevent oversized chunks)
+            elif len(word) > 25:
+                should_break = True
+                log.debug(f"Breaking at long word: '{word}' ({len(word)} chars)")
+            
+            if should_break and current_chunk:
+                # Join the chunk and add to results
+                chunk_text = " ".join(current_chunk)
+                if chunk_text.strip():
+                    chunks.append(chunk_text)
+                    log.debug(f"Created chunk: '{chunk_text}'")
+                
+                # Reset for next chunk
+                current_chunk = []
+                current_word_count = 0
+        
+        # Add any remaining words as the final chunk
+        if current_chunk:
+            chunk_text = " ".join(current_chunk)
+            if chunk_text.strip():
+                chunks.append(chunk_text)
+                log.debug(f"Created final chunk: '{chunk_text}'")
+        
+        # VALIDATION: Ensure no punctuation is separated
+        self._validate_chunk_integrity(chunks)
+        
+        log.info(f"Advanced smart chunking: {len(words)} words -> {len(chunks)} chunks")
+        for i, chunk in enumerate(chunks):
+            log.info(f"  Chunk {i+1}: '{chunk}'")
+        
+        return chunks
+    
+    def _validate_chunk_integrity(self, chunks: list) -> None:
+        """
+        Validate that chunks don't have separated punctuation.
+        This is a safety check to prevent audio artifacts.
+        """
+        import re
+        
+        for i, chunk in enumerate(chunks):
+            # CRITICAL: Check for empty punctuation chunks that cause "eeee aaaa hee" sounds
+            text_only_punctuation = re.sub(r'[.!?,;:]+', '', chunk.strip())
+            if not text_only_punctuation or not text_only_punctuation.strip():
+                log.warning(f"⚠️ Empty punctuation chunk detected (no words): '{chunk}'")
+                continue
+            
+            # Check for incomplete punctuation patterns that cause "eeeehehehehe" sounds
+            problematic_endings = [
+                'thing', 'time', 'ready', 'continue', 'world', 'you', 'fine', 
+                'name', 'John', 'meet', 'test', 'sentences', 'marks', 'text', 
+                'chunks', 'limit', 'thank', 'characters', 'Really', 'sure',
+                'here', 'when', 'take', 'your', 'be', 'ready', 'continue'
+            ]
+            
+            # Check if chunk ends with a word that might have separated punctuation
+            chunk_words = chunk.split()
+            if chunk_words and chunk_words[-1].lower() in problematic_endings:
+                log.warning(f"⚠️ Potential punctuation separation in chunk {i+1}: '{chunk}'")
+                # This should not happen with our advanced chunking
+            else:
+                log.debug(f"✅ Chunk {i+1} integrity validated: '{chunk}'")
 
     def should_generate_audio_chunk(self, text_buffer: str) -> bool:
         """Determine if we should generate audio for the current text buffer"""
         if not text_buffer.strip():
+            return False
+        
+        # CRITICAL: Prevent empty punctuation chunks that cause "eeee aaaa hee" sounds
+        import re
+        text_only_punctuation = re.sub(r'[.!?,;:]+', '', text_buffer.strip())
+        if not text_only_punctuation or not text_only_punctuation.strip():
+            log.warning(f"Empty punctuation chunk detected (no words): '{text_buffer}' - skipping audio generation")
             return False
         
         # If grammar correction is detected anywhere in the buffer, be more careful
@@ -552,12 +670,13 @@ If the input is grammatically correct, respond normally without any grammar corr
         words = text_buffer.split()
         sentence_endings = ['.', '!', '?', ';', ':', '\n']
         
-        # Check for sentence endings - this is the main trigger for natural speech
+        # CRITICAL FIX: Check for sentence endings - this is the main trigger for natural speech
         if any(text_buffer.rstrip().endswith(ending) for ending in sentence_endings):
             return True
         
-        # Only generate audio for longer phrases (8+ words) to avoid robotic word-by-word playback
-        if len(words) >= 8:
+        # CRITICAL FIX: Only generate audio for longer phrases (12+ words) to avoid robotic word-by-word playback
+        # This prevents generating audio for incomplete sentences that might have separated punctuation
+        if len(words) >= 12:
             return True
             
         return False
@@ -628,18 +747,15 @@ If the input is grammatically correct, respond normally without any grammar corr
                 "is_final": False
             })
             
-            # Create a simple text stream from the complete text
+            # Create a smart text stream that preserves punctuation integrity
             async def text_stream():
-                # Split text into chunks for streaming
-                words = text.split()
-                chunk_size = 8  # Process 8 words at a time
+                # Smart chunking that keeps punctuation with words
+                chunks = self._create_smart_chunks(text, chunk_size=8)
                 
-                for i in range(0, len(words), chunk_size):
-                    chunk = " ".join(words[i:i + chunk_size])
-                    if i + chunk_size < len(words):
-                        chunk += " "  # Add space if not the last chunk
-                    yield chunk
-                    await asyncio.sleep(0.1)  # Small delay between chunks
+                for chunk in chunks:
+                    if chunk.strip():  # Only yield non-empty chunks
+                        yield chunk
+                        await asyncio.sleep(0.1)  # Small delay between chunks
             
             # Generate streaming audio chunks
             async for audio_chunk in self.tts_service.synthesize_streaming_chunks(

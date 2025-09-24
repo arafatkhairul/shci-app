@@ -56,7 +56,7 @@ async def test_optimized_tts():
     
     # Test voice switching
     print(f"\n🎤 Testing voice switching...")
-    voices = ["en_GB-cori-medium", "en_GB-northern_english_male-medium"]
+    voices = ["en_US-libritts-high", "en_GB-cori-medium", "en_US-ryan-high", "en_GB-northern_english_male-medium"]
     
     for voice in voices:
         print(f"Switching to voice: {voice}")

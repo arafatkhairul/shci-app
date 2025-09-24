@@ -26,7 +26,7 @@ class Settings:
     TTS_SYSTEM = os.getenv("TTS_SYSTEM", "piper").lower()
     
     # ---- Piper TTS Configuration ----
-    PIPER_MODEL_NAME = os.getenv("PIPER_MODEL_NAME", "en_GB-cori-medium").strip()
+    PIPER_MODEL_NAME = os.getenv("PIPER_MODEL_NAME", "en_US-libritts-high").strip()
     PIPER_LENGTH_SCALE = float(os.getenv("PIPER_LENGTH_SCALE", "1.5"))
     PIPER_NOISE_SCALE = float(os.getenv("PIPER_NOISE_SCALE", "1.0"))
     PIPER_NOISE_W = float(os.getenv("PIPER_NOISE_W", "0.8"))

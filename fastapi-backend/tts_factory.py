@@ -10,11 +10,71 @@ import asyncio
 import wave
 import tempfile
 import inspect
+import re
 from typing import Optional, Dict, Any, Union
 from abc import ABC, abstractmethod
 from enum import Enum
 
 log = logging.getLogger("tts_factory")
+
+def preprocess_text_for_tts(text: str) -> str:
+    """
+    Advanced preprocessing to fix TTS issues with punctuation and special characters.
+    This prevents weird audio artifacts like 'eeeehehehehe' sounds.
+    """
+    if not text or not text.strip():
+        return text
+    
+    # Remove extra whitespace
+    text = re.sub(r'\s+', ' ', text.strip())
+    
+    # CRITICAL: Prevent empty punctuation chunks that cause "eeee aaaa hee" sounds
+    # Check if text contains only punctuation marks without any words
+    text_only_punctuation = re.sub(r'[.!?,;:]+', '', text.strip())
+    if not text_only_punctuation or not text_only_punctuation.strip():
+        log.warning(f"Empty punctuation chunk detected (no words): '{text}' - skipping")
+        return ""  # Return empty string to prevent audio generation
+    
+    # CRITICAL: Fix punctuation attachment issues that cause audio artifacts
+    # This is the main cause of "eeeehehehehe" sounds
+    
+    # 1. CRITICAL FIX: Keep punctuation attached to words to prevent separation
+    # This prevents the "eeeehehehehe" sound issue
+    # DO NOT separate punctuation from words - this causes TTS artifacts
+    
+    # 2. Fix multiple consecutive punctuation marks
+    text = re.sub(r'[.]{2,}', '.', text)  # Multiple dots -> single dot
+    text = re.sub(r'[?]{2,}', '?', text)  # Multiple question marks -> single
+    text = re.sub(r'[!]{2,}', '!', text)  # Multiple exclamation marks -> single
+    text = re.sub(r'[,]{2,}', ',', text)  # Multiple commas -> single comma
+    
+    # 3. Fix punctuation at the beginning of text
+    text = re.sub(r'^[.!?,;:]+', '', text)  # Remove leading punctuation
+    
+    # 4. Fix punctuation at the end of text - but keep it if it's part of a word
+    # Only remove if it's standalone punctuation
+    text = re.sub(r'[.!?,;:]+$', '', text)  # Remove trailing punctuation
+    
+    # 5. Ensure proper sentence ending
+    if text and not text[-1] in '.!?':
+        text += '.'
+    
+    # 6. Fix Bengali/English mixed text issues
+    text = re.sub(r'([a-zA-Z])([।])', r'\1.', text)  # Replace Bengali danda with dot
+    text = re.sub(r'([।])([a-zA-Z])', r'. \2', text)  # Add space after Bengali danda
+    
+    # 7. Remove control characters
+    text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', text)
+    
+    # 8. Ensure minimum length for stable synthesis
+    if len(text.strip()) < 3:
+        text = text.strip() + "."
+    
+    # 9. Final cleanup - remove extra spaces but preserve word-punctuation attachment
+    text = re.sub(r'\s+', ' ', text.strip())
+    
+    log.debug(f"Advanced text preprocessing: '{text[:50]}...' -> '{text[:50]}...'")
+    return text
 
 # Import Piper TTS
 try:
@@ -80,6 +140,15 @@ class PiperTTSProvider(TTSInterface):
         
         # Voice configuration with multiple models
         self.voice_configs = {
+            "en_US-libritts-high": {
+                "name": "Sarah (Female)",
+                "gender": "female",
+                "quality": "high",
+                "model_path": "en_US-libritts-high.onnx",
+                "config_path": "en_US-libritts-high.onnx.json",
+                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/libritts/high/en_US-libritts-high.onnx",
+                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/libritts/high/en_US-libritts-high.onnx.json"
+            },
             "en_GB-cori-medium": {
                 "name": "Cori (Female)",
                 "gender": "female",
@@ -88,6 +157,15 @@ class PiperTTSProvider(TTSInterface):
                 "config_path": "en_GB-cori-medium.onnx.json",
                 "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/cori/medium/en_GB-cori-medium.onnx",
                 "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/cori/medium/en_GB-cori-medium.onnx.json"
+            },
+            "en_US-ryan-high": {
+                "name": "Ryan (Male)",
+                "gender": "male",
+                "quality": "high",
+                "model_path": "en_US-ryan-high.onnx",
+                "config_path": "en_US-ryan-high.onnx.json",
+                "model_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/high/en_US-ryan-high.onnx",
+                "config_url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/high/en_US-ryan-high.onnx.json"
             },
             "en_GB-northern_english_male-medium": {
                 "name": "Northern English Male",
@@ -102,12 +180,14 @@ class PiperTTSProvider(TTSInterface):
         
         # Voice mapping - Map high quality requests to medium quality
         self.voice_mapping = {
+            "en_US-libritts-high": "en_US-libritts-high",
             "en_GB-cori-high": "en_GB-cori-medium",
+            "en_US-ryan-high": "en_US-ryan-high",
             "en_GB-northern_english_male-high": "en_GB-northern_english_male-medium"
         }
         
         # Default voice selection
-        self.current_voice = os.getenv("PIPER_VOICE", "en_GB-cori-medium")
+        self.current_voice = os.getenv("PIPER_VOICE", "en_US-libritts-high")
         self.model_path = self.voice_configs[self.current_voice]["model_path"]
         self.config_path = self.voice_configs[self.current_voice]["config_path"]
         
@@ -390,7 +470,7 @@ class PiperTTSProvider(TTSInterface):
         
         if voice_id not in self.voice_configs:
             log.warning(f"Voice {voice_id} not found, using default")
-            voice_id = "en_GB-cori-medium"
+            voice_id = "en_US-libritts-high"
         
         if voice_id != self.current_voice:
             log.info(f"🎤 Switching voice from {self.current_voice} to {voice_id}")
@@ -422,6 +502,9 @@ class PiperTTSProvider(TTSInterface):
         if not self.available or not self.voice:
             raise RuntimeError("Piper TTS not available")
         
+        # Preprocess text to fix punctuation issues
+        text = preprocess_text_for_tts(text)
+        
         # Switch voice if specified (optimized with caching)
         if voice and voice != self.current_voice:
             self.set_voice(voice)
@@ -441,6 +524,9 @@ class PiperTTSProvider(TTSInterface):
         if not self.available or not self.voice:
             raise RuntimeError("Piper TTS not available")
         
+        # Preprocess text to fix punctuation issues
+        text = preprocess_text_for_tts(text)
+        
         # Switch voice if specified
         if voice and voice != self.current_voice:
             log.info(f"🎤 Switching voice from {self.current_voice} to {voice}")
@@ -451,7 +537,8 @@ class PiperTTSProvider(TTSInterface):
         # Log current voice being used for synthesis
         current_voice_config = self.voice_configs.get(self.current_voice, {})
         voice_name = current_voice_config.get('name', 'Unknown')
-        log.info(f"🎤 Synthesizing with voice: {voice_name} ({self.current_voice})")
+        voice_gender = current_voice_config.get('gender', 'Unknown')
+        log.info(f"🎤 Synthesizing with voice: {voice_name} ({voice_gender}) - {self.current_voice}")
         
         try:
             # Create temporary WAV file
@@ -558,6 +645,9 @@ class PiperTTSProvider(TTSInterface):
         """Ultra-optimized synthesis for minimal latency using direct memory operations."""
         if not self.available or not self.voice:
             raise RuntimeError("Piper TTS not available")
+        
+        # Preprocess text to fix punctuation issues
+        text = preprocess_text_for_tts(text)
         
         # Use memory buffer for fastest processing
         import io

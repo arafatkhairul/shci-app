@@ -35,6 +35,10 @@ class TTSService:
         """Ultra-fast synthesize text to audio using cached models"""
         
         try:
+            # Preprocess text to fix punctuation issues
+            from tts_factory import preprocess_text_for_tts
+            text = preprocess_text_for_tts(text)
+            
             # Use provided voice or default
             voice_to_use = voice or self.piper_model
             
@@ -73,6 +77,61 @@ class TTSService:
             "fast": 1.2      # Faster for advanced
         }
         return speed_adjustments.get(level, 1.0)
+    
+    def _validate_text_for_synthesis(self, text: str) -> bool:
+        """
+        Validate text before synthesis to prevent audio artifacts.
+        Returns True if text is safe for synthesis, False otherwise.
+        """
+        if not text or not text.strip():
+            return False
+        
+        # CRITICAL: Prevent empty punctuation chunks that cause "eeee aaaa hee" sounds
+        # Check if text contains only punctuation marks without any words
+        import re
+        text_only_punctuation = re.sub(r'[.!?,;:]+', '', text.strip())
+        if not text_only_punctuation or not text_only_punctuation.strip():
+            log.warning(f"Empty punctuation chunk detected (no words): '{text}'")
+            return False
+        
+        # Check for problematic patterns that cause "eeeehehehehe" sounds
+        problematic_patterns = [
+            r'^\s*[.!?]',     # Punctuation at start
+            r'[.!?]{2,}',     # Multiple punctuation marks
+            r'\w+\s*[.!?]\s*\w+',  # Punctuation in middle without proper spacing
+        ]
+        
+        for pattern in problematic_patterns:
+            if re.search(pattern, text):
+                log.warning(f"Problematic pattern detected in text: '{text}' (pattern: {pattern})")
+                return False
+        
+        # CRITICAL: Check for words that might have separated punctuation
+        # This prevents the "eeeehehehehe" sound issue
+        problematic_words = [
+            'thing', 'time', 'ready', 'continue', 'world', 'you', 'fine', 
+            'name', 'John', 'meet', 'test', 'sentences', 'marks', 'text', 
+            'chunks', 'limit', 'thank', 'characters', 'Really', 'sure',
+            'here', 'when', 'take', 'your', 'be', 'ready', 'continue'
+        ]
+        
+        words = text.split()
+        if words and words[-1].lower() in problematic_words:
+            # Check if this word might have separated punctuation
+            if not any(text.rstrip().endswith(p) for p in ['.', '!', '?', ';', ':']):
+                log.warning(f"Potential punctuation separation detected: '{text}'")
+                return False
+        
+        # Check for minimum length
+        if len(text.strip()) < 3:
+            log.warning(f"Text too short for synthesis: '{text}'")
+            return False
+        
+        # Check for proper sentence structure
+        if not any(text.strip().endswith(p) for p in ['.', '!', '?']):
+            log.debug(f"Text doesn't end with sentence punctuation: '{text}'")
+        
+        return True
 
     async def synthesize_with_level(
         self,
@@ -82,6 +141,10 @@ class TTSService:
         level: str = "medium"
     ) -> Optional[bytes]:
         """Synthesize text with difficulty level adjustment"""
+        
+        # Preprocess text to fix punctuation issues
+        from tts_factory import preprocess_text_for_tts
+        text = preprocess_text_for_tts(text)
         
         # Adjust length scale based on level
         adjusted_length_scale = self.length_scale * self.adjust_speed_for_level(level)
@@ -101,7 +164,7 @@ class TTSService:
         level: str = "medium",
         chunk_size: int = 50
     ):
-        """Synthesize text chunks as they arrive from streaming LLM"""
+        """Advanced streaming synthesis with comprehensive punctuation handling"""
         import asyncio
         from collections import deque
         
@@ -137,20 +200,28 @@ class TTSService:
                 
                 if text_to_synthesize:
                     try:
-                        # Synthesize this chunk
-                        audio_data = await self.synthesize_text(
-                            text=text_to_synthesize,
-                            language=language,
-                            voice=voice,
-                            length_scale=adjusted_length_scale
-                        )
+                        # Apply advanced text preprocessing to fix punctuation issues
+                        from tts_factory import preprocess_text_for_tts
+                        processed_text = preprocess_text_for_tts(text_to_synthesize)
                         
-                        if audio_data:
-                            yield {
-                                'text': text_to_synthesize,
-                                'audio_data': audio_data,
-                                'audio_size': len(audio_data)
-                            }
+                        # Additional validation to prevent punctuation separation
+                        if self._validate_text_for_synthesis(processed_text):
+                            # Synthesize this chunk
+                            audio_data = await self.synthesize_text(
+                                text=processed_text,
+                                language=language,
+                                voice=voice,
+                                length_scale=adjusted_length_scale
+                            )
+                            
+                            if audio_data:
+                                yield {
+                                    'text': processed_text,
+                                    'audio_data': audio_data,
+                                    'audio_size': len(audio_data)
+                                }
+                        else:
+                            log.warning(f"Skipping problematic text chunk: '{processed_text}'")
                     except Exception as e:
                         log.error(f"TTS streaming chunk error: {e}")
                         continue
@@ -158,19 +229,27 @@ class TTSService:
         # Process any remaining text in buffer
         if text_buffer.strip():
             try:
-                audio_data = await self.synthesize_text(
-                    text=text_buffer.strip(),
-                    language=language,
-                    voice=voice,
-                    length_scale=adjusted_length_scale
-                )
+                # Apply advanced text preprocessing to fix punctuation issues
+                from tts_factory import preprocess_text_for_tts
+                processed_text = preprocess_text_for_tts(text_buffer.strip())
                 
-                if audio_data:
-                    yield {
-                        'text': text_buffer.strip(),
-                        'audio_data': audio_data,
-                        'audio_size': len(audio_data)
-                    }
+                # Additional validation to prevent punctuation separation
+                if self._validate_text_for_synthesis(processed_text):
+                    audio_data = await self.synthesize_text(
+                        text=processed_text,
+                        language=language,
+                        voice=voice,
+                        length_scale=adjusted_length_scale
+                    )
+                    
+                    if audio_data:
+                        yield {
+                            'text': processed_text,
+                            'audio_data': audio_data,
+                            'audio_size': len(audio_data)
+                        }
+                else:
+                    log.warning(f"Skipping problematic final text chunk: '{processed_text}'")
             except Exception as e:
                 log.error(f"TTS final chunk error: {e}")
 
