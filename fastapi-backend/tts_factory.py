@@ -311,6 +311,23 @@ class PiperTTSProvider(TTSInterface):
             import torch
             gpu_id = self.device_info.get('gpu_id', 0)
             
+            # Check CUDA compatibility first
+            try:
+                # Test CUDA compatibility with a simple operation
+                device = torch.device(f'cuda:{gpu_id}')
+                test_tensor = torch.tensor([1.0]).to(device)
+                log.info(f"✅ CUDA compatibility test passed for GPU {gpu_id}")
+            except Exception as cuda_error:
+                log.warning(f"CUDA compatibility test failed: {cuda_error}")
+                log.info("🔄 Switching to CPU mode due to CUDA incompatibility")
+                # Switch to CPU mode
+                self.use_cuda = False
+                self.device_info['device_type'] = 'CPU'
+                self.device_info['device_name'] = 'CPU (CUDA incompatible)'
+                os.environ["PIPER_DEVICE"] = "cpu"
+                os.environ["PIPER_FORCE_CPU"] = "true"
+                return
+            
             # Set CUDA device
             torch.cuda.set_device(gpu_id)
             
@@ -332,6 +349,13 @@ class PiperTTSProvider(TTSInterface):
             
         except Exception as e:
             log.warning(f"Failed to pre-load GPU: {e}")
+            # Switch to CPU mode on any GPU error
+            log.info("🔄 Switching to CPU mode due to GPU error")
+            self.use_cuda = False
+            self.device_info['device_type'] = 'CPU'
+            self.device_info['device_name'] = 'CPU (GPU error)'
+            os.environ["PIPER_DEVICE"] = "cpu"
+            os.environ["PIPER_FORCE_CPU"] = "true"
     
     def _apply_server_optimizations(self):
         """Apply server-specific performance optimizations."""
@@ -429,21 +453,33 @@ class PiperTTSProvider(TTSInterface):
             # Load with CUDA if available and configured
             if self.use_cuda and self.device_info['cuda_available']:
                 try:
+                    # Test CUDA compatibility before loading model
+                    import torch
+                    gpu_id = self.device_info.get('gpu_id', 0)
+                    device = torch.device(f'cuda:{gpu_id}')
+                    test_tensor = torch.tensor([1.0]).to(device)
+                    
                     self.voice = PiperVoice.load(
                         self.model_path, 
                         config_path=self.config_path,
                         use_cuda=True
                     )
-                    gpu_id = self.device_info.get('gpu_id', 0)
                     log.info(f"[OK] Model loaded successfully with GPU {gpu_id} acceleration")
                 except Exception as cuda_error:
                     log.warning(f"GPU loading failed, falling back to CPU: {cuda_error}")
+                    # Switch to CPU mode permanently
+                    self.use_cuda = False
+                    self.device_info['device_type'] = 'CPU'
+                    self.device_info['device_name'] = 'CPU (CUDA fallback)'
+                    os.environ["PIPER_DEVICE"] = "cpu"
+                    os.environ["PIPER_FORCE_CPU"] = "true"
+                    
                     self.voice = PiperVoice.load(
                         self.model_path, 
                         config_path=self.config_path,
                         use_cuda=False
                     )
-                    log.info("[OK] Model loaded successfully with CPU fallback")
+                    log.info("[OK] Model loaded successfully with CPU (CUDA fallback)")
             else:
                 self.voice = PiperVoice.load(
                     self.model_path, 

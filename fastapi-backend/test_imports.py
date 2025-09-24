@@ -40,7 +40,18 @@ def test_imports():
         print("  - Testing PyTorch...")
         try:
             import torch
-            print("    ✅ PyTorch import successful")
+            # Check CUDA availability and compatibility
+            if torch.cuda.is_available():
+                try:
+                    # Test CUDA with error handling
+                    device = torch.device("cuda")
+                    test_tensor = torch.tensor([1.0]).to(device)
+                    print("    ✅ PyTorch with CUDA import successful")
+                except Exception as cuda_error:
+                    print(f"    ⚠️  PyTorch CUDA error (using CPU): {str(cuda_error)[:100]}...")
+                    print("    ✅ PyTorch CPU mode available")
+            else:
+                print("    ✅ PyTorch CPU mode available")
         except ImportError:
             print("    ⚠️  PyTorch not available (optional)")
         
