@@ -599,7 +599,9 @@ setup_backend() {
     
     # Test Python imports to ensure everything works
     log_step "Testing Python imports..."
+    cd fastapi-backend
     python test_imports.py
+    cd ..
     if [ $? -eq 0 ]; then
         log_success "Python imports test passed"
     else
