@@ -624,7 +624,14 @@ export default function VoiceAgent() {
         },
         onStateChange: (isListening: boolean) => {
             console.log('VAD State changed:', isListening);
-            // Keep listening state active throughout the session - don't let VAD control the main listening state
+            // Mobile-specific: Always keep microphone active after start
+            if (isMobile) {
+                console.log('Mobile: VAD state change ignored - keeping microphone active');
+                setListening(true);
+                return;
+            }
+            
+            // Desktop: Keep listening state active throughout the session - don't let VAD control the main listening state
             // The microphone should only be controlled by Start/Stop button clicks
             if (isListening) {
                 setListening(true);
@@ -678,7 +685,14 @@ export default function VoiceAgent() {
         },
         onStateChange: (isListening: boolean) => {
             console.log('Fallback VAD State changed:', isListening);
-            // Keep listening state active throughout the session - don't let VAD control the main listening state
+            // Mobile-specific: Always keep microphone active after start
+            if (isMobile) {
+                console.log('Mobile: Fallback VAD state change ignored - keeping microphone active');
+                setListening(true);
+                return;
+            }
+            
+            // Desktop: Keep listening state active throughout the session - don't let VAD control the main listening state
             // The microphone should only be controlled by Start/Stop button clicks
             if (isListening) {
                 setListening(true);
@@ -904,6 +918,12 @@ export default function VoiceAgent() {
                             }
                             vadService.current.start();
                             console.log('🔊 Webkit VAD restarted');
+                            
+                            // Mobile-specific: Ensure listening state stays active
+                            if (isMobile) {
+                                setListening(true);
+                                console.log('📱 Mobile: Listening state maintained after VAD restart');
+                            }
                         } catch (error) {
                             // Try to reinitialize if restart fails
                             console.log('Failed to restart VAD, reinitializing...');
@@ -911,6 +931,11 @@ export default function VoiceAgent() {
                                 initializeVAD().then((success) => {
                                     if (success && listening) {
                                         startVAD();
+                                        // Mobile-specific: Ensure listening state stays active
+                                        if (isMobile) {
+                                            setListening(true);
+                                            console.log('📱 Mobile: Listening state maintained after VAD reinit');
+                                        }
                                     }
                                 });
                             }, isMobile ? 3000 : 2000); // Longer delay for mobile
@@ -921,6 +946,12 @@ export default function VoiceAgent() {
                         try {
                             fallbackVADService.current.start();
                             console.log('🔊 Fallback VAD restarted');
+                            
+                            // Mobile-specific: Ensure listening state stays active
+                            if (isMobile) {
+                                setListening(true);
+                                console.log('📱 Mobile: Listening state maintained after Fallback VAD restart');
+                            }
                         } catch (error) {
                             // Try to reinitialize if restart fails
                             console.log('Failed to restart Fallback VAD, reinitializing...');
@@ -928,6 +959,11 @@ export default function VoiceAgent() {
                                 initializeFallbackVAD().then((success) => {
                                     if (success && listening) {
                                         startFallbackVAD();
+                                        // Mobile-specific: Ensure listening state stays active
+                                        if (isMobile) {
+                                            setListening(true);
+                                            console.log('📱 Mobile: Listening state maintained after Fallback VAD reinit');
+                                        }
                                     }
                                 });
                             }, isMobile ? 3000 : 2000); // Longer delay for mobile
@@ -1936,7 +1972,7 @@ export default function VoiceAgent() {
 
     // ---------- Start mic ----------
     const startMic = async () => {
-        console.log("🎤 startMic called, listening:", listening, "connected:", connected);
+        console.log("🎤 startMic called, listening:", listening, "connected:", connected, "mobile:", isMobile);
         if (listening) {
             console.log("⚠️ Already listening, skipping startMic");
             return;
@@ -1948,6 +1984,13 @@ export default function VoiceAgent() {
 
         // Force mic level reset
         updateMicLevel(0, 'reset');
+        
+        // Mobile-specific: Set listening state immediately to prevent auto-off
+        if (isMobile) {
+            console.log("📱 Mobile: Setting listening state immediately");
+            setListening(true);
+            setStatus(currentLang.status.listening);
+        }
 
         // Auto-activate Webkit VAD if available and not already active
         if (vadSupported && vadInitialized && !useWebkitVAD && vadService.current) {

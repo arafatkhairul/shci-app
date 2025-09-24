@@ -439,7 +439,13 @@ export class WebkitVADService {
    * Start silence detection timer
    */
   private startSilenceTimer(): void {
-    // Disabled silence timer for manual control
+    // Mobile-specific: Completely disable silence timer to keep microphone always active
+    if (this.isMobile) {
+      console.log('Mobile: Silence timer disabled - keeping microphone active');
+      return;
+    }
+    
+    // Desktop: Disabled silence timer for manual control
     return;
   }
 

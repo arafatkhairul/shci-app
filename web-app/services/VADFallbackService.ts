@@ -39,6 +39,9 @@ export class FallbackVADService {
   private animationFrame: number | null = null;
   private lastSpeechTime: number = 0;
   private isSpeechActive: boolean = false;
+  
+  // Mobile-specific fixes
+  private isMobile: boolean = false;
 
   constructor(config: Partial<FallbackVADConfig> = {}, callbacks: FallbackVADCallbacks = {}) {
     this.config = {
@@ -52,6 +55,7 @@ export class FallbackVADService {
     };
     
     this.callbacks = callbacks;
+    this.isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   }
 
   /**
@@ -347,6 +351,12 @@ export class FallbackVADService {
    * Start silence detection timer
    */
   private startSilenceTimer(): void {
+    // Mobile-specific: Completely disable silence timer to keep microphone always active
+    if (this.isMobile) {
+      console.log('Mobile: Fallback VAD silence timer disabled - keeping microphone active');
+      return;
+    }
+    
     this.clearSilenceTimer();
     this.silenceTimer = window.setTimeout(() => {
       if (this.isSpeechActive) {
