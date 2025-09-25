@@ -49,6 +49,9 @@ export class RealtimeSTTService {
   private pingInterval: NodeJS.Timeout | null = null;
   private status: RealtimeSTTStatus | null = null;
   private recognition: any = null;
+  private shouldBeRunning = false;
+  private restartAttempts = 0;
+  private maxRestartAttempts = 10;
 
   constructor(config: RealtimeSTTConfig, callbacks: RealtimeSTTCallbacks) {
     this.config = config;
@@ -83,6 +86,7 @@ export class RealtimeSTTService {
       this.recognition.onstart = () => {
         console.log('🎤 RealtimeSTT started');
         this.isRecording = true;
+        this.restartAttempts = 0; // Reset restart attempts on successful start
         this.callbacks.onStateChange?.(true);
       };
       
@@ -119,6 +123,24 @@ export class RealtimeSTTService {
         console.log('🛑 RealtimeSTT ended');
         this.isRecording = false;
         this.callbacks.onStateChange?.(false);
+        
+        // Auto-restart if it was supposed to be recording
+        if (this.isInitialized && this.recognition && this.shouldBeRunning && this.restartAttempts < this.maxRestartAttempts) {
+          this.restartAttempts++;
+          console.log(`🔄 Auto-restarting RealtimeSTT... (attempt ${this.restartAttempts}/${this.maxRestartAttempts})`);
+          setTimeout(() => {
+            try {
+              if (this.shouldBeRunning && this.recognition) {
+                this.recognition.start();
+              }
+            } catch (error) {
+              console.error('❌ Error auto-restarting RealtimeSTT:', error);
+            }
+          }, 100); // Small delay to prevent rapid restarts
+        } else if (this.restartAttempts >= this.maxRestartAttempts) {
+          console.error('❌ Max restart attempts reached, stopping auto-restart');
+          this.shouldBeRunning = false;
+        }
       };
       
       this.isInitialized = true;
@@ -277,6 +299,10 @@ export class RealtimeSTTService {
 
       console.log('🎤 Starting RealtimeSTT service...');
       
+      // Set flag to indicate we should be running
+      this.shouldBeRunning = true;
+      this.restartAttempts = 0; // Reset restart attempts
+      
       // Start Web Speech API recognition
       this.recognition.start();
 
@@ -299,6 +325,9 @@ export class RealtimeSTTService {
       }
 
       console.log('🛑 Stopping RealtimeSTT service...');
+      
+      // Clear flag to prevent auto-restart
+      this.shouldBeRunning = false;
       
       // Stop Web Speech API recognition
       this.recognition.stop();
@@ -441,6 +470,7 @@ export class RealtimeSTTService {
       this.isInitialized = false;
       this.isRecording = false;
       this.isConnected = false;
+      this.shouldBeRunning = false;
       
       console.log('✅ RealtimeSTT service destroyed');
     } catch (error) {
