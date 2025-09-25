@@ -230,7 +230,6 @@ class WhisperSTTService:
             # Prepare options for Faster Whisper (optimized for speed)
             options = {
                 "task": task,
-                "verbose": False,
                 "beam_size": 1,  # Faster inference
                 "best_of": 1,    # Faster inference
                 "patience": 1,   # Faster inference
