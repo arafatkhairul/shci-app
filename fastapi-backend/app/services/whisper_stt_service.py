@@ -1,0 +1,334 @@
+"""
+Whisper Speech-to-Text Service
+==============================
+
+This service provides Whisper-based speech-to-text functionality for the SHCI voice assistant.
+It handles audio processing, transcription, and language detection using OpenAI's Whisper model.
+
+Features:
+- Real-time audio transcription
+- Multiple language support
+- Audio format conversion
+- Confidence scoring
+- GPU acceleration support
+
+Author: SHCI Development Team
+Date: 2025
+"""
+
+import asyncio
+import io
+import logging
+import tempfile
+import wave
+from pathlib import Path
+from typing import Optional, Dict, Any, Tuple
+import numpy as np
+import whisper
+import librosa
+from app.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+class WhisperSTTService:
+    """
+    Whisper-based Speech-to-Text service for real-time audio transcription.
+    """
+    
+    def __init__(self, model_size: str = "base", device: str = "auto"):
+        """
+        Initialize the Whisper STT service.
+        
+        Args:
+            model_size: Whisper model size (tiny, base, small, medium, large)
+            device: Device to run on (auto, cpu, cuda)
+        """
+        self.model_size = model_size
+        self.device = self._detect_device(device)
+        self.model = None
+        self.is_initialized = False
+        
+        # Audio processing parameters
+        self.sample_rate = 16000  # Whisper expects 16kHz
+        self.chunk_duration = 30  # Process audio in 30-second chunks
+        self.min_audio_length = 0.5  # Minimum audio length in seconds
+        
+        logger.info(f"Whisper STT Service initialized with model: {model_size}, device: {self.device}")
+    
+    def _detect_device(self, device: str) -> str:
+        """Detect the best available device for Whisper."""
+        if device == "auto":
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    return "cuda"
+                elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                    return "mps"  # Apple Silicon
+                else:
+                    return "cpu"
+            except ImportError:
+                return "cpu"
+        return device
+    
+    async def initialize(self) -> bool:
+        """
+        Initialize the Whisper model.
+        
+        Returns:
+            bool: True if initialization successful, False otherwise
+        """
+        try:
+            logger.info(f"Loading Whisper model: {self.model_size}")
+            
+            # Load model in a separate thread to avoid blocking
+            loop = asyncio.get_event_loop()
+            self.model = await loop.run_in_executor(
+                None, 
+                whisper.load_model, 
+                self.model_size, 
+                self.device
+            )
+            
+            self.is_initialized = True
+            logger.info(f"Whisper model loaded successfully on {self.device}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize Whisper model: {e}")
+            return False
+    
+    async def transcribe_audio(
+        self, 
+        audio_data: bytes, 
+        language: Optional[str] = None,
+        task: str = "transcribe"
+    ) -> Dict[str, Any]:
+        """
+        Transcribe audio data using Whisper.
+        
+        Args:
+            audio_data: Raw audio data bytes
+            language: Language code (e.g., 'en', 'it') or None for auto-detection
+            task: Task type ('transcribe' or 'translate')
+            
+        Returns:
+            Dict containing transcription results
+        """
+        if not self.is_initialized:
+            return {
+                "success": False,
+                "error": "Whisper model not initialized",
+                "transcript": "",
+                "confidence": 0.0
+            }
+        
+        try:
+            # Convert audio data to numpy array
+            audio_array = await self._process_audio_data(audio_data)
+            
+            if audio_array is None or len(audio_array) == 0:
+                return {
+                    "success": False,
+                    "error": "Invalid audio data",
+                    "transcript": "",
+                    "confidence": 0.0
+                }
+            
+            # Check minimum audio length
+            duration = len(audio_array) / self.sample_rate
+            if duration < self.min_audio_length:
+                return {
+                    "success": False,
+                    "error": f"Audio too short: {duration:.2f}s (minimum: {self.min_audio_length}s)",
+                    "transcript": "",
+                    "confidence": 0.0
+                }
+            
+            # Transcribe using Whisper
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                self._transcribe_with_whisper,
+                audio_array,
+                language,
+                task
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Transcription failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "transcript": "",
+                "confidence": 0.0
+            }
+    
+    def _transcribe_with_whisper(
+        self, 
+        audio_array: np.ndarray, 
+        language: Optional[str], 
+        task: str
+    ) -> Dict[str, Any]:
+        """Transcribe audio using Whisper model."""
+        try:
+            # Prepare options for Whisper
+            options = {
+                "task": task,
+                "fp16": self.device != "cpu",  # Use fp16 for GPU
+                "verbose": False
+            }
+            
+            if language:
+                options["language"] = language
+            
+            # Transcribe
+            result = self.model.transcribe(audio_array, **options)
+            
+            # Extract transcript and confidence
+            transcript = result["text"].strip()
+            
+            # Calculate average confidence from segments
+            segments = result.get("segments", [])
+            if segments:
+                avg_confidence = np.mean([seg.get("avg_logprob", 0) for seg in segments])
+                # Convert log probability to confidence (0-1)
+                confidence = min(1.0, max(0.0, np.exp(avg_confidence)))
+            else:
+                confidence = 0.5  # Default confidence
+            
+            return {
+                "success": True,
+                "transcript": transcript,
+                "confidence": float(confidence),
+                "language": result.get("language", language),
+                "duration": len(audio_array) / self.sample_rate,
+                "segments": segments
+            }
+            
+        except Exception as e:
+            logger.error(f"Whisper transcription error: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "transcript": "",
+                "confidence": 0.0
+            }
+    
+    async def _process_audio_data(self, audio_data: bytes) -> Optional[np.ndarray]:
+        """
+        Process raw audio data and convert to the format expected by Whisper.
+        
+        Args:
+            audio_data: Raw audio bytes
+            
+        Returns:
+            numpy array of audio samples or None if processing fails
+        """
+        try:
+            # Try to load as WAV first
+            try:
+                with io.BytesIO(audio_data) as audio_io:
+                    audio_array, sr = librosa.load(audio_io, sr=self.sample_rate)
+                    return audio_array
+            except Exception:
+                # If WAV loading fails, try to process as raw audio
+                pass
+            
+            # Try to process as raw audio data
+            try:
+                # Assume 16-bit PCM audio
+                audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                # Convert to float32 and normalize
+                audio_array = audio_array.astype(np.float32) / 32768.0
+                
+                # Resample if necessary
+                if len(audio_array) > 0:
+                    # Simple resampling (for basic cases)
+                    target_length = int(len(audio_array) * self.sample_rate / 44100)  # Assume 44.1kHz input
+                    if target_length != len(audio_array):
+                        audio_array = np.interp(
+                            np.linspace(0, len(audio_array), target_length),
+                            np.arange(len(audio_array)),
+                            audio_array
+                        )
+                
+                return audio_array
+                
+            except Exception as e:
+                logger.error(f"Audio processing failed: {e}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Audio data processing error: {e}")
+            return None
+    
+    async def transcribe_file(self, file_path: str, language: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Transcribe an audio file.
+        
+        Args:
+            file_path: Path to audio file
+            language: Language code or None for auto-detection
+            
+        Returns:
+            Dict containing transcription results
+        """
+        try:
+            with open(file_path, 'rb') as f:
+                audio_data = f.read()
+            
+            return await self.transcribe_audio(audio_data, language)
+            
+        except Exception as e:
+            logger.error(f"File transcription failed: {e}")
+            return {
+                "success": False,
+                "error": str(e),
+                "transcript": "",
+                "confidence": 0.0
+            }
+    
+    def get_supported_languages(self) -> list:
+        """Get list of supported languages."""
+        return [
+            "en", "es", "fr", "de", "it", "pt", "ru", "ja", "ko", "zh",
+            "ar", "hi", "th", "vi", "tr", "pl", "nl", "sv", "da", "no",
+            "fi", "cs", "hu", "ro", "bg", "hr", "sk", "sl", "et", "lv",
+            "lt", "el", "he", "ur", "bn", "ta", "te", "ml", "kn", "gu",
+            "pa", "or", "as", "ne", "si", "my", "km", "lo", "ka", "am",
+            "sw", "zu", "af", "sq", "az", "be", "bs", "ca", "cy", "eo",
+            "eu", "fa", "gl", "is", "mk", "ms", "mt", "sr", "tl", "uk"
+        ]
+    
+    def get_model_info(self) -> Dict[str, Any]:
+        """Get information about the loaded model."""
+        return {
+            "model_size": self.model_size,
+            "device": self.device,
+            "is_initialized": self.is_initialized,
+            "sample_rate": self.sample_rate,
+            "supported_languages": self.get_supported_languages()
+        }
+    
+    async def cleanup(self):
+        """Clean up resources."""
+        if self.model:
+            del self.model
+            self.model = None
+        self.is_initialized = False
+        logger.info("Whisper STT service cleaned up")
+
+# Global instance
+whisper_stt_service = None
+
+async def get_whisper_stt_service() -> WhisperSTTService:
+    """Get or create the global Whisper STT service instance."""
+    global whisper_stt_service
+    
+    if whisper_stt_service is None:
+        whisper_stt_service = WhisperSTTService()
+        await whisper_stt_service.initialize()
+    
+    return whisper_stt_service

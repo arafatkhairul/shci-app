@@ -27,7 +27,8 @@ import {
     FaCheck
 } from "react-icons/fa";
 import RolePlayAnswers from "./RolePlayAnswers";
-import WhisperSTTService, { WhisperSTTConfig, WhisperSTTCallbacks } from "../services/WhisperSTTService";
+import WebkitVADService, { VADConfig, VADCallbacks, SpeechResult } from "../services/WebkitVADService";
+import FallbackVADService, { FallbackVADConfig, FallbackVADCallbacks } from "../services/VADFallbackService";
 
 export default function VoiceAgent() {
     // ---------- State ----------
@@ -41,13 +42,14 @@ export default function VoiceAgent() {
     // Default: server TTS ON (local TTS OFF)
     const [useLocalTTS, setUseLocalTTS] = useState(false);
 
-    // Whisper STT Service State
-    const [useWhisperSTT, setUseWhisperSTT] = useState(false);
-    const [whisperSTTSupported, setWhisperSTTSupported] = useState(false);
-    const [whisperSTTInitialized, setWhisperSTTInitialized] = useState(false);
-    const [whisperTranscript, setWhisperTranscript] = useState("");
-    const [whisperConfidence, setWhisperConfidence] = useState(0);
-    const [detectedLanguage, setDetectedLanguage] = useState<string>("");
+    // VAD Service State
+    const [useWebkitVAD, setUseWebkitVAD] = useState(false);
+    const [vadSupported, setVadSupported] = useState(false);
+    const [vadInitialized, setVadInitialized] = useState(false);
+    const [vadTranscript, setVadTranscript] = useState("");
+    const [vadConfidence, setVadConfidence] = useState(0);
+    const [useFallbackVAD, setUseFallbackVAD] = useState(false);
+    const [fallbackVADInitialized, setFallbackVADInitialized] = useState(false);
 
     // Real-time Transcription State
     const [interimTranscript, setInterimTranscript] = useState("");
@@ -227,7 +229,8 @@ export default function VoiceAgent() {
     const audioCtx = useRef<AudioContext | null>(null);
     const sourceNode = useRef<MediaStreamAudioSourceNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
-    const whisperSTTService = useRef<WhisperSTTService | null>(null);
+    const vadService = useRef<WebkitVADService | null>(null);
+    const fallbackVADService = useRef<FallbackVADService | null>(null);
     const workletNode = useRef<AudioWorkletNode | null>(null);
     const processorNode = useRef<ScriptProcessorNode | null>(null);
     const analyser = useRef<AnalyserNode | null>(null);
@@ -558,64 +561,132 @@ export default function VoiceAgent() {
     }, [aiText]); // Remove displayedAiText from dependencies to prevent infinite loop
 
 
-    // ---------- Whisper STT Service Configuration ----------
-    const whisperSTTConfig: WhisperSTTConfig = {
-        language: selectedLanguage === 'en' ? 'en' : 'it',
-        task: 'transcribe',
-        sampleRate: 16000,
-        chunkSize: 1024,
-        continuous: true
+    // ---------- VAD Service Configuration ----------
+    const vadConfig: VADConfig = {
+        language: selectedLanguage === 'en' ? 'en-US' : 'it-IT',
+        continuous: true,
+        interimResults: true,
+        maxAlternatives: 1,
+        confidenceThreshold: 0.5, // Lowered for faster detection
+        silenceTimeout: 2000, // Reduced to 2 seconds for instant response
+        speechTimeout: 5000, // Reduced to 5 seconds for faster processing
+        restartDelay: 50 // Reduced delay for faster restart
     };
 
-    const whisperSTTCallbacks: WhisperSTTCallbacks = {
-        onTranscription: (transcript: string, confidence: number, isFinal: boolean) => {
-            console.log('Whisper STT: Transcription received', { transcript, confidence, isFinal });
-            
-            setWhisperTranscript(transcript);
-            setWhisperConfidence(confidence);
-            
+    const fallbackVADConfig: FallbackVADConfig = {
+        silenceThreshold: 0.01,
+        silenceTimeout: 2000, // Reduced to 2 seconds for instant response
+        speechTimeout: 5000, // Reduced to 5 seconds for faster processing
+        sampleRate: 48000,
+        fftSize: 256,
+        smoothingTimeConstant: 0.8
+    };
+
+    const vadCallbacks: VADCallbacks = {
+        onSpeechStart: () => {
+            setListening(true);
+            setStatus(currentLang.status.listening);
+            setShowTranscription(true);
+        },
+        onSpeechEnd: () => {
+            // Don't automatically turn off microphone - keep it active for continuous listening
+            setStatus(currentLang.status.connected);
+        },
+        onSpeechResult: (transcript: string, isFinal: boolean, confidence: number) => {
+            setVadTranscript(transcript);
+            setVadConfidence(confidence);
+
             if (isFinal && transcript.trim()) {
                 setTranscript(transcript);
                 setFinalTranscript(transcript);
                 setInterimTranscript("");
-                
-                // Send to backend if WebSocket is connected
-                if (ws.current?.readyState === WebSocket.OPEN) {
-                    try {
-                        ws.current.send(JSON.stringify({
-                            type: "user_message",
-                            message: transcript,
-                            timestamp: new Date().toISOString(),
-                            confidence: confidence,
-                            source: "whisper_stt"
-                        }));
-                        console.log('Whisper STT: Message sent to backend:', transcript);
-                    } catch (error) {
-                        console.error('Whisper STT: Failed to send message:', error);
-                    }
-                }
-            } else {
-                setInterimTranscript(transcript);
             }
+        },
+        onInterimResult: (transcript: string, confidence: number) => {
+            console.log('VAD: Interim result', { transcript, confidence });
+            setInterimTranscript(transcript);
+            setVadTranscript(transcript);
+            setVadConfidence(confidence);
+        },
+        onFinalResult: (transcript: string, confidence: number) => {
+            console.log('VAD: Final result', { transcript, confidence });
+            setFinalTranscript(transcript);
+            setInterimTranscript("");
+        },
+        onSilenceDetected: () => {
+            console.log('VAD: Silence detected - keeping microphone active');
+            // Don't automatically turn off microphone - keep it active for continuous listening
+            setStatus(currentLang.status.connected);
         },
         onError: (error: string) => {
-            console.error('Whisper STT Error:', error);
-            setStatus(`Whisper STT Error: ${error}`);
+            console.error('VAD Error:', error);
+            setStatus(`VAD Error: ${error}`);
         },
-        onStateChange: (isRecording: boolean) => {
-            console.log('Whisper STT State changed:', isRecording);
-            if (isRecording) {
+        onStateChange: (isListening: boolean) => {
+            console.log('VAD State changed:', isListening);
+            // Keep listening state active throughout the session - don't let VAD control the main listening state
+            // The microphone should only be controlled by Start/Stop button clicks
+            if (isListening) {
                 setListening(true);
-                setStatus(currentLang.status.listening);
-                setShowTranscription(true);
-            } else {
-                setListening(false);
-                setStatus(currentLang.status.connected);
+            }
+            // Don't set listening to false - let only the Stop button control that
+        },
+        onVoiceLevelUpdate: (level: number, source: string) => {
+            updateMicLevel(level, source);
+        }
+    };
+
+    const fallbackVADCallbacks: FallbackVADCallbacks = {
+        onSpeechStart: () => {
+            setListening(true);
+            setStatus(currentLang.status.listening);
+            setShowTranscription(true);
+        },
+        onSpeechEnd: () => {
+            // Don't automatically turn off microphone - keep it active for continuous listening
+            setStatus(currentLang.status.connected);
+        },
+        onSpeechResult: (transcript: string, isFinal: boolean, confidence: number) => {
+            setVadTranscript(transcript);
+            setVadConfidence(confidence);
+
+            if (isFinal && transcript.trim()) {
+                setTranscript(transcript);
+                setFinalTranscript(transcript);
+                setInterimTranscript("");
             }
         },
-        onLanguageDetected: (language: string) => {
-            console.log('Whisper STT: Language detected:', language);
-            setDetectedLanguage(language);
+        onInterimResult: (transcript: string, confidence: number) => {
+            console.log('Fallback VAD: Interim result', { transcript, confidence });
+            setInterimTranscript(transcript);
+            setVadTranscript(transcript);
+            setVadConfidence(confidence);
+        },
+        onFinalResult: (transcript: string, confidence: number) => {
+            console.log('Fallback VAD: Final result', { transcript, confidence });
+            setFinalTranscript(transcript);
+            setInterimTranscript("");
+        },
+        onSilenceDetected: () => {
+            console.log('Fallback VAD: Silence detected - keeping microphone active');
+            // Don't automatically turn off microphone - keep it active for continuous listening
+            setStatus(currentLang.status.connected);
+        },
+        onError: (error: string) => {
+            console.error('Fallback VAD Error:', error);
+            setStatus(`Fallback VAD Error: ${error}`);
+        },
+        onStateChange: (isListening: boolean) => {
+            console.log('Fallback VAD State changed:', isListening);
+            // Keep listening state active throughout the session - don't let VAD control the main listening state
+            // The microphone should only be controlled by Start/Stop button clicks
+            if (isListening) {
+                setListening(true);
+            }
+            // Don't set listening to false - let only the Stop button control that
+        },
+        onVoiceLevelUpdate: (level: number, source: string) => {
+            updateMicLevel(level, source);
         }
     };
 
@@ -685,136 +756,231 @@ export default function VoiceAgent() {
     }, [organizationContext, sendPrefs]);
 
 
-    // ---------- Whisper STT Service Management ----------
-    const initializeWhisperSTT = useCallback(async () => {
-        if (!whisperSTTService.current) {
-            whisperSTTService.current = new WhisperSTTService(whisperSTTConfig, whisperSTTCallbacks);
+    // ---------- VAD Service Management ----------
+    const initializeVAD = useCallback(async () => {
+        if (!vadService.current) {
+            vadService.current = new WebkitVADService(vadConfig, vadCallbacks);
         }
 
-        const success = await whisperSTTService.current.initialize();
-        setWhisperSTTSupported(success);
-        setWhisperSTTInitialized(success);
+        const success = await vadService.current.initialize();
+        setVadSupported(success);
+        setVadInitialized(success);
 
         if (success) {
-            console.log('Whisper STT Service initialized successfully');
+            console.log('VAD Service initialized successfully');
+            // Set WebSocket connection when available
+            if (ws.current?.readyState === WebSocket.OPEN) {
+                vadService.current.setWebSocket(ws.current);
+            }
         } else {
-            console.log('Whisper STT Service not supported or failed to initialize');
+            console.log('VAD Service not supported or failed to initialize');
         }
 
         return success;
-    }, [whisperSTTConfig, whisperSTTCallbacks]);
+    }, [vadConfig, vadCallbacks]);
 
-    const startWhisperSTT = useCallback(async () => {
-        console.log('🎤 Starting Whisper STT service...', {
-            whisperSTTAvailable: !!whisperSTTService.current,
-            whisperSTTInitialized: whisperSTTInitialized
+    const initializeFallbackVAD = useCallback(async () => {
+        if (!fallbackVADService.current) {
+            fallbackVADService.current = new FallbackVADService(fallbackVADConfig, fallbackVADCallbacks);
+        }
+
+        const success = await fallbackVADService.current.initialize();
+        setFallbackVADInitialized(success);
+
+        if (success) {
+            console.log('Fallback VAD Service initialized successfully');
+        } else {
+            console.log('Fallback VAD Service failed to initialize');
+        }
+
+        return success;
+    }, [fallbackVADConfig, fallbackVADCallbacks]);
+
+    const startVAD = useCallback(() => {
+        console.log('🎤 Starting VAD service...', {
+            webkitVADAvailable: !!vadService.current,
+            webkitVADInitialized: vadInitialized,
+            fallbackVADAvailable: !!fallbackVADService.current,
+            fallbackVADInitialized: fallbackVADInitialized
         });
 
-        if (whisperSTTService.current && whisperSTTInitialized) {
-            const success = await whisperSTTService.current.start();
+        if (vadService.current && vadInitialized) {
+            const success = vadService.current.start();
             if (success) {
-                setUseWhisperSTT(true);
-                setListening(true);
-                setStatus(currentLang.status.listening);
+                setUseWebkitVAD(true);
             } else {
-                console.log('❌ Failed to start Whisper STT');
+                console.log('❌ Failed to start Webkit VAD');
             }
             return success;
         }
         return false;
-    }, [whisperSTTInitialized]);
+    }, [vadInitialized]);
 
-    const stopWhisperSTT = useCallback(() => {
-        if (whisperSTTService.current) {
-            whisperSTTService.current.stop();
-            setUseWhisperSTT(false);
-            setWhisperTranscript("");
-            setWhisperConfidence(0);
-            setListening(false);
-            setStatus(currentLang.status.connected);
-            console.log('Whisper STT stopped');
+    const stopVAD = useCallback(() => {
+        if (vadService.current) {
+            vadService.current.stop();
+            setUseWebkitVAD(false);
+            setVadTranscript("");
+            setVadConfidence(0);
+            console.log('VAD stopped');
         }
     }, []);
 
-    const toggleWhisperSTT = useCallback(() => {
-        if (useWhisperSTT) {
-            stopWhisperSTT();
-        } else {
-            startWhisperSTT();
+    const startFallbackVAD = useCallback(() => {
+        if (fallbackVADService.current && fallbackVADInitialized) {
+            const success = fallbackVADService.current.start();
+            if (success) {
+                setUseFallbackVAD(true);
+            } else {
+                console.log('❌ Failed to start Fallback VAD');
+            }
+            return success;
         }
-    }, [useWhisperSTT, startWhisperSTT, stopWhisperSTT]);
+        return false;
+    }, [fallbackVADInitialized]);
 
-    // Update Whisper STT config when language changes
+    const stopFallbackVAD = useCallback(() => {
+        if (fallbackVADService.current) {
+            fallbackVADService.current.stop();
+            setUseFallbackVAD(false);
+            console.log('Fallback VAD stopped');
+        }
+    }, []);
+
+    const toggleVAD = useCallback(() => {
+        if (useWebkitVAD) {
+            stopVAD();
+        } else {
+            startVAD();
+        }
+    }, [useWebkitVAD, startVAD, stopVAD]);
+
+    const toggleFallbackVAD = useCallback(() => {
+        if (useFallbackVAD) {
+            stopFallbackVAD();
+        } else {
+            startFallbackVAD();
+        }
+    }, [useFallbackVAD, startFallbackVAD, stopFallbackVAD]);
+
+    // Update VAD config when language changes
     useEffect(() => {
-        if (whisperSTTService.current && whisperSTTInitialized) {
-            whisperSTTService.current.updateConfig({
-                language: selectedLanguage === 'en' ? 'en' : 'it'
+        if (vadService.current && vadInitialized) {
+            vadService.current.updateConfig({
+                language: selectedLanguage === 'en' ? 'en-US' : 'it-IT'
             });
         }
-    }, [selectedLanguage, whisperSTTInitialized]);
+    }, [selectedLanguage, vadInitialized]);
 
-    // Monitor TTS speaking state - Pause Whisper STT during AI speaking
+    // Monitor TTS speaking state - Ensure continuous speech recognition
     useEffect(() => {
         if (aiSpeaking) {
-            // Pause Whisper STT during audio playback to prevent feedback
-            console.log('🔇 Pausing Whisper STT during AI speaking to prevent audio loop');
-            if (useWhisperSTT && whisperSTTService.current) {
-                whisperSTTService.current.stop();
-                console.log('🔇 Whisper STT paused');
+            // CRITICAL: Immediately pause VAD services during audio playback to prevent feedback
+            console.log('🔇 Pausing VAD services during AI speaking to prevent audio loop');
+            if (useWebkitVAD && vadService.current) {
+                vadService.current.stop();
+                console.log('🔇 Webkit VAD paused');
+            }
+            if (useFallbackVAD && fallbackVADService.current) {
+                fallbackVADService.current.stop();
+                console.log('🔇 Fallback VAD paused');
             }
         } else {
-            // Restart Whisper STT after audio playback
-            console.log('🔊 Scheduling Whisper STT restart after AI speaking ends');
+            // CRITICAL: Restart VAD services after audio playback with longer delay to prevent audio loop
+            console.log('🔊 Scheduling VAD restart after AI speaking ends');
             
+            // Mobile-specific: Longer delay and better error handling
             const restartDelay = isMobile ? 3000 : 2000; // 3 seconds for mobile, 2 for desktop
             
-            setTimeout(async () => {
-                if (listening && !aiSpeaking && useWhisperSTT && whisperSTTService.current) {
-                    console.log('🔊 Restarting Whisper STT after audio playback');
-                    try {
-                        const success = await whisperSTTService.current.start();
-                        if (success) {
-                            console.log('🔊 Whisper STT restarted successfully');
-                        } else {
-                            console.log('❌ Failed to restart Whisper STT');
+            setTimeout(() => {
+                if (listening && !aiSpeaking) {
+                    console.log('🔊 Restarting VAD services after audio playback');
+
+                    if (useWebkitVAD && vadService.current && vadInitialized) {
+                        try {
+                            // Ensure WebSocket is still connected for VAD service
+                            if (ws.current?.readyState === WebSocket.OPEN) {
+                                vadService.current.setWebSocket(ws.current);
+                            }
+                            vadService.current.start();
+                            console.log('🔊 Webkit VAD restarted');
+                        } catch (error) {
+                            // Try to reinitialize if restart fails
+                            console.log('Failed to restart VAD, reinitializing...');
+                            setTimeout(() => {
+                                initializeVAD().then((success) => {
+                                    if (success && listening) {
+                                        startVAD();
+                                    }
+                                });
+                            }, isMobile ? 3000 : 2000); // Longer delay for mobile
                         }
-                    } catch (error) {
-                        console.log('Failed to restart Whisper STT:', error);
+                    }
+
+                    if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized) {
+                        try {
+                            fallbackVADService.current.start();
+                            console.log('🔊 Fallback VAD restarted');
+                        } catch (error) {
+                            // Try to reinitialize if restart fails
+                            console.log('Failed to restart Fallback VAD, reinitializing...');
+                            setTimeout(() => {
+                                initializeFallbackVAD().then((success) => {
+                                    if (success && listening) {
+                                        startFallbackVAD();
+                                    }
+                                });
+                            }, isMobile ? 3000 : 2000); // Longer delay for mobile
+                        }
                     }
                 }
             }, restartDelay);
         }
-    }, [aiSpeaking, useWhisperSTT, listening, whisperSTTInitialized, isMobile]);
+    }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized, isMobile]);
 
-    // Whisper STT Health Check - Ensure speech recognition continues working
+    // VAD Health Check - Ensure speech recognition continues working
     useEffect(() => {
         if (!listening) return;
 
         const healthCheckInterval = setInterval(() => {
-            if (listening && !aiSpeaking && useWhisperSTT && whisperSTTService.current) {
-                const status = whisperSTTService.current.getStatus();
-                
-                console.log('🔍 Whisper STT Health Check:', {
-                    isRecording: status.isRecording,
-                    isConnected: status.isConnected,
-                    isInitialized: status.isInitialized
+            if (listening && !aiSpeaking) {
+                // Check if VAD services are still active
+                const webkitVADStatus = vadService.current?.getStatus();
+                const fallbackVADStatus = fallbackVADService.current?.getStatus();
+
+                console.log('🔍 VAD Health Check:', {
+                    webkitVADActive: webkitVADStatus?.isListening,
+                    fallbackVADActive: fallbackVADStatus?.isListening,
+                    useWebkitVAD,
+                    useFallbackVAD
                 });
 
-                // If Whisper STT should be active but isn't, restart it
-                if (!status.isRecording && status.isInitialized) {
-                    console.log('🔄 Whisper STT not recording - restarting...');
+                // If Webkit VAD should be active but isn't, restart it
+                if (useWebkitVAD && vadService.current && vadInitialized && !webkitVADStatus?.isListening) {
+                    console.log('🔄 Webkit VAD not listening - restarting...');
                     try {
-                        whisperSTTService.current.start();
-                        console.log('✅ Whisper STT restarted via health check');
+                        vadService.current.start();
+                        console.log('✅ Webkit VAD restarted via health check');
                     } catch (error) {
-                        console.log('❌ Failed to restart Whisper STT via health check:', error);
+                        console.log('❌ Failed to restart Webkit VAD via health check:', error);
+                    }
+                }
+
+                // If Fallback VAD should be active but isn't, restart it
+                if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized && !fallbackVADStatus?.isListening) {
+                    console.log('🔄 Fallback VAD not listening - restarting...');
+                    try {
+                        fallbackVADService.current.start();
+                        console.log('✅ Fallback VAD restarted via health check');
+                    } catch (error) {
+                        console.log('❌ Failed to restart Fallback VAD via health check:', error);
                     }
                 }
             }
         }, 10000); // Check every 10 seconds
 
         return () => clearInterval(healthCheckInterval);
-    }, [listening, aiSpeaking, useWhisperSTT, whisperSTTInitialized]);
+    }, [listening, aiSpeaking, useWebkitVAD, useFallbackVAD, vadInitialized, fallbackVADInitialized]);
 
     // Click outside handler for language and voice dropdowns
     useEffect(() => {
@@ -1001,21 +1167,20 @@ export default function VoiceAgent() {
         }
     };
 
-    // Set WebSocket connection for Whisper STT service when connected (only once per connection)
+    // Set WebSocket connection for VAD service when connected (only once per connection)
     useEffect(() => {
-        if (connected && whisperSTTService.current && whisperSTTInitialized && ws.current?.readyState === WebSocket.OPEN) {
-            // Whisper STT doesn't need WebSocket setup as it handles its own connection
-            console.log('Whisper STT: WebSocket connected, service ready');
+        if (connected && vadService.current && vadInitialized && ws.current?.readyState === WebSocket.OPEN) {
+            vadService.current.setWebSocket(ws.current);
         }
-    }, [connected, whisperSTTInitialized]); // Only depend on connected state
+    }, [connected]); // Only depend on connected state
 
-    // Auto-activate Whisper STT when WebSocket is connected and STT is ready (but don't start listening)
+    // Auto-activate VAD when WebSocket is connected and VAD is ready (but don't start listening)
     useEffect(() => {
-        if (connected && whisperSTTSupported && whisperSTTInitialized && !useWhisperSTT && whisperSTTService.current) {
-            // Auto-activate Whisper STT when everything is ready (but don't start listening)
-            setUseWhisperSTT(true);
+        if (connected && vadSupported && vadInitialized && !useWebkitVAD && vadService.current) {
+            // Auto-activate VAD when everything is ready (but don't start listening)
+            setUseWebkitVAD(true);
         }
-    }, [connected, whisperSTTSupported, whisperSTTInitialized]); // Remove useWhisperSTT from dependencies to prevent infinite loop
+    }, [connected, vadSupported, vadInitialized]); // Remove useWebkitVAD from dependencies to prevent infinite loop
 
     const handleLevelChange = (newLevel: "easy" | "medium" | "fast") => {
         setLevel(newLevel);
@@ -1077,17 +1242,26 @@ export default function VoiceAgent() {
             if (isInitialized) return;
             isInitialized = true;
 
-            // Initialize Whisper STT
-            await initializeWhisperSTT();
+            // Try Webkit VAD first
+            const webkitSuccess = await initializeVAD();
+
+            // If Webkit VAD fails, initialize fallback VAD
+            if (!webkitSuccess) {
+                await initializeFallbackVAD();
+            }
         };
 
         initializeServices();
 
         // Cleanup on unmount
         return () => {
-            if (whisperSTTService.current) {
-                whisperSTTService.current.destroy();
-                whisperSTTService.current = null;
+            if (vadService.current) {
+                vadService.current.destroy();
+                vadService.current = null;
+            }
+            if (fallbackVADService.current) {
+                fallbackVADService.current.destroy();
+                fallbackVADService.current = null;
             }
         };
     }, []); // Empty dependency array to run only once
@@ -1241,10 +1415,13 @@ export default function VoiceAgent() {
             return;
         }
         
-        // CRITICAL: Immediately pause Whisper STT to prevent audio loop
-        console.log('🔇 Pausing Whisper STT before server MP3 playback to prevent loop');
-        if (useWhisperSTT && whisperSTTService.current) {
-            whisperSTTService.current.stop();
+        // CRITICAL: Immediately pause VAD services to prevent audio loop
+        console.log('🔇 Pausing VAD services before server MP3 playback to prevent loop');
+        if (useWebkitVAD && vadService.current) {
+            vadService.current.stop();
+        }
+        if (useFallbackVAD && fallbackVADService.current) {
+            fallbackVADService.current.stop();
         }
         
         if (isMobile) {
@@ -1368,10 +1545,13 @@ export default function VoiceAgent() {
                 return;
             }
 
-            // CRITICAL: Immediately pause Whisper STT to prevent audio loop
-            console.log('🔇 Pausing Whisper STT before audio playback to prevent loop');
-            if (useWhisperSTT && whisperSTTService.current) {
-                whisperSTTService.current.stop();
+            // CRITICAL: Immediately pause VAD services to prevent audio loop
+            console.log('🔇 Pausing VAD services before audio playback to prevent loop');
+            if (useWebkitVAD && vadService.current) {
+                vadService.current.stop();
+            }
+            if (useFallbackVAD && fallbackVADService.current) {
+                fallbackVADService.current.stop();
             }
 
             if (!audioCtx.current) {
@@ -1769,11 +1949,11 @@ export default function VoiceAgent() {
         // Force mic level reset
         updateMicLevel(0, 'reset');
 
-        // Auto-activate Whisper STT if available and not already active
-        if (whisperSTTSupported && whisperSTTInitialized && !useWhisperSTT && whisperSTTService.current) {
-            const success = await startWhisperSTT();
+        // Auto-activate Webkit VAD if available and not already active
+        if (vadSupported && vadInitialized && !useWebkitVAD && vadService.current) {
+            const success = startVAD();
             if (success) {
-                setUseWhisperSTT(true);
+                setUseWebkitVAD(true);
                 setListening(true);
                 setStatus(currentLang.status.listening);
                 setShowTranscription(true);
@@ -1783,23 +1963,39 @@ export default function VoiceAgent() {
 
         console.log("🚀 START MIC INITIATED:", {
             timestamp: new Date().toLocaleTimeString(),
-            useWhisperSTT,
-            whisperSTTSupported,
-            whisperSTTInitialized,
-            whisperSTTServiceExists: !!whisperSTTService.current
+            useWebkitVAD,
+            useFallbackVAD,
+            vadServiceExists: !!vadService.current,
+            fallbackVADServiceExists: !!fallbackVADService.current,
+            audioContextExists: !!audioCtx.current,
+            audioContextState: audioCtx.current?.state
         });
 
-        // If Whisper STT is enabled, use Whisper STT service
-        if (useWhisperSTT && whisperSTTService.current) {
-            const success = await startWhisperSTT();
+        // If VAD is enabled, use appropriate VAD service
+        if (useWebkitVAD && vadService.current) {
+            const success = startVAD();
             if (success) {
                 setListening(true);
                 setStatus(currentLang.status.listening);
                 setShowTranscription(true);
-                console.log("✅ Whisper STT Started Successfully");
+                console.log("✅ Webkit VAD Started Successfully");
                 return;
             } else {
-                console.log("❌ Whisper STT Failed to Start");
+                console.log("❌ Webkit VAD Failed to Start");
+            }
+        }
+
+        // If fallback VAD is enabled, use fallback service
+        if (useFallbackVAD && fallbackVADService.current) {
+            const success = startFallbackVAD();
+            if (success) {
+                setListening(true);
+                setStatus(currentLang.status.listening);
+                setShowTranscription(true);
+                console.log("✅ Fallback VAD Started Successfully");
+                return;
+            } else {
+                console.log("❌ Fallback VAD Failed to Start");
             }
         }
         try {
@@ -2091,15 +2287,22 @@ export default function VoiceAgent() {
 
     // ---------- Stop mic ----------
     const stopMic = () => {
-        console.log("stopMic called, listening:", listening, "useWhisperSTT:", useWhisperSTT);
-        // If Whisper STT is enabled, stop Whisper STT service
-        if (useWhisperSTT && whisperSTTService.current) {
-            stopWhisperSTT();
+        console.log("stopMic called, listening:", listening, "useWebkitVAD:", useWebkitVAD);
+        // If VAD is enabled, stop appropriate VAD service
+        if (useWebkitVAD && vadService.current) {
+            stopVAD();
             setListening(false);
             setStatus(currentLang.status.connected);
             return;
         }
 
+        // If fallback VAD is enabled, stop fallback service
+        if (useFallbackVAD && fallbackVADService.current) {
+            stopFallbackVAD();
+            setListening(false);
+            setStatus(currentLang.status.connected);
+            return;
+        }
 
         // Stop traditional microphone
         listeningRef.current = false;
@@ -3368,10 +3571,10 @@ export default function VoiceAgent() {
 
                                             {/* Minimal Status Indicators */}
                                             <div className="flex items-center gap-1">
-                                                {useWhisperSTT && (
+                                                {(useWebkitVAD || useFallbackVAD) && (
                                                     <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
                                                         <div className="w-1 h-1 bg-emerald-400 rounded-full" />
-                                                        <span className="text-xs text-emerald-300">Whisper STT</span>
+                                                        <span className="text-xs text-emerald-300">STT</span>
                                                     </div>
                                                 )}
                                                 {listening && (
@@ -3387,7 +3590,7 @@ export default function VoiceAgent() {
                                     {/* Soft Organized Content */}
                                     <div className="relative p-5 min-h-[180px]">
                                         {/* Soft Live Processing */}
-                                        {useWhisperSTT && (
+                                        {(useWebkitVAD || useFallbackVAD) && (
                                             <div className="mb-4">
                                                 <div className="relative group">
                                                     {/* Soft Live Container */}
@@ -3411,10 +3614,10 @@ export default function VoiceAgent() {
                                                     </div>
 
                                                     {/* Soft Confidence Badge */}
-                                                    {whisperConfidence > 0 && (
+                                                    {vadConfidence > 0 && (
                                                         <div className="absolute -top-1 -right-1 px-2 py-1 bg-white/[0.05] border border-white/8 rounded-lg backdrop-blur-sm shadow-sm">
                                                             <span className="text-xs text-zinc-400 font-medium">
-                                                                {(whisperConfidence * 100).toFixed(0)}%
+                                                                {(vadConfidence * 100).toFixed(0)}%
                                                             </span>
                                                         </div>
                                                     )}
@@ -3452,7 +3655,9 @@ export default function VoiceAgent() {
                                                         {currentLang.labels.readyToCapture}
                                                     </p>
                                                     <p className="text-xs text-zinc-600 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/6">
-                                                        {useWhisperSTT ? "Whisper STT Active" : "Start Conversation"}
+                                                        {useWebkitVAD ? "STT Active" :
+                                                            useFallbackVAD ? "VAD Active" :
+                                                                "Start Conversation"}
                                                     </p>
                                                 </div>
                                             </div>
