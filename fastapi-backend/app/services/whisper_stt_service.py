@@ -62,8 +62,9 @@ class WhisperSTTService:
                 import torch
                 if torch.cuda.is_available():
                     return "cuda"
-                elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                    return "mps"  # Apple Silicon
+                # Force CPU for Apple Silicon to avoid MPS sparse tensor issues
+                # elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                #     return "mps"  # Apple Silicon
                 else:
                     return "cpu"
             except ImportError:
@@ -94,8 +95,27 @@ class WhisperSTTService:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to initialize Whisper model: {e}")
-            return False
+            logger.error(f"Failed to initialize Whisper model on {self.device}: {e}")
+            
+            # If MPS failed, try CPU as fallback
+            if self.device == "mps":
+                logger.info("MPS failed, trying CPU as fallback...")
+                try:
+                    self.device = "cpu"
+                    self.model = await loop.run_in_executor(
+                        None, 
+                        whisper.load_model, 
+                        self.model_size, 
+                        "cpu"
+                    )
+                    self.is_initialized = True
+                    logger.info(f"Whisper model loaded successfully on CPU (fallback)")
+                    return True
+                except Exception as cpu_error:
+                    logger.error(f"CPU fallback also failed: {cpu_error}")
+                    return False
+            else:
+                return False
     
     async def transcribe_audio(
         self, 

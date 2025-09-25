@@ -21,7 +21,7 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/stt", tags=["Speech-to-Text"])
+router = APIRouter(tags=["Speech-to-Text"])
 
 @router.post("/transcribe")
 async def transcribe_audio(
