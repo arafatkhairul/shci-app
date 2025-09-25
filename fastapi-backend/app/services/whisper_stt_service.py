@@ -184,6 +184,13 @@ class WhisperSTTService:
                     "confidence": 0.0
                 }
             
+            # Validate and normalize language
+            if language and language not in ["en", "it"]:
+                logger.warning(f"Unsupported language '{language}', defaulting to English")
+                language = "en"
+            elif not language:
+                language = "en"  # Default to English
+            
             # Transcribe using Whisper
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(
@@ -229,6 +236,16 @@ class WhisperSTTService:
             # Extract transcript and confidence
             transcript = result["text"].strip()
             
+            # Filter out gibberish results (patterns of repeated characters/numbers)
+            if self._is_gibberish(transcript):
+                logger.warning(f"Filtered out gibberish transcript: {transcript[:50]}...")
+                return {
+                    "success": False,
+                    "error": "Audio quality too poor for transcription",
+                    "transcript": "",
+                    "confidence": 0.0
+                }
+            
             # Calculate average confidence from segments
             segments = result.get("segments", [])
             if segments:
@@ -256,6 +273,29 @@ class WhisperSTTService:
                 "confidence": 0.0
             }
     
+    def _is_gibberish(self, text: str) -> bool:
+        """Check if transcript appears to be gibberish."""
+        if not text or len(text) < 3:
+            return True
+        
+        # Check for patterns of repeated characters/numbers
+        if len(set(text)) < 3:  # Too few unique characters
+            return True
+        
+        # Check for patterns like "1.0.1.1.1.1..." or "0.0.0.0..."
+        if text.count('.') > len(text) * 0.3:  # Too many dots
+            return True
+        
+        # Check for repeated patterns
+        if len(text) > 10:
+            # Look for repeated substrings
+            for i in range(2, min(10, len(text) // 2)):
+                pattern = text[:i]
+                if text.count(pattern) > len(text) / (i * 2):
+                    return True
+        
+        return False
+    
     async def _process_audio_data(self, audio_data: bytes) -> Optional[np.ndarray]:
         """
         Process raw audio data and convert to the format expected by Whisper.
@@ -280,15 +320,33 @@ class WhisperSTTService:
             
             # Try to process as raw audio data
             try:
-                # Assume 16-bit PCM audio
+                # Check if this looks like WAV data (starts with RIFF header)
+                if audio_data.startswith(b'RIFF') or audio_data.startswith(b'data'):
+                    # Try to process as WAV using librosa
+                    with io.BytesIO(audio_data) as audio_io:
+                        audio_array, sr = librosa.load(audio_io, sr=self.sample_rate, dtype=np.float32)
+                        return audio_array.astype(np.float32)
+                
+                # Assume 16-bit PCM audio (most common for real-time streaming)
                 audio_array = np.frombuffer(audio_data, dtype=np.int16)
+                
+                # Validate audio data - check if it looks like real audio
+                if len(audio_array) == 0 or np.all(audio_array == 0):
+                    logger.warning("Received empty or silent audio data")
+                    return None
+                
+                # Check for binary patterns that indicate corrupted data
+                unique_values = len(np.unique(audio_array))
+                if unique_values < 10:  # Too few unique values suggests binary data
+                    logger.warning(f"Audio data appears corrupted (only {unique_values} unique values)")
+                    return None
+                
                 # Convert to float32 and normalize
                 audio_array = audio_array.astype(np.float32) / 32768.0
                 
-                # Resample if necessary
+                # Resample if necessary (assume 44.1kHz input)
                 if len(audio_array) > 0:
-                    # Simple resampling (for basic cases)
-                    target_length = int(len(audio_array) * self.sample_rate / 44100)  # Assume 44.1kHz input
+                    target_length = int(len(audio_array) * self.sample_rate / 44100)
                     if target_length != len(audio_array):
                         audio_array = np.interp(
                             np.linspace(0, len(audio_array), target_length, dtype=np.float32),

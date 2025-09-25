@@ -133,10 +133,10 @@ async def websocket_audio_stream(websocket: WebSocket):
                 
                 # Process buffer if it's large enough (every 5 seconds of audio)
                 if len(audio_buffer) >= buffer_size // 6:  # Process every 5 seconds
-                    # Process the audio buffer
+                    # Process the audio buffer - force English for now
                     result = await whisper_service.transcribe_audio(
                         audio_data=audio_buffer,
-                        language=None,  # Auto-detect language
+                        language="en",  # Force English to avoid wrong language detection
                         task="transcribe"
                     )
                     
