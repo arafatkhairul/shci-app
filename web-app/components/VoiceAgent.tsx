@@ -1012,19 +1012,19 @@ export default function VoiceAgent() {
 
     // Set WebSocket connection for Whisper STT service when connected (only once per connection)
     useEffect(() => {
-        if (connected && whisperSTTService.current && whisperSTTInitialized && ws.current?.readyState === WebSocket.OPEN) {
-            // Whisper STT doesn't need WebSocket setup as it handles its own connection
-            console.log('Whisper STT: WebSocket connected, service ready');
+        if (connected && realtimeSTTService.current && realtimeSTTInitialized && ws.current?.readyState === WebSocket.OPEN) {
+            // RealtimeSTT doesn't need WebSocket setup as it handles its own connection
+            console.log('RealtimeSTT: WebSocket connected, service ready');
         }
-    }, [connected, whisperSTTInitialized]); // Only depend on connected state
+    }, [connected, realtimeSTTInitialized]); // Only depend on connected state
 
-    // Auto-activate Whisper STT when WebSocket is connected and STT is ready (but don't start listening)
+    // Auto-activate RealtimeSTT when WebSocket is connected and STT is ready (but don't start listening)
     useEffect(() => {
-        if (connected && whisperSTTSupported && whisperSTTInitialized && !useWhisperSTT && whisperSTTService.current) {
-            // Auto-activate Whisper STT when everything is ready (but don't start listening)
-            setUseWhisperSTT(true);
+        if (connected && realtimeSTTSupported && realtimeSTTInitialized && !useRealtimeSTT && realtimeSTTService.current) {
+            // Auto-activate RealtimeSTT when everything is ready (but don't start listening)
+            setUseRealtimeSTT(true);
         }
-    }, [connected, whisperSTTSupported, whisperSTTInitialized]); // Remove useWhisperSTT from dependencies to prevent infinite loop
+    }, [connected, realtimeSTTSupported, realtimeSTTInitialized]); // Remove useRealtimeSTT from dependencies to prevent infinite loop
 
     const handleLevelChange = (newLevel: "easy" | "medium" | "fast") => {
         setLevel(newLevel);
@@ -1252,8 +1252,8 @@ export default function VoiceAgent() {
         
         // CRITICAL: Immediately pause Whisper STT to prevent audio loop
         console.log('🔇 Pausing Whisper STT before server MP3 playback to prevent loop');
-        if (useWhisperSTT && whisperSTTService.current) {
-            whisperSTTService.current.stop();
+        if (useRealtimeSTT && realtimeSTTService.current) {
+            realtimeSTTService.current.stop();
         }
         
         if (isMobile) {
@@ -1379,8 +1379,8 @@ export default function VoiceAgent() {
 
             // CRITICAL: Immediately pause Whisper STT to prevent audio loop
             console.log('🔇 Pausing Whisper STT before audio playback to prevent loop');
-            if (useWhisperSTT && whisperSTTService.current) {
-                whisperSTTService.current.stop();
+            if (useRealtimeSTT && realtimeSTTService.current) {
+                realtimeSTTService.current.stop();
             }
 
             if (!audioCtx.current) {
