@@ -48,6 +48,10 @@ export class RealtimeSTTService {
   private reconnectDelay = 1000; // 1 second
   private pingInterval: NodeJS.Timeout | null = null;
   private status: RealtimeSTTStatus | null = null;
+  private mediaRecorder: MediaRecorder | null = null;
+  private audioContext: AudioContext | null = null;
+  private mediaStream: MediaStream | null = null;
+  private audioChunks: Blob[] = [];
 
   constructor(config: RealtimeSTTConfig, callbacks: RealtimeSTTCallbacks) {
     this.config = config;
@@ -226,10 +230,20 @@ export class RealtimeSTTService {
 
       console.log('🎤 Starting RealtimeSTT service...');
       
+      // Start audio capture
+      const audioSuccess = await this.startAudioCapture();
+      if (!audioSuccess) {
+        console.error('❌ Failed to start audio capture');
+        return false;
+      }
+      
       // Send start command to backend
       this.sendMessage({
         type: 'start'
       });
+
+      this.isRecording = true;
+      this.callbacks.onStateChange?.(true);
 
       return true;
     } catch (error) {
@@ -251,12 +265,16 @@ export class RealtimeSTTService {
 
       console.log('🛑 Stopping RealtimeSTT service...');
       
+      // Stop audio capture
+      this.stopAudioCapture();
+      
       // Send stop command to backend
       this.sendMessage({
         type: 'stop'
       });
 
       this.isRecording = false;
+      this.callbacks.onStateChange?.(false);
     } catch (error) {
       console.error('❌ Error stopping RealtimeSTT service:', error);
     }
@@ -366,6 +384,109 @@ export class RealtimeSTTService {
   }
 
   /**
+   * Start audio capture from microphone
+   */
+  private async startAudioCapture(): Promise<boolean> {
+    try {
+      console.log('🎤 Starting audio capture...');
+      
+      // Get microphone access
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: this.config.sampleRate,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      
+      // Create audio context
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+        sampleRate: this.config.sampleRate
+      });
+      
+      // Create media recorder
+      this.mediaRecorder = new MediaRecorder(this.mediaStream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+      
+      // Set up data handler
+      this.mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          this.audioChunks.push(event.data);
+          this.sendAudioData(event.data);
+        }
+      };
+      
+      // Start recording with small chunks
+      this.mediaRecorder.start(100); // 100ms chunks
+      
+      console.log('✅ Audio capture started');
+      return true;
+    } catch (error) {
+      console.error('❌ Error starting audio capture:', error);
+      this.callbacks.onError?.(`Audio capture failed: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Stop audio capture
+   */
+  private stopAudioCapture(): void {
+    try {
+      console.log('🛑 Stopping audio capture...');
+      
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        this.mediaRecorder.stop();
+      }
+      
+      if (this.mediaStream) {
+        this.mediaStream.getTracks().forEach(track => track.stop());
+        this.mediaStream = null;
+      }
+      
+      if (this.audioContext) {
+        this.audioContext.close();
+        this.audioContext = null;
+      }
+      
+      this.audioChunks = [];
+      console.log('✅ Audio capture stopped');
+    } catch (error) {
+      console.error('❌ Error stopping audio capture:', error);
+    }
+  }
+
+  /**
+   * Send audio data to backend
+   */
+  private sendAudioData(audioData: Blob): void {
+    try {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        // Convert blob to array buffer
+        const reader = new FileReader();
+        reader.onload = () => {
+          const arrayBuffer = reader.result as ArrayBuffer;
+          const uint8Array = new Uint8Array(arrayBuffer);
+          
+          // Send audio data to backend
+          this.ws!.send(JSON.stringify({
+            type: 'audio_data',
+            data: Array.from(uint8Array),
+            sampleRate: this.config.sampleRate,
+            chunkSize: this.config.chunkSize
+          }));
+        };
+        reader.readAsArrayBuffer(audioData);
+      }
+    } catch (error) {
+      console.error('❌ Error sending audio data:', error);
+    }
+  }
+
+  /**
    * Get WebSocket URL based on environment
    */
   private getWebSocketUrl(): string {
@@ -384,6 +505,7 @@ export class RealtimeSTTService {
       
       this.stop();
       this.stopPingInterval();
+      this.stopAudioCapture();
       
       if (this.ws) {
         this.ws.close(1000, 'Service destroyed');

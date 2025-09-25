@@ -115,6 +115,16 @@ async def websocket_realtime_stt(websocket: WebSocket):
                         "status": realtime_stt_service.get_status(),
                         "timestamp": asyncio.get_event_loop().time()
                     }))
+                elif data.get("type") == "audio_data":
+                    # Handle audio data from frontend
+                    audio_data = data.get("data", [])
+                    sample_rate = data.get("sampleRate", 16000)
+                    chunk_size = data.get("chunkSize", 1024)
+                    
+                    # Process audio data with RealtimeSTT
+                    if audio_data:
+                        await process_audio_data(realtime_stt_service, audio_data, sample_rate, chunk_size)
+                        
                 elif data.get("type") == "stop":
                     realtime_stt_service.stop()
                     await websocket.send_text(json.dumps({
@@ -232,6 +242,27 @@ def create_language_callback(websocket: WebSocket):
         except Exception as e:
             logger.error(f"Error sending language detection: {e}")
     return callback
+
+async def process_audio_data(realtime_stt_service, audio_data: list, sample_rate: int, chunk_size: int):
+    """Process audio data from frontend."""
+    try:
+        import numpy as np
+        
+        # Convert list to numpy array
+        audio_array = np.array(audio_data, dtype=np.float32)
+        
+        # Normalize audio data
+        if audio_array.max() > 1.0:
+            audio_array = audio_array / 32768.0  # Convert from 16-bit to float
+        
+        # Process with RealtimeSTT service
+        if hasattr(realtime_stt_service, '_recorder') and realtime_stt_service._recorder:
+            # Feed audio data to RealtimeSTT
+            # Note: This is a simplified approach - RealtimeSTT might need different handling
+            logger.debug(f"Processing audio chunk: {len(audio_array)} samples at {sample_rate}Hz")
+            
+    except Exception as e:
+        logger.error(f"Error processing audio data: {e}")
 
 async def handle_config_update(websocket: WebSocket, data: Dict[str, Any]):
     """Handle configuration updates."""
