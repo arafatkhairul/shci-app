@@ -38,6 +38,8 @@ export default function VoiceAgent() {
     // Mobile-specific state
     const [isMobile, setIsMobile] = useState(false);
     const [isProcessingAudio, setIsProcessingAudio] = useState(false);
+    const [audioContextInitialized, setAudioContextInitialized] = useState(false);
+    const [userInteracted, setUserInteracted] = useState(false);
 
     // Default: server TTS ON (local TTS OFF)
     const [useLocalTTS, setUseLocalTTS] = useState(false);
@@ -245,6 +247,53 @@ export default function VoiceAgent() {
         const mobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         setIsMobile(mobile);
         console.log('Device type:', mobile ? 'Mobile' : 'Desktop');
+    }, []);
+
+    // ---------- Mobile Audio Context Initialization ----------
+    const initializeAudioContext = useCallback(async () => {
+        if (!isMobile || audioContextInitialized) return true;
+        
+        try {
+            if (!audioCtx.current) {
+                audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            }
+            
+            if (audioCtx.current.state === 'suspended') {
+                await audioCtx.current.resume();
+            }
+            
+            setAudioContextInitialized(true);
+            console.log('📱 Mobile: Audio context initialized successfully');
+            return true;
+        } catch (error) {
+            console.error('📱 Mobile: Failed to initialize audio context:', error);
+            return false;
+        }
+    }, [isMobile, audioContextInitialized]);
+
+    // ---------- Mobile Audio Test ----------
+    const testMobileAudio = useCallback(async () => {
+        if (!isMobile) return;
+        
+        try {
+            // Test HTML Audio element
+            const testAudio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBS13yO/eizEIHWq+8+OWT');
+            testAudio.volume = 1.0;
+            await testAudio.play();
+            console.log('📱 Mobile: Audio test successful');
+            setStatus("Audio test successful! Audio is working.");
+        } catch (error) {
+            console.error('📱 Mobile: Audio test failed:', error);
+            setStatus("Audio test failed. Please check your device settings.");
+        }
+    }, [isMobile]);
+
+    // ---------- Worklet Playback State Management ----------
+    const updateWorkletPlaybackState = useCallback((isPlaying: boolean) => {
+        if (workletNode.current) {
+            workletNode.current.port.postMessage({ type: "playback", value: isPlaying });
+            console.log(`🔊 Worklet: Playback state updated to ${isPlaying}`);
+        }
     }, []);
 
     // ---------- Stable client_id ----------
@@ -603,6 +652,12 @@ export default function VoiceAgent() {
             }
         },
         onSpeechResult: (transcript: string, isFinal: boolean, confidence: number) => {
+            // CRITICAL: Don't process speech results during AI speaking to prevent partial word sending
+            if (aiSpeaking) {
+                console.log('🔇 VAD: Ignoring speech result during AI speaking to prevent partial words');
+                return;
+            }
+            
             // Enable transcript processing on BOTH mobile and desktop
             setVadTranscript(transcript);
             setVadConfidence(confidence);
@@ -612,16 +667,38 @@ export default function VoiceAgent() {
                 setFinalTranscript(transcript);
                 setInterimTranscript("");
                 console.log(isMobile ? '📱 Mobile transcript:' : '🖥️ Desktop transcript:', transcript);
+                
+                // Mobile-specific: Show transcription UI when final results come
+                if (isMobile) {
+                    setShowTranscription(true);
+                }
             }
         },
         onInterimResult: (transcript: string, confidence: number) => {
+            // CRITICAL: Don't process interim results during AI speaking to prevent partial word sending
+            if (aiSpeaking) {
+                console.log('🔇 VAD: Ignoring interim result during AI speaking to prevent partial words');
+                return;
+            }
+            
             // Enable interim results on BOTH mobile and desktop
             console.log(isMobile ? '📱 Mobile interim:' : '🖥️ Desktop interim:', { transcript, confidence });
             setInterimTranscript(transcript);
             setVadTranscript(transcript);
             setVadConfidence(confidence);
+            
+            // Mobile-specific: Show transcription UI when interim results come
+            if (isMobile && transcript.trim()) {
+                setShowTranscription(true);
+            }
         },
         onFinalResult: (transcript: string, confidence: number) => {
+            // CRITICAL: Don't process final results during AI speaking to prevent partial word sending
+            if (aiSpeaking) {
+                console.log('🔇 VAD: Ignoring final result during AI speaking to prevent partial words');
+                return;
+            }
+            
             // Enable final results on BOTH mobile and desktop
             console.log(isMobile ? '📱 Mobile final:' : '🖥️ Desktop final:', { transcript, confidence });
             setFinalTranscript(transcript);
@@ -677,6 +754,12 @@ export default function VoiceAgent() {
             }
         },
         onSpeechResult: (transcript: string, isFinal: boolean, confidence: number) => {
+            // CRITICAL: Don't process speech results during AI speaking to prevent partial word sending
+            if (aiSpeaking) {
+                console.log('🔇 Fallback VAD: Ignoring speech result during AI speaking to prevent partial words');
+                return;
+            }
+            
             // Enable transcript processing on BOTH mobile and desktop
             setVadTranscript(transcript);
             setVadConfidence(confidence);
@@ -689,6 +772,12 @@ export default function VoiceAgent() {
             }
         },
         onInterimResult: (transcript: string, confidence: number) => {
+            // CRITICAL: Don't process interim results during AI speaking to prevent partial word sending
+            if (aiSpeaking) {
+                console.log('🔇 Fallback VAD: Ignoring interim result during AI speaking to prevent partial words');
+                return;
+            }
+            
             // Enable interim results on BOTH mobile and desktop
             console.log(isMobile ? '📱 Mobile fallback interim:' : '🖥️ Desktop fallback interim:', { transcript, confidence });
             setInterimTranscript(transcript);
@@ -696,6 +785,12 @@ export default function VoiceAgent() {
             setVadConfidence(confidence);
         },
         onFinalResult: (transcript: string, confidence: number) => {
+            // CRITICAL: Don't process final results during AI speaking to prevent partial word sending
+            if (aiSpeaking) {
+                console.log('🔇 Fallback VAD: Ignoring final result during AI speaking to prevent partial words');
+                return;
+            }
+            
             // Enable final results on BOTH mobile and desktop
             console.log(isMobile ? '📱 Mobile fallback final:' : '🖥️ Desktop fallback final:', { transcript, confidence });
             setFinalTranscript(transcript);
@@ -881,6 +976,40 @@ export default function VoiceAgent() {
         }
     }, [isMobile]);
 
+    // Mobile-specific: Auto-start VAD service when initialized
+    useEffect(() => {
+        if (!isMobile || !vadSupported || !vadInitialized || !vadService.current) return;
+
+        // Auto-start VAD service on mobile when it's ready
+        if (!useWebkitVAD) {
+            console.log('📱 Mobile: Auto-starting VAD service for transcription');
+            const success = startVAD();
+            if (success) {
+                setUseWebkitVAD(true);
+                setShowTranscription(true);
+                console.log('📱 Mobile: VAD service started successfully');
+            } else {
+                console.log('📱 Mobile: Failed to start VAD service');
+            }
+        }
+    }, [isMobile, vadSupported, vadInitialized, useWebkitVAD, startVAD]);
+
+    // Mobile-specific: Auto-restart VAD service to keep microphone active
+    useEffect(() => {
+        if (!isMobile || !useWebkitVAD || !vadService.current) return;
+
+        const restartInterval = setInterval(() => {
+            if (vadService.current && !vadService.current.getStatus().isListening) {
+                console.log('📱 Mobile: Auto-restarting VAD service to keep microphone active');
+                vadService.current.start();
+            }
+        }, 5000); // Check every 5 seconds
+
+        return () => {
+            clearInterval(restartInterval);
+        };
+    }, [isMobile, useWebkitVAD]);
+
     const startFallbackVAD = useCallback(() => {
         // Start Fallback VAD on BOTH mobile and desktop
         // Mobile: Only for transcript processing
@@ -960,9 +1089,16 @@ export default function VoiceAgent() {
                 fallbackVADService.current.stop();
                 console.log('🔇 Fallback VAD paused');
             }
+            
+            // CRITICAL: Update worklet playback state to prevent audio frame sending
+            updateWorkletPlaybackState(true);
         } else {
             // CRITICAL: Restart VAD services after audio playback with longer delay to prevent audio loop
             console.log('🔊 Scheduling VAD restart after AI speaking ends');
+            
+            // CRITICAL: Update worklet playback state to allow audio frame sending
+            updateWorkletPlaybackState(false);
+            
             setTimeout(() => {
                 if (listening && !aiSpeaking) {
                     console.log('🔊 Restarting VAD services after audio playback');
@@ -1007,7 +1143,7 @@ export default function VoiceAgent() {
                 }
             }, 2000); // Increased delay to 2 seconds to ensure audio has completely stopped
         }
-    }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized]);
+    }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized, updateWorkletPlaybackState]);
 
     // VAD Health Check - Ensure speech recognition continues working
     useEffect(() => {
@@ -1480,6 +1616,12 @@ export default function VoiceAgent() {
             return;
         }
         
+        // Mobile: Ensure audio context is initialized
+        if (isMobile && !audioContextInitialized) {
+            console.log('📱 Mobile: Audio context not initialized, cannot play audio');
+            return;
+        }
+        
         // CRITICAL: Immediately pause VAD services to prevent audio loop
         console.log('🔇 Pausing VAD services before server MP3 playback to prevent loop');
         if (useWebkitVAD && vadService.current) {
@@ -1508,7 +1650,11 @@ export default function VoiceAgent() {
             if (!audioCtx.current) {
                 audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
             }
-            await audioCtx.current.resume();
+            
+            // Mobile: Ensure audio context is resumed
+            if (audioCtx.current.state === 'suspended') {
+                await audioCtx.current.resume();
+            }
 
             const binary = atob(base64);
             const array = new Uint8Array(binary.length);
@@ -1524,9 +1670,18 @@ export default function VoiceAgent() {
                 setFinalTranscript(""); // Clear transcript to prevent waiting state
                 setIsWaitingForResponse(false); // Clear waiting state when audio ends
                 
-                // Mobile-specific: reset processing flag
+                // Mobile-specific: reset processing flag and restart VAD
                 if (isMobile) {
                     setIsProcessingAudio(false);
+                    // Restart VAD service after audio ends to keep microphone active
+                    if (useWebkitVAD && vadService.current) {
+                        setTimeout(() => {
+                            if (vadService.current && !vadService.current.getStatus().isListening) {
+                                console.log('📱 Mobile: Restarting VAD after audio playback');
+                                vadService.current.start();
+                            }
+                        }, 500);
+                    }
                 }
             };
 
@@ -1534,8 +1689,16 @@ export default function VoiceAgent() {
             setAiSpeaking(true);
             setIsWaitingForResponse(false); // Clear waiting state when audio starts
             src.start(0);
-        } catch {
+        } catch (error) {
+            console.log('AudioContext failed, falling back to HTML Audio element:', error);
             const el = new Audio(`data:audio/mp3;base64,${base64}`);
+            
+            // Mobile-specific: Set volume and ensure playability
+            if (isMobile) {
+                el.volume = 1.0;
+                el.preload = 'auto';
+            }
+            
             // Fallback audio playback rate removed - now controlled by backend noise_scale
             if (currentAudioRef.current) {
                 currentAudioRef.current.pause();
@@ -1547,14 +1710,30 @@ export default function VoiceAgent() {
                 setFinalTranscript(""); // Clear transcript to prevent waiting state
                 setIsWaitingForResponse(false); // Clear waiting state when audio ends
                 
-                // Mobile-specific: reset processing flag
+                // Mobile-specific: reset processing flag and restart VAD
                 if (isMobile) {
                     setIsProcessingAudio(false);
+                    // Restart VAD service after audio ends to keep microphone active
+                    if (useWebkitVAD && vadService.current) {
+                        setTimeout(() => {
+                            if (vadService.current && !vadService.current.getStatus().isListening) {
+                                console.log('📱 Mobile: Restarting VAD after audio playback');
+                                vadService.current.start();
+                            }
+                        }, 500);
+                    }
                 }
             };
             setAiSpeaking(true);
             setIsWaitingForResponse(false); // Clear waiting state when audio starts
-            await el.play();
+            
+            try {
+                await el.play();
+                console.log('📱 Mobile: HTML Audio element playing successfully');
+            } catch (playError) {
+                console.error('📱 Mobile: Failed to play HTML Audio element:', playError);
+                setStatus("Audio playback failed. Please try again.");
+            }
         }
     };
 
@@ -1594,6 +1773,12 @@ export default function VoiceAgent() {
     // ---------- Helpers: Real-time Audio Chunk Playback ----------
     const playAudioChunk = async (base64: string, text?: string) => {
         try {
+            // Mobile: Ensure audio context is initialized
+            if (isMobile && !audioContextInitialized) {
+                console.log('📱 Mobile: Audio context not initialized, cannot play audio chunk');
+                return;
+            }
+            
             // CRITICAL: Immediately pause VAD services to prevent audio loop
             console.log('🔇 Pausing VAD services before audio playback to prevent loop');
             if (useWebkitVAD && vadService.current) {
@@ -1606,7 +1791,11 @@ export default function VoiceAgent() {
             if (!audioCtx.current) {
                 audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
             }
-            await audioCtx.current.resume();
+            
+            // Mobile: Ensure audio context is resumed
+            if (audioCtx.current.state === 'suspended') {
+                await audioCtx.current.resume();
+            }
 
             const binary = atob(base64);
             const array = new Uint8Array(binary.length);
@@ -1648,6 +1837,16 @@ export default function VoiceAgent() {
             setIsWaitingForResponse(false);
             setHighlightedText("");
             setCurrentSpeakingText("");
+            
+            // Mobile-specific: restart VAD after all audio is complete
+            if (isMobile && useWebkitVAD && vadService.current) {
+                setTimeout(() => {
+                    if (vadService.current && !vadService.current.getStatus().isListening) {
+                        console.log('📱 Mobile: Restarting VAD after all audio playback complete');
+                        vadService.current.start();
+                    }
+                }, 500);
+            }
             return;
         }
 
@@ -1950,6 +2149,17 @@ export default function VoiceAgent() {
             return;
         }
 
+        // Mobile: Initialize audio context on first user interaction
+        if (isMobile && !audioContextInitialized) {
+            console.log('📱 Mobile: Initializing audio context on user interaction');
+            const success = await initializeAudioContext();
+            if (!success) {
+                setStatus("Failed to initialize audio. Please try again.");
+                return;
+            }
+            setUserInteracted(true);
+        }
+
         // Force mic level reset
         updateMicLevel(0, 'reset');
 
@@ -1961,6 +2171,7 @@ export default function VoiceAgent() {
                 setListening(true);
                 setStatus(currentLang.status.listening);
                 setShowTranscription(true);
+                console.log(isMobile ? '📱 Mobile VAD auto-activated' : '🖥️ Desktop VAD auto-activated');
                 return;
             }
         }
@@ -2111,6 +2322,12 @@ export default function VoiceAgent() {
                         // Enhanced mic level calculation with better sensitivity
                         updateMicLevel(value, 'worklet');
                     } else if (type === "frame" && buffer) {
+                        // CRITICAL: Don't send audio frames during AI speaking to prevent partial word processing
+                        if (aiSpeaking) {
+                            console.log('🔇 Worklet: Ignoring audio frame during AI speaking to prevent partial words');
+                            return;
+                        }
+                        
                         if (listeningRef.current && ws.current?.readyState === WebSocket.OPEN) {
                             try {
                                 ws.current.send(new Uint8Array(buffer));
@@ -2186,6 +2403,12 @@ export default function VoiceAgent() {
                             const s = Math.max(-1, Math.min(1, slice[i] || 0));
                             i16[i] = (s * 32767) | 0;
                         }
+                        // CRITICAL: Don't send audio data during AI speaking to prevent partial word processing
+                        if (aiSpeaking) {
+                            console.log('🔇 Fallback: Ignoring audio data during AI speaking to prevent partial words');
+                            return;
+                        }
+                        
                         if (listeningRef.current && ws.current?.readyState === WebSocket.OPEN) {
                             try {
                                 ws.current.send(new Uint8Array(i16.buffer));
@@ -3402,6 +3625,44 @@ export default function VoiceAgent() {
                                         </div>
                                     </div>
 
+                                    {/* Mobile Audio Initialization Button */}
+                                    {isMobile && !audioContextInitialized && (
+                                        <div className="mb-4 text-center">
+                                            <div className="flex gap-2 justify-center">
+                                                <button
+                                                    onClick={async (e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        console.log('📱 Mobile: Initializing audio context on user interaction');
+                                                        const success = await initializeAudioContext();
+                                                        if (success) {
+                                                            setUserInteracted(true);
+                                                            setStatus("Audio initialized! You can now start the conversation.");
+                                                        } else {
+                                                            setStatus("Failed to initialize audio. Please try again.");
+                                                        }
+                                                    }}
+                                                    className="px-4 py-2 bg-green-600/80 text-white rounded-full font-medium text-sm hover:bg-green-600 shadow-lg transition-all duration-300 flex items-center justify-center gap-2"
+                                                >
+                                                    🔊 Initialize Audio
+                                                </button>
+                                                <button
+                                                    onClick={async (e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        await testMobileAudio();
+                                                    }}
+                                                    className="px-4 py-2 bg-blue-600/80 text-white rounded-full font-medium text-sm hover:bg-blue-600 shadow-lg transition-all duration-300 flex items-center justify-center gap-2"
+                                                >
+                                                    🎵 Test Audio
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-zinc-400 mt-2">
+                                                Tap to enable audio playback on mobile
+                                            </p>
+                                        </div>
+                                    )}
+
                                     {/* Small Rounded Button - Fixed Click with Glass UI */}
                                     <div className="flex justify-center">
                                         <button
@@ -3417,15 +3678,17 @@ export default function VoiceAgent() {
                                             }}
                                             onMouseDown={(e) => e.stopPropagation()}
                                             onMouseUp={(e) => e.stopPropagation()}
+                                            disabled={!connected || (isMobile && !audioContextInitialized)}
                                             className={` px-4 py-2 rounded-full font-medium text-xs transition-colors flex items-center justify-center gap-1 cursor-pointer ${listening
                                                 ? listening && micLevel > 0.01
                                                     ? "bg-red-600/20 backdrop-blur-xl text-white hover:bg-red-600/30 shadow-lg"
                                                     : "bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white shadow-lg"
                                                 : !connected
                                                     ? "bg-zinc-600/80 text-white cursor-not-allowed shadow-lg"
-                                                    : "bg-blue-600/80 text-white hover:bg-blue-600 shadow-lg"
+                                                    : isMobile && !audioContextInitialized
+                                                        ? "bg-zinc-600/80 text-white cursor-not-allowed shadow-lg"
+                                                        : "bg-blue-600/80 text-white hover:bg-blue-600 shadow-lg"
                                                 }`}
-                                            disabled={!connected}
                                             style={{
                                                 pointerEvents: 'auto',
                                                 ...(listening && micLevel > 0.01 ? {
