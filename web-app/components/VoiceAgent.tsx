@@ -561,22 +561,22 @@ export default function VoiceAgent() {
     }, [aiText]); // Remove displayedAiText from dependencies to prevent infinite loop
 
 
-    // ---------- VAD Service Configuration ----------
+    // ---------- VAD Service Configuration ---------- 
     const vadConfig: VADConfig = {
         language: selectedLanguage === 'en' ? 'en-US' : 'it-IT',
         continuous: true,
         interimResults: true,
         maxAlternatives: 1,
         confidenceThreshold: 0.5, // Lowered for faster detection
-        silenceTimeout: 2000, // Reduced to 2 seconds for instant response
-        speechTimeout: 5000, // Reduced to 5 seconds for faster processing
+        silenceTimeout: isMobile ? 30000 : 2000, // 30 seconds on mobile to prevent mic shutoff, 2 seconds on desktop
+        speechTimeout: isMobile ? 60000 : 5000, // 60 seconds on mobile, 5 seconds on desktop
         restartDelay: 50 // Reduced delay for faster restart
     };
 
     const fallbackVADConfig: FallbackVADConfig = {
         silenceThreshold: 0.01,
-        silenceTimeout: 2000, // Reduced to 2 seconds for instant response
-        speechTimeout: 5000, // Reduced to 5 seconds for faster processing
+        silenceTimeout: isMobile ? 30000 : 2000, // 30 seconds on mobile to prevent mic shutoff, 2 seconds on desktop
+        speechTimeout: isMobile ? 60000 : 5000, // 60 seconds on mobile, 5 seconds on desktop  
         sampleRate: 48000,
         fftSize: 256,
         smoothingTimeConstant: 0.8

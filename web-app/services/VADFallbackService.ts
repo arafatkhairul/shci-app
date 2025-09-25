@@ -41,10 +41,13 @@ export class FallbackVADService {
   private isSpeechActive: boolean = false;
 
   constructor(config: Partial<FallbackVADConfig> = {}, callbacks: FallbackVADCallbacks = {}) {
+    // Detect mobile device
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
     this.config = {
       silenceThreshold: 0.01,
-      silenceTimeout: 3000,
-      speechTimeout: 10000,
+      silenceTimeout: isMobile ? 30000 : 3000, // 30 seconds on mobile, 3 seconds on desktop
+      speechTimeout: isMobile ? 60000 : 10000, // 60 seconds on mobile, 10 seconds on desktop
       sampleRate: 48000,
       fftSize: 256,
       smoothingTimeConstant: 0.8,

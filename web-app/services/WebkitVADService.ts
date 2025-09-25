@@ -59,20 +59,22 @@ export class WebkitVADService {
   private animationFrame: number | null = null;
 
   constructor(config: Partial<VADConfig> = {}, callbacks: VADCallbacks = {}) {
+    // Detect mobile device first
+    this.isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
     this.config = {
       language: 'en-US',
       continuous: true,
       interimResults: true,
       maxAlternatives: 1,
       confidenceThreshold: 0.7,
-      silenceTimeout: 8000, // 8 seconds
-      speechTimeout: 30000, // 30 seconds
+      silenceTimeout: this.isMobile ? 30000 : 8000, // 30 seconds on mobile, 8 seconds on desktop
+      speechTimeout: this.isMobile ? 60000 : 30000, // 60 seconds on mobile, 30 seconds on desktop
       restartDelay: 100,
       ...config
     };
     
     this.callbacks = callbacks;
-    this.isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     this.checkSupport();
   }
 
@@ -425,6 +427,16 @@ export class WebkitVADService {
     this.isListening = false;
     this.clearTimers();
     this.callbacks.onStateChange?.(false);
+    
+    // Mobile-specific: Auto-restart to prevent microphone from turning off
+    if (this.isMobile && wasListening) {
+      console.log('VAD: Auto-restarting on mobile to keep microphone active');
+      setTimeout(() => {
+        if (!this.isListening) {
+          this.restart();
+        }
+      }, this.config.restartDelay);
+    }
     
     // Disabled auto-restart for manual control
   }
