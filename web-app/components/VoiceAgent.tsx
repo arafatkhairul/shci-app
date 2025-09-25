@@ -1102,48 +1102,108 @@ export default function VoiceAgent() {
             setTimeout(() => {
                 if (listening && !aiSpeaking) {
                     console.log('🔊 Restarting VAD services after audio playback');
-
-                    if (useWebkitVAD && vadService.current && vadInitialized) {
-                        try {
-                            // Ensure WebSocket is still connected for VAD service
-                            if (ws.current?.readyState === WebSocket.OPEN) {
-                                vadService.current.setWebSocket(ws.current);
+                    
+                    // Additional safety check: Ensure audio has completely stopped
+                    if (isPlayingAudioRef.current) {
+                        console.log('🔊 Audio still playing, delaying VAD restart...');
+                        setTimeout(() => {
+                            if (listening && !aiSpeaking && !isPlayingAudioRef.current) {
+                                restartVADServices();
                             }
-                            vadService.current.start();
-                            console.log('🔊 Webkit VAD restarted');
-                        } catch (error) {
-                            // Try to reinitialize if restart fails
-                            console.log('Failed to restart VAD, reinitializing...');
-                            setTimeout(() => {
-                                initializeVAD().then((success) => {
-                                    if (success && listening) {
-                                        startVAD();
-                                    }
-                                });
-                            }, 2000);
-                        }
+                        }, 1000);
+                        return;
                     }
-
-                    if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized) {
-                        try {
-                            fallbackVADService.current.start();
-                            console.log('🔊 Fallback VAD restarted');
-                        } catch (error) {
-                            // Try to reinitialize if restart fails
-                            console.log('Failed to restart Fallback VAD, reinitializing...');
-                            setTimeout(() => {
-                                initializeFallbackVAD().then((success) => {
-                                    if (success && listening) {
-                                        startFallbackVAD();
-                                    }
-                                });
-                            }, 2000);
-                        }
-                    }
+                    
+                    restartVADServices();
                 }
             }, 2000); // Increased delay to 2 seconds to ensure audio has completely stopped
         }
     }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized, updateWorkletPlaybackState]);
+
+    // Helper function to restart VAD services
+    const restartVADServices = useCallback(() => {
+        if (useWebkitVAD && vadService.current && vadInitialized) {
+            try {
+                // Ensure WebSocket is still connected for VAD service
+                if (ws.current?.readyState === WebSocket.OPEN) {
+                    vadService.current.setWebSocket(ws.current);
+                }
+                vadService.current.start();
+                console.log('🔊 Webkit VAD restarted');
+            } catch (error) {
+                // Try to reinitialize if restart fails
+                console.log('Failed to restart VAD, reinitializing...');
+                setTimeout(() => {
+                    initializeVAD().then((success) => {
+                        if (success && listening) {
+                            startVAD();
+                        }
+                    });
+                }, 2000);
+            }
+        }
+
+        if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized) {
+            try {
+                fallbackVADService.current.start();
+                console.log('🔊 Fallback VAD restarted');
+            } catch (error) {
+                // Try to reinitialize if restart fails
+                console.log('Failed to restart Fallback VAD, reinitializing...');
+                setTimeout(() => {
+                    initializeFallbackVAD().then((success) => {
+                        if (success && listening) {
+                            startFallbackVAD();
+                        }
+                    });
+                }, 2000);
+            }
+        }
+    }, [useWebkitVAD, useFallbackVAD, vadInitialized, fallbackVADInitialized, listening, initializeVAD, initializeFallbackVAD, startVAD, startFallbackVAD]);
+
+    // Monitor TTS speaking state - Ensure continuous speech recognition
+    useEffect(() => {
+        if (aiSpeaking) {
+            // CRITICAL: Immediately pause VAD services during audio playback to prevent feedback
+            console.log('🔇 Pausing VAD services during AI speaking to prevent audio loop');
+            if (useWebkitVAD && vadService.current) {
+                vadService.current.stop();
+                console.log('🔇 Webkit VAD paused');
+            }
+            if (useFallbackVAD && fallbackVADService.current) {
+                fallbackVADService.current.stop();
+                console.log('🔇 Fallback VAD paused');
+            }
+            
+            // CRITICAL: Update worklet playback state to prevent audio frame sending
+            updateWorkletPlaybackState(true);
+        } else {
+            // CRITICAL: Restart VAD services after audio playback with longer delay to prevent audio loop
+            console.log('🔊 Scheduling VAD restart after AI speaking ends');
+            
+            // CRITICAL: Update worklet playback state to allow audio frame sending
+            updateWorkletPlaybackState(false);
+            
+            setTimeout(() => {
+                if (listening && !aiSpeaking) {
+                    console.log('🔊 Restarting VAD services after audio playback');
+                    
+                    // Additional safety check: Ensure audio has completely stopped
+                    if (isPlayingAudioRef.current) {
+                        console.log('🔊 Audio still playing, delaying VAD restart...');
+                        setTimeout(() => {
+                            if (listening && !aiSpeaking && !isPlayingAudioRef.current) {
+                                restartVADServices();
+                            }
+                        }, 1000);
+                        return;
+                    }
+                    
+                    restartVADServices();
+                }
+            }, 2000); // Increased delay to 2 seconds to ensure audio has completely stopped
+        }
+    }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized, updateWorkletPlaybackState, restartVADServices]);
 
     // VAD Health Check - Ensure speech recognition continues working
     useEffect(() => {
@@ -1622,6 +1682,10 @@ export default function VoiceAgent() {
             return;
         }
         
+        // CRITICAL: Stop all existing audio before playing new audio
+        console.log('🛑 Stopping all existing audio before playing new audio');
+        stopAllAudio();
+        
         // CRITICAL: Immediately pause VAD services to prevent audio loop
         console.log('🔇 Pausing VAD services before server MP3 playback to prevent loop');
         if (useWebkitVAD && vadService.current) {
@@ -1728,11 +1792,31 @@ export default function VoiceAgent() {
             setIsWaitingForResponse(false); // Clear waiting state when audio starts
             
             try {
+                // Mobile-specific: Add user interaction requirement
+                if (isMobile && !userInteracted) {
+                    console.log('📱 Mobile: User interaction required for audio playback');
+                    setStatus("Please tap the microphone button to enable audio playback.");
+                    return;
+                }
+                
                 await el.play();
                 console.log('📱 Mobile: HTML Audio element playing successfully');
             } catch (playError) {
                 console.error('📱 Mobile: Failed to play HTML Audio element:', playError);
-                setStatus("Audio playback failed. Please try again.");
+                
+                // Mobile-specific error handling
+                if (isMobile) {
+                    const error = playError as Error;
+                    if (error.name === 'NotAllowedError') {
+                        setStatus("Audio blocked. Please tap 'Initialize Audio' button first.");
+                    } else if (error.name === 'NotSupportedError') {
+                        setStatus("Audio format not supported on this device.");
+                    } else {
+                        setStatus("Audio playback failed. Please try again.");
+                    }
+                } else {
+                    setStatus("Audio playback failed. Please try again.");
+                }
             }
         }
     };
