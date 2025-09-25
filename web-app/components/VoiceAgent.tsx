@@ -584,50 +584,70 @@ export default function VoiceAgent() {
 
     const vadCallbacks: VADCallbacks = {
         onSpeechStart: () => {
-            setListening(true);
-            setStatus(currentLang.status.listening);
-            setShowTranscription(true);
+            // VAD disabled on mobile - only activate on desktop
+            if (!isMobile) {
+                setListening(true);
+                setStatus(currentLang.status.listening);
+                setShowTranscription(true);
+            }
         },
         onSpeechEnd: () => {
-            // Don't automatically turn off microphone - keep it active for continuous listening
-            setStatus(currentLang.status.connected);
+            // VAD disabled on mobile - only activate on desktop
+            if (!isMobile) {
+                setStatus(currentLang.status.connected);
+            }
         },
         onSpeechResult: (transcript: string, isFinal: boolean, confidence: number) => {
-            setVadTranscript(transcript);
-            setVadConfidence(confidence);
+            // VAD disabled on mobile - only process on desktop
+            if (!isMobile) {
+                setVadTranscript(transcript);
+                setVadConfidence(confidence);
 
-            if (isFinal && transcript.trim()) {
-                setTranscript(transcript);
+                if (isFinal && transcript.trim()) {
+                    setTranscript(transcript);
+                    setFinalTranscript(transcript);
+                    setInterimTranscript("");
+                }
+            }
+        },
+        onInterimResult: (transcript: string, confidence: number) => {
+            // VAD disabled on mobile - only process on desktop
+            if (!isMobile) {
+                console.log('VAD: Interim result', { transcript, confidence });
+                setInterimTranscript(transcript);
+                setVadTranscript(transcript);
+                setVadConfidence(confidence);
+            }
+        },
+        onFinalResult: (transcript: string, confidence: number) => {
+            // VAD disabled on mobile - only process on desktop
+            if (!isMobile) {
+                console.log('VAD: Final result', { transcript, confidence });
                 setFinalTranscript(transcript);
                 setInterimTranscript("");
             }
         },
-        onInterimResult: (transcript: string, confidence: number) => {
-            console.log('VAD: Interim result', { transcript, confidence });
-            setInterimTranscript(transcript);
-            setVadTranscript(transcript);
-            setVadConfidence(confidence);
-        },
-        onFinalResult: (transcript: string, confidence: number) => {
-            console.log('VAD: Final result', { transcript, confidence });
-            setFinalTranscript(transcript);
-            setInterimTranscript("");
-        },
         onSilenceDetected: () => {
-            console.log('VAD: Silence detected - keeping microphone active');
-            // Don't automatically turn off microphone - keep it active for continuous listening
-            setStatus(currentLang.status.connected);
+            // VAD disabled on mobile - only process on desktop
+            if (!isMobile) {
+                console.log('VAD: Silence detected - keeping microphone active');
+                setStatus(currentLang.status.connected);
+            }
         },
         onError: (error: string) => {
-            console.error('VAD Error:', error);
-            setStatus(`VAD Error: ${error}`);
+            // VAD disabled on mobile - only process on desktop
+            if (!isMobile) {
+                console.error('VAD Error:', error);
+                setStatus(`VAD Error: ${error}`);
+            }
         },
         onStateChange: (isListening: boolean) => {
-            console.log('VAD State changed:', isListening);
-            // Keep listening state active throughout the session - don't let VAD control the main listening state
-            // The microphone should only be controlled by Start/Stop button clicks
-            if (isListening) {
-                setListening(true);
+            // VAD disabled on mobile - only process on desktop
+            if (!isMobile) {
+                console.log('VAD State changed:', isListening);
+                if (isListening) {
+                    setListening(true);
+                }
             }
             // Don't set listening to false - let only the Stop button control that
         },
@@ -758,6 +778,15 @@ export default function VoiceAgent() {
 
     // ---------- VAD Service Management ----------
     const initializeVAD = useCallback(async () => {
+        // VAD completely disabled on mobile devices
+        if (isMobile) {
+            console.log('VAD disabled on mobile - skipping initialization');
+            setVadSupported(false);
+            setVadInitialized(false);
+            setUseWebkitVAD(false);
+            return false;
+        }
+
         if (!vadService.current) {
             vadService.current = new WebkitVADService(vadConfig, vadCallbacks);
         }
@@ -780,6 +809,14 @@ export default function VoiceAgent() {
     }, [vadConfig, vadCallbacks]);
 
     const initializeFallbackVAD = useCallback(async () => {
+        // VAD completely disabled on mobile devices
+        if (isMobile) {
+            console.log('Fallback VAD disabled on mobile - skipping initialization');
+            setFallbackVADInitialized(false);
+            setUseFallbackVAD(false);
+            return false;
+        }
+
         if (!fallbackVADService.current) {
             fallbackVADService.current = new FallbackVADService(fallbackVADConfig, fallbackVADCallbacks);
         }
@@ -794,9 +831,15 @@ export default function VoiceAgent() {
         }
 
         return success;
-    }, [fallbackVADConfig, fallbackVADCallbacks]);
+    }, [fallbackVADConfig, fallbackVADCallbacks, isMobile]);
 
     const startVAD = useCallback(() => {
+        // VAD completely disabled on mobile devices
+        if (isMobile) {
+            console.log('VAD disabled on mobile - skipping start');
+            return false;
+        }
+
         console.log('🎤 Starting VAD service...', {
             webkitVADAvailable: !!vadService.current,
             webkitVADInitialized: vadInitialized,
@@ -814,9 +857,15 @@ export default function VoiceAgent() {
             return success;
         }
         return false;
-    }, [vadInitialized]);
+    }, [vadInitialized, isMobile]);
 
     const stopVAD = useCallback(() => {
+        // VAD completely disabled on mobile devices
+        if (isMobile) {
+            console.log('VAD disabled on mobile - skipping stop');
+            return;
+        }
+
         if (vadService.current) {
             vadService.current.stop();
             setUseWebkitVAD(false);
@@ -824,9 +873,15 @@ export default function VoiceAgent() {
             setVadConfidence(0);
             console.log('VAD stopped');
         }
-    }, []);
+    }, [isMobile]);
 
     const startFallbackVAD = useCallback(() => {
+        // VAD completely disabled on mobile devices
+        if (isMobile) {
+            console.log('Fallback VAD disabled on mobile - skipping start');
+            return false;
+        }
+
         if (fallbackVADService.current && fallbackVADInitialized) {
             const success = fallbackVADService.current.start();
             if (success) {
@@ -837,31 +892,49 @@ export default function VoiceAgent() {
             return success;
         }
         return false;
-    }, [fallbackVADInitialized]);
+    }, [fallbackVADInitialized, isMobile]);
 
     const stopFallbackVAD = useCallback(() => {
+        // VAD completely disabled on mobile devices
+        if (isMobile) {
+            console.log('Fallback VAD disabled on mobile - skipping stop');
+            return;
+        }
+
         if (fallbackVADService.current) {
             fallbackVADService.current.stop();
             setUseFallbackVAD(false);
             console.log('Fallback VAD stopped');
         }
-    }, []);
+    }, [isMobile]);
 
     const toggleVAD = useCallback(() => {
+        // VAD completely disabled on mobile devices
+        if (isMobile) {
+            console.log('VAD disabled on mobile - skipping toggle');
+            return;
+        }
+
         if (useWebkitVAD) {
             stopVAD();
         } else {
             startVAD();
         }
-    }, [useWebkitVAD, startVAD, stopVAD]);
+    }, [useWebkitVAD, startVAD, stopVAD, isMobile]);
 
     const toggleFallbackVAD = useCallback(() => {
+        // VAD completely disabled on mobile devices
+        if (isMobile) {
+            console.log('Fallback VAD disabled on mobile - skipping toggle');
+            return;
+        }
+
         if (useFallbackVAD) {
             stopFallbackVAD();
         } else {
             startFallbackVAD();
         }
-    }, [useFallbackVAD, startFallbackVAD, stopFallbackVAD]);
+    }, [useFallbackVAD, startFallbackVAD, stopFallbackVAD, isMobile]);
 
     // Update VAD config when language changes
     useEffect(() => {
