@@ -1076,6 +1076,62 @@ export default function VoiceAgent() {
         }
     }, [selectedLanguage, vadInitialized]);
 
+    // Helper function to check VAD service status
+    const checkVADStatus = useCallback(() => {
+        const webkitStatus = vadService.current?.getStatus();
+        const fallbackStatus = fallbackVADService.current?.getStatus();
+        
+        return {
+            webkit: {
+                isListening: webkitStatus?.isListening || false,
+                isInitialized: webkitStatus?.isInitialized || false
+            },
+            fallback: {
+                isListening: fallbackStatus?.isListening || false,
+                isInitialized: fallbackStatus?.isInitialized || false
+            }
+        };
+    }, []);
+
+    // Helper function to restart VAD services with proper state checking
+    const restartVADServices = useCallback(() => {
+        const status = checkVADStatus();
+        
+        if (useWebkitVAD && vadService.current && vadInitialized) {
+            // Only start if not already listening
+            if (!status.webkit.isListening) {
+                try {
+                    // Ensure WebSocket is still connected for VAD service
+                    if (ws.current?.readyState === WebSocket.OPEN) {
+                        vadService.current.setWebSocket(ws.current);
+                    }
+                    vadService.current.start();
+                    console.log('🔊 Webkit VAD restarted');
+                } catch (error) {
+                    console.error('Failed to restart Webkit VAD:', error);
+                    // Don't try to reinitialize immediately to prevent loops
+                }
+            } else {
+                console.log('🔊 Webkit VAD already listening, skipping restart');
+            }
+        }
+
+        if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized) {
+            // Only start if not already listening
+            if (!status.fallback.isListening) {
+                try {
+                    fallbackVADService.current.start();
+                    console.log('🔊 Fallback VAD restarted');
+                } catch (error) {
+                    console.error('Failed to restart Fallback VAD:', error);
+                    // Don't try to reinitialize immediately to prevent loops
+                }
+            } else {
+                console.log('🔊 Fallback VAD already listening, skipping restart');
+            }
+        }
+    }, [useWebkitVAD, useFallbackVAD, vadInitialized, fallbackVADInitialized, checkVADStatus]);
+
     // Monitor TTS speaking state - Ensure continuous speech recognition
     useEffect(() => {
         if (aiSpeaking) {
@@ -1108,58 +1164,27 @@ export default function VoiceAgent() {
                         console.log('🔊 Audio still playing, delaying VAD restart...');
                         setTimeout(() => {
                             if (listening && !aiSpeaking && !isPlayingAudioRef.current) {
-                                restartVADServices();
+                                const status = checkVADStatus();
+                                // Only restart if not already listening
+                                if (!status.webkit.isListening || !status.fallback.isListening) {
+                                    restartVADServices();
+                                }
                             }
                         }, 1000);
                         return;
                     }
                     
-                    restartVADServices();
+                    // Check current status before restarting
+                    const status = checkVADStatus();
+                    if (!status.webkit.isListening || !status.fallback.isListening) {
+                        restartVADServices();
+                    } else {
+                        console.log('🔊 VAD services already listening, skipping restart');
+                    }
                 }
-            }, 2000); // Increased delay to 2 seconds to ensure audio has completely stopped
+            }, 3000); // Increased delay to 3 seconds to ensure audio has completely stopped
         }
-    }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized, updateWorkletPlaybackState]);
-
-    // Helper function to restart VAD services
-    const restartVADServices = useCallback(() => {
-        if (useWebkitVAD && vadService.current && vadInitialized) {
-            try {
-                // Ensure WebSocket is still connected for VAD service
-                if (ws.current?.readyState === WebSocket.OPEN) {
-                    vadService.current.setWebSocket(ws.current);
-                }
-                vadService.current.start();
-                console.log('🔊 Webkit VAD restarted');
-            } catch (error) {
-                // Try to reinitialize if restart fails
-                console.log('Failed to restart VAD, reinitializing...');
-                setTimeout(() => {
-                    initializeVAD().then((success) => {
-                        if (success && listening) {
-                            startVAD();
-                        }
-                    });
-                }, 2000);
-            }
-        }
-
-        if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized) {
-            try {
-                fallbackVADService.current.start();
-                console.log('🔊 Fallback VAD restarted');
-            } catch (error) {
-                // Try to reinitialize if restart fails
-                console.log('Failed to restart Fallback VAD, reinitializing...');
-                setTimeout(() => {
-                    initializeFallbackVAD().then((success) => {
-                        if (success && listening) {
-                            startFallbackVAD();
-                        }
-                    });
-                }, 2000);
-            }
-        }
-    }, [useWebkitVAD, useFallbackVAD, vadInitialized, fallbackVADInitialized, listening, initializeVAD, initializeFallbackVAD, startVAD, startFallbackVAD]);
+    }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized, updateWorkletPlaybackState, checkVADStatus, restartVADServices]);
 
     // Monitor TTS speaking state - Ensure continuous speech recognition
     useEffect(() => {
@@ -1193,7 +1218,11 @@ export default function VoiceAgent() {
                         console.log('🔊 Audio still playing, delaying VAD restart...');
                         setTimeout(() => {
                             if (listening && !aiSpeaking && !isPlayingAudioRef.current) {
-                                restartVADServices();
+                                const status = checkVADStatus();
+                                // Only restart if not already listening
+                                if (!status.webkit.isListening || !status.fallback.isListening) {
+                                    restartVADServices();
+                                }
                             }
                         }, 1000);
                         return;
@@ -1211,43 +1240,54 @@ export default function VoiceAgent() {
 
         const healthCheckInterval = setInterval(() => {
             if (listening && !aiSpeaking) {
-                // Check if VAD services are still active
-                const webkitVADStatus = vadService.current?.getStatus();
-                const fallbackVADStatus = fallbackVADService.current?.getStatus();
-
+                const status = checkVADStatus();
+                
                 console.log('🔍 VAD Health Check:', {
-                    webkitVADActive: webkitVADStatus?.isListening,
-                    fallbackVADActive: fallbackVADStatus?.isListening,
+                    webkitVADActive: status.webkit.isListening,
+                    fallbackVADActive: status.fallback.isListening,
                     useWebkitVAD,
                     useFallbackVAD
                 });
 
-                // If Webkit VAD should be active but isn't, restart it
-                if (useWebkitVAD && vadService.current && vadInitialized && !webkitVADStatus?.isListening) {
+                // Only restart if services are not listening and we're not in a restart loop
+                if (useWebkitVAD && vadService.current && vadInitialized && !status.webkit.isListening) {
                     console.log('🔄 Webkit VAD not listening - restarting...');
                     try {
-                        vadService.current.start();
-                        console.log('✅ Webkit VAD restarted via health check');
+                        // Double check before starting to prevent race conditions
+                        const currentStatus = vadService.current.getStatus();
+                        if (!currentStatus.isListening) {
+                            vadService.current.start();
+                            console.log('✅ Webkit VAD restarted via health check');
+                        } else {
+                            console.log('🔊 Webkit VAD already listening, skipping health check restart');
+                        }
                     } catch (error) {
                         console.log('❌ Failed to restart Webkit VAD via health check:', error);
+                        // Don't try to reinitialize to prevent loops
                     }
                 }
 
-                // If Fallback VAD should be active but isn't, restart it
-                if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized && !fallbackVADStatus?.isListening) {
+                if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized && !status.fallback.isListening) {
                     console.log('🔄 Fallback VAD not listening - restarting...');
                     try {
-                        fallbackVADService.current.start();
-                        console.log('✅ Fallback VAD restarted via health check');
+                        // Double check before starting to prevent race conditions
+                        const currentStatus = fallbackVADService.current.getStatus();
+                        if (!currentStatus.isListening) {
+                            fallbackVADService.current.start();
+                            console.log('✅ Fallback VAD restarted via health check');
+                        } else {
+                            console.log('🔊 Fallback VAD already listening, skipping health check restart');
+                        }
                     } catch (error) {
                         console.log('❌ Failed to restart Fallback VAD via health check:', error);
+                        // Don't try to reinitialize to prevent loops
                     }
                 }
             }
-        }, 10000); // Check every 10 seconds
+        }, 15000); // Increased interval to 15 seconds to reduce frequency
 
         return () => clearInterval(healthCheckInterval);
-    }, [listening, aiSpeaking, useWebkitVAD, useFallbackVAD, vadInitialized, fallbackVADInitialized]);
+    }, [listening, aiSpeaking, useWebkitVAD, useFallbackVAD, vadInitialized, fallbackVADInitialized, checkVADStatus]);
 
     // Click outside handler for language and voice dropdowns
     useEffect(() => {

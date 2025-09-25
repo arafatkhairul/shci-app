@@ -176,16 +176,24 @@ export class WebkitVADService {
       return true;
     } catch (error) {
       console.error('Failed to start VAD:', error);
-      this.callbacks.onError?.('Failed to start speech recognition');
       
-      // Try to reinitialize if start fails
-      setTimeout(() => {
-        this.initialize().then((success) => {
-          if (success) {
-          }
-        });
-      }, 1000);
+      // Handle specific error types
+      if (error instanceof Error) {
+        if (error.name === 'InvalidStateError') {
+          console.warn('Speech recognition already started, marking as listening');
+          this.isListening = true;
+          this.callbacks.onStateChange?.(true);
+          return true;
+        } else if (error.name === 'NotAllowedError') {
+          this.callbacks.onError?.('Microphone access denied');
+        } else {
+          this.callbacks.onError?.(`Failed to start: ${error.message}`);
+        }
+      } else {
+        this.callbacks.onError?.('Failed to start speech recognition');
+      }
       
+      // Don't try to reinitialize immediately to prevent loops
       return false;
     }
   }
