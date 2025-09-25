@@ -86,12 +86,14 @@ class WhisperSTTService:
             
             # Load model in a separate thread to avoid blocking
             loop = asyncio.get_event_loop()
+            compute_type = "float16" if self.device != "cpu" else "int8"
             self.model = await loop.run_in_executor(
                 None, 
-                WhisperModel, 
-                self.model_size, 
-                self.device,
-                compute_type="float16" if self.device != "cpu" else "int8"
+                lambda: WhisperModel(
+                    self.model_size, 
+                    self.device,
+                    compute_type=compute_type
+                )
             )
             
             self.is_initialized = True
@@ -108,10 +110,11 @@ class WhisperSTTService:
                     self.device = "cpu"
                     self.model = await loop.run_in_executor(
                         None, 
-                        WhisperModel, 
-                        self.model_size, 
-                        "cpu",
-                        compute_type="int8"
+                        lambda: WhisperModel(
+                            self.model_size, 
+                            "cpu",
+                            compute_type="int8"
+                        )
                     )
                     self.is_initialized = True
                     logger.info(f"Whisper model loaded successfully on CPU (fallback)")
@@ -126,10 +129,11 @@ class WhisperSTTService:
                     self.device = "cpu"
                     self.model = await loop.run_in_executor(
                         None, 
-                        WhisperModel, 
-                        self.model_size, 
-                        "cpu",
-                        compute_type="int8"
+                        lambda: WhisperModel(
+                            self.model_size, 
+                            "cpu",
+                            compute_type="int8"
+                        )
                     )
                     self.is_initialized = True
                     logger.info(f"Whisper model loaded successfully on CPU (fallback)")
