@@ -27,7 +27,7 @@ import {
     FaCheck
 } from "react-icons/fa";
 import RolePlayAnswers from "./RolePlayAnswers";
-import WhisperSTTService, { WhisperSTTConfig, WhisperSTTCallbacks } from "../services/WhisperSTTService";
+import { RealtimeSTTService, RealtimeSTTConfig, RealtimeSTTCallbacks, defaultRealtimeSTTConfig, defaultRealtimeSTTCallbacks } from "../services/RealtimeSTTService";
 
 export default function VoiceAgent() {
     // ---------- State ----------
@@ -41,12 +41,12 @@ export default function VoiceAgent() {
     // Default: server TTS ON (local TTS OFF)
     const [useLocalTTS, setUseLocalTTS] = useState(false);
 
-    // Whisper STT Service State
-    const [useWhisperSTT, setUseWhisperSTT] = useState(false);
-    const [whisperSTTSupported, setWhisperSTTSupported] = useState(false);
-    const [whisperSTTInitialized, setWhisperSTTInitialized] = useState(false);
-    const [whisperTranscript, setWhisperTranscript] = useState("");
-    const [whisperConfidence, setWhisperConfidence] = useState(0);
+    // RealtimeSTT Service State
+    const [useRealtimeSTT, setUseRealtimeSTT] = useState(false);
+    const [realtimeSTTSupported, setRealtimeSTTSupported] = useState(false);
+    const [realtimeSTTInitialized, setRealtimeSTTInitialized] = useState(false);
+    const [realtimeTranscript, setRealtimeTranscript] = useState("");
+    const [realtimeConfidence, setRealtimeConfidence] = useState(0);
     const [detectedLanguage, setDetectedLanguage] = useState<string>("");
 
     // Real-time Transcription State
@@ -227,7 +227,7 @@ export default function VoiceAgent() {
     const audioCtx = useRef<AudioContext | null>(null);
     const sourceNode = useRef<MediaStreamAudioSourceNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
-    const whisperSTTService = useRef<WhisperSTTService | null>(null);
+    const realtimeSTTService = useRef<RealtimeSTTService | null>(null);
     const workletNode = useRef<AudioWorkletNode | null>(null);
     const processorNode = useRef<ScriptProcessorNode | null>(null);
     const analyser = useRef<AnalyserNode | null>(null);
@@ -558,27 +558,31 @@ export default function VoiceAgent() {
     }, [aiText]); // Remove displayedAiText from dependencies to prevent infinite loop
 
 
-    // ---------- Whisper STT Service Configuration ----------
-    const whisperSTTConfig: WhisperSTTConfig = {
+    // ---------- RealtimeSTT Service Configuration ----------
+    const realtimeSTTConfig: RealtimeSTTConfig = {
+        model: 'base.en',
         language: selectedLanguage === 'en' ? 'en' : 'it',
-        task: 'transcribe',
+        useMicrophone: true,
+        postSpeechSilenceDuration: 1.0,
+        spinner: false,
+        enableRealtimeTranscription: true,
+        enableFinalTranscription: true,
         sampleRate: 16000,
-        chunkSize: 1024,
-        continuous: true
+        chunkSize: 1024
     };
 
-    const whisperSTTCallbacks: WhisperSTTCallbacks = {
-        onTranscription: (transcript: string, confidence: number, isFinal: boolean) => {
-            console.log('Whisper STT: Transcription received', { transcript, confidence, isFinal });
-            
-            setWhisperTranscript(transcript);
-            setWhisperConfidence(confidence);
-            
+    const realtimeSTTCallbacks: RealtimeSTTCallbacks = {
+        onRealtimeTranscription: (transcript: string, confidence: number, isFinal: boolean) => {
+            console.log('RealtimeSTT: Realtime transcription received', { transcript, confidence, isFinal });
+
+            setRealtimeTranscript(transcript);
+            setRealtimeConfidence(confidence);
+
             if (isFinal && transcript.trim()) {
                 setTranscript(transcript);
                 setFinalTranscript(transcript);
                 setInterimTranscript("");
-                
+
                 // Send to backend if WebSocket is connected
                 if (ws.current?.readyState === WebSocket.OPEN) {
                     try {
@@ -587,23 +591,28 @@ export default function VoiceAgent() {
                             message: transcript,
                             timestamp: new Date().toISOString(),
                             confidence: confidence,
-                            source: "whisper_stt"
+                            source: "realtime_stt"
                         }));
-                        console.log('Whisper STT: Message sent to backend:', transcript);
+                        console.log('RealtimeSTT: Message sent to backend:', transcript);
                     } catch (error) {
-                        console.error('Whisper STT: Failed to send message:', error);
+                        console.error('RealtimeSTT: Failed to send message:', error);
                     }
                 }
             } else {
                 setInterimTranscript(transcript);
             }
         },
+        onFinalTranscription: (transcript: string, confidence: number) => {
+            console.log('RealtimeSTT: Final transcription received', { transcript, confidence });
+            setRealtimeTranscript(transcript);
+            setRealtimeConfidence(confidence);
+        },
         onError: (error: string) => {
-            console.error('Whisper STT Error:', error);
-            setStatus(`Whisper STT Error: ${error}`);
+            console.error('RealtimeSTT Error:', error);
+            setStatus(`RealtimeSTT Error: ${error}`);
         },
         onStateChange: (isRecording: boolean) => {
-            console.log('Whisper STT State changed:', isRecording);
+            console.log('RealtimeSTT State changed:', isRecording);
             if (isRecording) {
                 setListening(true);
                 setStatus(currentLang.status.listening);
@@ -614,7 +623,7 @@ export default function VoiceAgent() {
             }
         },
         onLanguageDetected: (language: string) => {
-            console.log('Whisper STT: Language detected:', language);
+            console.log('RealtimeSTT: Language detected:', language);
             setDetectedLanguage(language);
         }
     };
@@ -685,136 +694,136 @@ export default function VoiceAgent() {
     }, [organizationContext, sendPrefs]);
 
 
-    // ---------- Whisper STT Service Management ----------
-    const initializeWhisperSTT = useCallback(async () => {
-        if (!whisperSTTService.current) {
-            whisperSTTService.current = new WhisperSTTService(whisperSTTConfig, whisperSTTCallbacks);
+    // ---------- RealtimeSTT Service Management ----------
+    const initializeRealtimeSTT = useCallback(async () => {
+        if (!realtimeSTTService.current) {
+            realtimeSTTService.current = new RealtimeSTTService(realtimeSTTConfig, realtimeSTTCallbacks);
         }
 
-        const success = await whisperSTTService.current.initialize();
-        setWhisperSTTSupported(success);
-        setWhisperSTTInitialized(success);
+        const success = await realtimeSTTService.current.initialize();
+        setRealtimeSTTSupported(success);
+        setRealtimeSTTInitialized(success);
 
         if (success) {
-            console.log('Whisper STT Service initialized successfully');
+            console.log('RealtimeSTT Service initialized successfully');
         } else {
-            console.log('Whisper STT Service not supported or failed to initialize');
+            console.log('RealtimeSTT Service not supported or failed to initialize');
         }
 
         return success;
-    }, [whisperSTTConfig, whisperSTTCallbacks]);
+    }, [realtimeSTTConfig, realtimeSTTCallbacks]);
 
-    const startWhisperSTT = useCallback(async () => {
-        console.log('🎤 Starting Whisper STT service...', {
-            whisperSTTAvailable: !!whisperSTTService.current,
-            whisperSTTInitialized: whisperSTTInitialized
+    const startRealtimeSTT = useCallback(async () => {
+        console.log('🎤 Starting RealtimeSTT service...', {
+            realtimeSTTAvailable: !!realtimeSTTService.current,
+            realtimeSTTInitialized: realtimeSTTInitialized
         });
 
-        if (whisperSTTService.current && whisperSTTInitialized) {
-            const success = await whisperSTTService.current.start();
+        if (realtimeSTTService.current && realtimeSTTInitialized) {
+            const success = await realtimeSTTService.current.start();
             if (success) {
-                setUseWhisperSTT(true);
+                setUseRealtimeSTT(true);
                 setListening(true);
                 setStatus(currentLang.status.listening);
             } else {
-                console.log('❌ Failed to start Whisper STT');
+                console.log('❌ Failed to start RealtimeSTT');
             }
             return success;
         }
         return false;
-    }, [whisperSTTInitialized]);
+    }, [realtimeSTTInitialized]);
 
-    const stopWhisperSTT = useCallback(() => {
-        if (whisperSTTService.current) {
-            whisperSTTService.current.stop();
-            setUseWhisperSTT(false);
-            setWhisperTranscript("");
-            setWhisperConfidence(0);
+    const stopRealtimeSTT = useCallback(() => {
+        if (realtimeSTTService.current) {
+            realtimeSTTService.current.stop();
+            setUseRealtimeSTT(false);
+            setRealtimeTranscript("");
+            setRealtimeConfidence(0);
             setListening(false);
             setStatus(currentLang.status.connected);
-            console.log('Whisper STT stopped');
+            console.log('RealtimeSTT stopped');
         }
     }, []);
 
-    const toggleWhisperSTT = useCallback(() => {
-        if (useWhisperSTT) {
-            stopWhisperSTT();
+    const toggleRealtimeSTT = useCallback(() => {
+        if (useRealtimeSTT) {
+            stopRealtimeSTT();
         } else {
-            startWhisperSTT();
+            startRealtimeSTT();
         }
-    }, [useWhisperSTT, startWhisperSTT, stopWhisperSTT]);
+    }, [useRealtimeSTT, startRealtimeSTT, stopRealtimeSTT]);
 
-    // Update Whisper STT config when language changes
+    // Update RealtimeSTT config when language changes
     useEffect(() => {
-        if (whisperSTTService.current && whisperSTTInitialized) {
-            whisperSTTService.current.updateConfig({
+        if (realtimeSTTService.current && realtimeSTTInitialized) {
+            realtimeSTTService.current.updateConfig({
                 language: selectedLanguage === 'en' ? 'en' : 'it'
             });
         }
-    }, [selectedLanguage, whisperSTTInitialized]);
+    }, [selectedLanguage, realtimeSTTInitialized]);
 
-    // Monitor TTS speaking state - Pause Whisper STT during AI speaking
+    // Monitor TTS speaking state - Pause RealtimeSTT during AI speaking
     useEffect(() => {
         if (aiSpeaking) {
-            // Pause Whisper STT during audio playback to prevent feedback
-            console.log('🔇 Pausing Whisper STT during AI speaking to prevent audio loop');
-            if (useWhisperSTT && whisperSTTService.current) {
-                whisperSTTService.current.stop();
-                console.log('🔇 Whisper STT paused');
+            // Pause RealtimeSTT during audio playback to prevent feedback
+            console.log('🔇 Pausing RealtimeSTT during AI speaking to prevent audio loop');
+            if (useRealtimeSTT && realtimeSTTService.current) {
+                realtimeSTTService.current.stop();
+                console.log('🔇 RealtimeSTT paused');
             }
         } else {
-            // Restart Whisper STT after audio playback
-            console.log('🔊 Scheduling Whisper STT restart after AI speaking ends');
-            
+            // Restart RealtimeSTT after audio playback
+            console.log('🔊 Scheduling RealtimeSTT restart after AI speaking ends');
+
             const restartDelay = isMobile ? 3000 : 2000; // 3 seconds for mobile, 2 for desktop
-            
+
             setTimeout(async () => {
-                if (listening && !aiSpeaking && useWhisperSTT && whisperSTTService.current) {
-                    console.log('🔊 Restarting Whisper STT after audio playback');
+                if (listening && !aiSpeaking && useRealtimeSTT && realtimeSTTService.current) {
+                    console.log('🔊 Restarting RealtimeSTT after audio playback');
                     try {
-                        const success = await whisperSTTService.current.start();
+                        const success = await realtimeSTTService.current.start();
                         if (success) {
-                            console.log('🔊 Whisper STT restarted successfully');
+                            console.log('🔊 RealtimeSTT restarted successfully');
                         } else {
-                            console.log('❌ Failed to restart Whisper STT');
+                            console.log('❌ Failed to restart RealtimeSTT');
                         }
                     } catch (error) {
-                        console.log('Failed to restart Whisper STT:', error);
+                        console.log('Failed to restart RealtimeSTT:', error);
                     }
                 }
             }, restartDelay);
         }
-    }, [aiSpeaking, useWhisperSTT, listening, whisperSTTInitialized, isMobile]);
+    }, [aiSpeaking, useRealtimeSTT, listening, realtimeSTTInitialized, isMobile]);
 
-    // Whisper STT Health Check - Ensure speech recognition continues working
+    // RealtimeSTT Health Check - Ensure speech recognition continues working
     useEffect(() => {
         if (!listening) return;
 
-        const healthCheckInterval = setInterval(() => {
-            if (listening && !aiSpeaking && useWhisperSTT && whisperSTTService.current) {
-                const status = whisperSTTService.current.getStatus();
-                
-                console.log('🔍 Whisper STT Health Check:', {
-                    isRecording: status.isRecording,
-                    isConnected: status.isConnected,
-                    isInitialized: status.isInitialized
+        const healthCheckInterval = setInterval(async () => {
+            if (listening && !aiSpeaking && useRealtimeSTT && realtimeSTTService.current) {
+                const status = await realtimeSTTService.current.getStatus();
+
+                console.log('🔍 RealtimeSTT Health Check:', {
+                    isRecording: status?.isRecording,
+                    isConnected: status?.isConnected,
+                    isInitialized: status?.isInitialized
                 });
 
-                // If Whisper STT should be active but isn't, restart it
-                if (!status.isRecording && status.isInitialized) {
-                    console.log('🔄 Whisper STT not recording - restarting...');
+                // If RealtimeSTT should be active but isn't, restart it
+                if (status && !status.isRecording && status.isInitialized) {
+                    console.log('🔄 RealtimeSTT not recording - restarting...');
                     try {
-                        whisperSTTService.current.start();
-                        console.log('✅ Whisper STT restarted via health check');
+                        await realtimeSTTService.current.start();
+                        console.log('✅ RealtimeSTT restarted via health check');
                     } catch (error) {
-                        console.log('❌ Failed to restart Whisper STT via health check:', error);
+                        console.log('❌ Failed to restart RealtimeSTT via health check:', error);
                     }
                 }
             }
         }, 10000); // Check every 10 seconds
 
         return () => clearInterval(healthCheckInterval);
-    }, [listening, aiSpeaking, useWhisperSTT, whisperSTTInitialized]);
+    }, [listening, aiSpeaking, useRealtimeSTT, realtimeSTTInitialized]);
 
     // Click outside handler for language and voice dropdowns
     useEffect(() => {
@@ -1069,7 +1078,7 @@ export default function VoiceAgent() {
         // roleTitle
     ]); // Removed role play dependencies to prevent re-renders
 
-    // Initialize VAD services on component mount (only once)
+    // Initialize RealtimeSTT service on component mount (only once)
     useEffect(() => {
         let isInitialized = false;
 
@@ -1077,17 +1086,17 @@ export default function VoiceAgent() {
             if (isInitialized) return;
             isInitialized = true;
 
-            // Initialize Whisper STT
-            await initializeWhisperSTT();
+            // Initialize RealtimeSTT
+            await initializeRealtimeSTT();
         };
 
         initializeServices();
 
         // Cleanup on unmount
         return () => {
-            if (whisperSTTService.current) {
-                whisperSTTService.current.destroy();
-                whisperSTTService.current = null;
+            if (realtimeSTTService.current) {
+                realtimeSTTService.current.destroy();
+                realtimeSTTService.current = null;
             }
         };
     }, []); // Empty dependency array to run only once
@@ -1769,39 +1778,39 @@ export default function VoiceAgent() {
         // Force mic level reset
         updateMicLevel(0, 'reset');
 
-        // Auto-activate Whisper STT if available and not already active
-        if (whisperSTTSupported && whisperSTTInitialized && !useWhisperSTT && whisperSTTService.current) {
-            const success = await startWhisperSTT();
-            if (success) {
-                setUseWhisperSTT(true);
-                setListening(true);
-                setStatus(currentLang.status.listening);
-                setShowTranscription(true);
-                return;
+            // Auto-activate RealtimeSTT if available and not already active
+            if (realtimeSTTSupported && realtimeSTTInitialized && !useRealtimeSTT && realtimeSTTService.current) {
+                const success = await startRealtimeSTT();
+                if (success) {
+                    setUseRealtimeSTT(true);
+                    setListening(true);
+                    setStatus(currentLang.status.listening);
+                    setShowTranscription(true);
+                    return;
+                }
             }
-        }
 
-        console.log("🚀 START MIC INITIATED:", {
-            timestamp: new Date().toLocaleTimeString(),
-            useWhisperSTT,
-            whisperSTTSupported,
-            whisperSTTInitialized,
-            whisperSTTServiceExists: !!whisperSTTService.current
-        });
+            console.log("🚀 START MIC INITIATED:", {
+                timestamp: new Date().toLocaleTimeString(),
+                useRealtimeSTT,
+                realtimeSTTSupported,
+                realtimeSTTInitialized,
+                realtimeSTTServiceExists: !!realtimeSTTService.current
+            });
 
-        // If Whisper STT is enabled, use Whisper STT service
-        if (useWhisperSTT && whisperSTTService.current) {
-            const success = await startWhisperSTT();
-            if (success) {
-                setListening(true);
-                setStatus(currentLang.status.listening);
-                setShowTranscription(true);
-                console.log("✅ Whisper STT Started Successfully");
-                return;
-            } else {
-                console.log("❌ Whisper STT Failed to Start");
+            // If RealtimeSTT is enabled, use RealtimeSTT service
+            if (useRealtimeSTT && realtimeSTTService.current) {
+                const success = await startRealtimeSTT();
+                if (success) {
+                    setListening(true);
+                    setStatus(currentLang.status.listening);
+                    setShowTranscription(true);
+                    console.log("✅ RealtimeSTT Started Successfully");
+                    return;
+                } else {
+                    console.log("❌ RealtimeSTT Failed to Start");
+                }
             }
-        }
         try {
             // Mobile-specific: Enhanced audio constraints for better mobile performance
             const audioConstraints = isMobile ? {
@@ -2091,10 +2100,10 @@ export default function VoiceAgent() {
 
     // ---------- Stop mic ----------
     const stopMic = () => {
-        console.log("stopMic called, listening:", listening, "useWhisperSTT:", useWhisperSTT);
-        // If Whisper STT is enabled, stop Whisper STT service
-        if (useWhisperSTT && whisperSTTService.current) {
-            stopWhisperSTT();
+        console.log("stopMic called, listening:", listening, "useRealtimeSTT:", useRealtimeSTT);
+        // If RealtimeSTT is enabled, stop RealtimeSTT service
+        if (useRealtimeSTT && realtimeSTTService.current) {
+            stopRealtimeSTT();
             setListening(false);
             setStatus(currentLang.status.connected);
             return;
@@ -3366,61 +3375,61 @@ export default function VoiceAgent() {
                                                 </div>
                                             </div>
 
-                                            {/* Minimal Status Indicators */}
-                                            <div className="flex items-center gap-1">
-                                                {useWhisperSTT && (
-                                                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
-                                                        <div className="w-1 h-1 bg-emerald-400 rounded-full" />
-                                                        <span className="text-xs text-emerald-300">Whisper STT</span>
-                                                    </div>
-                                                )}
-                                                {listening && (
-                                                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
-                                                        <div className="w-1 h-1 bg-blue-400 rounded-full" />
-                                                        <span className="text-xs text-blue-300">Live</span>
-                                                    </div>
-                                                )}
-                                            </div>
+        {/* Minimal Status Indicators */}
+        <div className="flex items-center gap-1">
+            {useRealtimeSTT && (
+                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
+                    <div className="w-1 h-1 bg-emerald-400 rounded-full" />
+                    <span className="text-xs text-emerald-300">RealtimeSTT</span>
+                </div>
+            )}
+            {listening && (
+                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
+                    <div className="w-1 h-1 bg-blue-400 rounded-full" />
+                    <span className="text-xs text-blue-300">Live</span>
+                </div>
+            )}
+        </div>
                                         </div>
                                     </div>
 
                                     {/* Soft Organized Content */}
                                     <div className="relative p-5 min-h-[180px]">
-                                        {/* Soft Live Processing */}
-                                        {useWhisperSTT && (
-                                            <div className="mb-4">
-                                                <div className="relative group">
-                                                    {/* Soft Live Container */}
-                                                    <div className="min-h-[60px] p-3 bg-white/[0.02] rounded-xl border border-white/6 hover:border-white/8 transition-all duration-300 shadow-sm hover:shadow-md">
-                                                        {interimTranscript && (
-                                                            <div className="text-sm text-blue-300 italic leading-relaxed">
-                                                                {interimTranscript}
-                                                                <span className="animate-pulse text-blue-400 ml-1">|</span>
-                                                            </div>
-                                                        )}
-                                                        {!interimTranscript && !finalTranscript && (
-                                                            <div className="text-sm text-zinc-500 italic leading-relaxed">
-                                                                {listening ? "Listening..." : "Ready"}
-                                                            </div>
-                                                        )}
-                                                        {finalTranscript && !interimTranscript && (
-                                                            <div className="text-sm text-zinc-500 italic leading-relaxed">
-                                                                Processing complete...
-                                                            </div>
-                                                        )}
-                                                    </div>
+        {/* Soft Live Processing */}
+        {useRealtimeSTT && (
+            <div className="mb-4">
+                <div className="relative group">
+                    {/* Soft Live Container */}
+                    <div className="min-h-[60px] p-3 bg-white/[0.02] rounded-xl border border-white/6 hover:border-white/8 transition-all duration-300 shadow-sm hover:shadow-md">
+                        {interimTranscript && (
+                            <div className="text-sm text-blue-300 italic leading-relaxed">
+                                {interimTranscript}
+                                <span className="animate-pulse text-blue-400 ml-1">|</span>
+                            </div>
+                        )}
+                        {!interimTranscript && !finalTranscript && (
+                            <div className="text-sm text-zinc-500 italic leading-relaxed">
+                                {listening ? "Listening..." : "Ready"}
+                            </div>
+                        )}
+                        {finalTranscript && !interimTranscript && (
+                            <div className="text-sm text-zinc-500 italic leading-relaxed">
+                                Processing complete...
+                            </div>
+                        )}
+                    </div>
 
-                                                    {/* Soft Confidence Badge */}
-                                                    {whisperConfidence > 0 && (
-                                                        <div className="absolute -top-1 -right-1 px-2 py-1 bg-white/[0.05] border border-white/8 rounded-lg backdrop-blur-sm shadow-sm">
-                                                            <span className="text-xs text-zinc-400 font-medium">
-                                                                {(whisperConfidence * 100).toFixed(0)}%
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
+                    {/* Soft Confidence Badge */}
+                    {realtimeConfidence > 0 && (
+                        <div className="absolute -top-1 -right-1 px-2 py-1 bg-white/[0.05] border border-white/8 rounded-lg backdrop-blur-sm shadow-sm">
+                            <span className="text-xs text-zinc-400 font-medium">
+                                {(realtimeConfidence * 100).toFixed(0)}%
+                            </span>
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
 
                                         {transcript ? (
                                             <div className="space-y-3">
@@ -3451,9 +3460,9 @@ export default function VoiceAgent() {
                                                     <p className="text-xs font-medium mb-1 text-zinc-400">
                                                         {currentLang.labels.readyToCapture}
                                                     </p>
-                                                    <p className="text-xs text-zinc-600 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/6">
-                                                        {useWhisperSTT ? "Whisper STT Active" : "Start Conversation"}
-                                                    </p>
+        <p className="text-xs text-zinc-600 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/6">
+            {useRealtimeSTT ? "RealtimeSTT Active" : "Start Conversation"}
+        </p>
                                                 </div>
                                             </div>
                                         )}

@@ -67,8 +67,8 @@ numpy==1.26.4
 # Audio file creation and processing
 # wave, tempfile, inspect - Python standard library modules
 
-# Faster Whisper for Speech-to-Text (STT) - Optimized performance
-faster-whisper==1.1.1
+# RealtimeSTT for Professional Real-time Speech Recognition
+RealtimeSTT==0.3.104
 
 # Audio processing for Whisper
 librosa==0.10.1

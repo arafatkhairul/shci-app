@@ -7,6 +7,7 @@ from .roleplay import router as roleplay_router
 from .health import router as health_router
 from .memory import router as memory_router
 from .stt import router as stt_router
+from .realtime_stt import router as realtime_stt_router
 
 router = APIRouter()
 
@@ -16,3 +17,4 @@ router.include_router(roleplay_router, prefix="/roleplay", tags=["Role Play"])
 router.include_router(health_router, prefix="/health", tags=["Health"])
 router.include_router(memory_router, prefix="/memory", tags=["Memory"])
 router.include_router(stt_router, prefix="/stt", tags=["Speech-to-Text"])
+router.include_router(realtime_stt_router, prefix="/realtime-stt", tags=["Realtime Speech-to-Text"])
