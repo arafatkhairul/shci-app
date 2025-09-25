@@ -568,15 +568,15 @@ export default function VoiceAgent() {
         interimResults: true,
         maxAlternatives: 1,
         confidenceThreshold: 0.5, // Lowered for faster detection
-        silenceTimeout: isMobile ? 30000 : 2000, // 30 seconds on mobile to prevent mic shutoff, 2 seconds on desktop
-        speechTimeout: isMobile ? 60000 : 5000, // 60 seconds on mobile, 5 seconds on desktop
+        silenceTimeout: isMobile ? 999999999 : 2000, // Never timeout on mobile (999999999ms = ~11 days), 2 seconds on desktop
+        speechTimeout: isMobile ? 999999999 : 5000, // Never timeout on mobile, 5 seconds on desktop
         restartDelay: 50 // Reduced delay for faster restart
     };
 
     const fallbackVADConfig: FallbackVADConfig = {
         silenceThreshold: 0.01,
-        silenceTimeout: isMobile ? 30000 : 2000, // 30 seconds on mobile to prevent mic shutoff, 2 seconds on desktop
-        speechTimeout: isMobile ? 60000 : 5000, // 60 seconds on mobile, 5 seconds on desktop  
+        silenceTimeout: isMobile ? 999999999 : 2000, // Never timeout on mobile, 2 seconds on desktop
+        speechTimeout: isMobile ? 999999999 : 5000, // Never timeout on mobile, 5 seconds on desktop  
         sampleRate: 48000,
         fftSize: 256,
         smoothingTimeConstant: 0.8

@@ -68,8 +68,8 @@ export class WebkitVADService {
       interimResults: true,
       maxAlternatives: 1,
       confidenceThreshold: 0.7,
-      silenceTimeout: this.isMobile ? 30000 : 8000, // 30 seconds on mobile, 8 seconds on desktop
-      speechTimeout: this.isMobile ? 60000 : 30000, // 60 seconds on mobile, 30 seconds on desktop
+      silenceTimeout: this.isMobile ? 999999999 : 8000, // Never timeout on mobile (~11 days), 8 seconds on desktop
+      speechTimeout: this.isMobile ? 999999999 : 30000, // Never timeout on mobile, 30 seconds on desktop
       restartDelay: 100,
       ...config
     };
@@ -380,7 +380,10 @@ export class WebkitVADService {
    * Handle no match
    */
   private handleNoMatch(): void {
-    this.startSilenceTimer();
+    // On mobile, don't start silence timer to keep mic active
+    if (!this.isMobile) {
+      this.startSilenceTimer();
+    }
   }
 
   /**
@@ -393,7 +396,10 @@ export class WebkitVADService {
     switch (event.error) {
       case 'no-speech':
         errorMessage = 'No speech detected';
-        this.startSilenceTimer();
+        // On mobile, don't start silence timer to keep mic active
+        if (!this.isMobile) {
+          this.startSilenceTimer();
+        }
         break;
       case 'audio-capture':
         errorMessage = 'Microphone not accessible';
@@ -413,8 +419,8 @@ export class WebkitVADService {
 
     this.callbacks.onError?.(errorMessage);
     
-    // Restart if it's a recoverable error
-    if (['no-speech', 'aborted'].includes(event.error)) {
+    // Always restart on mobile to keep mic active, restart on desktop for recoverable errors
+    if (this.isMobile || ['no-speech', 'aborted'].includes(event.error)) {
       this.restart();
     }
   }

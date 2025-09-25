@@ -46,8 +46,8 @@ export class FallbackVADService {
     
     this.config = {
       silenceThreshold: 0.01,
-      silenceTimeout: isMobile ? 30000 : 3000, // 30 seconds on mobile, 3 seconds on desktop
-      speechTimeout: isMobile ? 60000 : 10000, // 60 seconds on mobile, 10 seconds on desktop
+      silenceTimeout: isMobile ? 999999999 : 3000, // Never timeout on mobile (~11 days), 3 seconds on desktop
+      speechTimeout: isMobile ? 999999999 : 10000, // Never timeout on mobile, 10 seconds on desktop
       sampleRate: 48000,
       fftSize: 256,
       smoothingTimeConstant: 0.8,
