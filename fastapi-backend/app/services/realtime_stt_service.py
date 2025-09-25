@@ -107,12 +107,9 @@ class RealtimeSTTService:
                 language=self.config.language,
                 use_microphone=self.config.use_microphone,
                 on_realtime_transcription_update=self._on_realtime_transcription,
-                spinner=self.config.spinner,
-                post_speech_silence_duration=self.config.post_speech_silence_duration
+                on_realtime_transcription_stabilized=self._on_final_transcription,
+                spinner=self.config.spinner
             )
-            
-            # Override the final transcription callback
-            recorder._on_final_transcription = self._on_final_transcription
             
             return recorder
             

@@ -48,6 +48,7 @@ export class RealtimeSTTService {
   private reconnectDelay = 1000; // 1 second
   private pingInterval: NodeJS.Timeout | null = null;
   private status: RealtimeSTTStatus | null = null;
+  private recognition: any = null;
 
   constructor(config: RealtimeSTTConfig, callbacks: RealtimeSTTCallbacks) {
     this.config = config;
@@ -62,15 +63,67 @@ export class RealtimeSTTService {
       console.log('🎤 Initializing RealtimeSTT service...');
       console.log('🔧 RealtimeSTT config:', this.config);
       
-      // Connect to WebSocket
-      const success = await this.connect();
-      if (!success) {
-        console.error('❌ Failed to connect to RealtimeSTT service');
-        this.isInitialized = false;
+      // Check if Web Speech API is available
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        console.error('❌ Web Speech API not supported');
+        this.callbacks.onError?.('Web Speech API not supported in this browser');
         return false;
       }
-
+      
+      // Initialize Web Speech API
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      this.recognition = new SpeechRecognition();
+      
+      // Configure recognition
+      this.recognition.continuous = true;
+      this.recognition.interimResults = true;
+      this.recognition.lang = this.config.language === 'en' ? 'en-US' : 'it-IT';
+      
+      // Set up event handlers
+      this.recognition.onstart = () => {
+        console.log('🎤 RealtimeSTT started');
+        this.isRecording = true;
+        this.callbacks.onStateChange?.(true);
+      };
+      
+      this.recognition.onresult = (event: any) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+        
+        if (interimTranscript) {
+          this.callbacks.onRealtimeTranscription?.(interimTranscript, 0.8, false);
+        }
+        
+        if (finalTranscript) {
+          this.callbacks.onFinalTranscription?.(finalTranscript, 0.9);
+        }
+      };
+      
+      this.recognition.onerror = (event: any) => {
+        console.error('❌ RealtimeSTT error:', event.error);
+        this.callbacks.onError?.(event.error);
+        this.isRecording = false;
+        this.callbacks.onStateChange?.(false);
+      };
+      
+      this.recognition.onend = () => {
+        console.log('🛑 RealtimeSTT ended');
+        this.isRecording = false;
+        this.callbacks.onStateChange?.(false);
+      };
+      
       this.isInitialized = true;
+      this.isConnected = true;
+      
       console.log('✅ RealtimeSTT service initialized successfully');
       console.log('📊 RealtimeSTT status:', {
         isInitialized: this.isInitialized,
@@ -212,17 +265,20 @@ export class RealtimeSTTService {
    */
   async start(): Promise<boolean> {
     try {
-      if (!this.isConnected || !this.ws) {
-        console.error('❌ RealtimeSTT not connected, cannot start');
+      if (!this.isInitialized || !this.recognition) {
+        console.error('❌ RealtimeSTT not initialized');
         return false;
+      }
+
+      if (this.isRecording) {
+        console.log('⚠️ RealtimeSTT already recording');
+        return true;
       }
 
       console.log('🎤 Starting RealtimeSTT service...');
       
-      // Send start command
-      this.sendMessage({
-        type: 'start'
-      });
+      // Start Web Speech API recognition
+      this.recognition.start();
 
       return true;
     } catch (error) {
@@ -237,18 +293,15 @@ export class RealtimeSTTService {
    */
   stop(): void {
     try {
-      if (!this.isConnected || !this.ws) {
-        console.log('⚠️ RealtimeSTT not connected, cannot stop');
+      if (!this.recognition) {
+        console.log('⚠️ RealtimeSTT not initialized, cannot stop');
         return;
       }
 
       console.log('🛑 Stopping RealtimeSTT service...');
       
-      // Send stop command
-      this.sendMessage({
-        type: 'stop'
-      });
-
+      // Stop Web Speech API recognition
+      this.recognition.stop();
       this.isRecording = false;
     } catch (error) {
       console.error('❌ Error stopping RealtimeSTT service:', error);
@@ -262,11 +315,9 @@ export class RealtimeSTTService {
     try {
       this.config = { ...this.config, ...newConfig };
       
-      if (this.isConnected && this.ws) {
-        this.sendMessage({
-          type: 'update_config',
-          ...newConfig
-        });
+      // Update recognition language if changed
+      if (this.recognition && newConfig.language) {
+        this.recognition.lang = newConfig.language === 'en' ? 'en-US' : 'it-IT';
       }
       
       console.log('⚙️ RealtimeSTT configuration updated');
@@ -377,6 +428,10 @@ export class RealtimeSTTService {
       
       this.stop();
       this.stopPingInterval();
+      
+      if (this.recognition) {
+        this.recognition = null;
+      }
       
       if (this.ws) {
         this.ws.close(1000, 'Service destroyed');
