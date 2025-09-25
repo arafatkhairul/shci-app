@@ -137,7 +137,10 @@ class RealtimeSTTService:
             # Call user callback
             if self.callbacks.on_realtime_transcription:
                 try:
-                    self.callbacks.on_realtime_transcription(text, confidence, False)
+                    if asyncio.iscoroutinefunction(self.callbacks.on_realtime_transcription):
+                        asyncio.create_task(self.callbacks.on_realtime_transcription(text, confidence, False))
+                    else:
+                        self.callbacks.on_realtime_transcription(text, confidence, False)
                 except Exception as e:
                     logger.error(f"Error in realtime transcription callback: {e}")
                     
@@ -162,7 +165,10 @@ class RealtimeSTTService:
             # Call user callback
             if self.callbacks.on_final_transcription:
                 try:
-                    self.callbacks.on_final_transcription(text, confidence)
+                    if asyncio.iscoroutinefunction(self.callbacks.on_final_transcription):
+                        asyncio.create_task(self.callbacks.on_final_transcription(text, confidence))
+                    else:
+                        self.callbacks.on_final_transcription(text, confidence)
                 except Exception as e:
                     logger.error(f"Error in final transcription callback: {e}")
                     
@@ -202,7 +208,10 @@ class RealtimeSTTService:
                 # Notify state change
                 if self.callbacks.on_state_change:
                     try:
-                        self.callbacks.on_state_change(True)
+                        if asyncio.iscoroutinefunction(self.callbacks.on_state_change):
+                            asyncio.create_task(self.callbacks.on_state_change(True))
+                        else:
+                            self.callbacks.on_state_change(True)
                     except Exception as e:
                         logger.error(f"Error in state change callback: {e}")
                 
@@ -235,7 +244,10 @@ class RealtimeSTTService:
                 # Notify state change
                 if self.callbacks.on_state_change:
                     try:
-                        self.callbacks.on_state_change(False)
+                        if asyncio.iscoroutinefunction(self.callbacks.on_state_change):
+                            asyncio.create_task(self.callbacks.on_state_change(False))
+                        else:
+                            self.callbacks.on_state_change(False)
                     except Exception as e:
                         logger.error(f"Error in state change callback: {e}")
                 
@@ -263,7 +275,10 @@ class RealtimeSTTService:
                     logger.error(f"Error in recording loop: {e}")
                     if self.callbacks.on_error:
                         try:
-                            self.callbacks.on_error(str(e))
+                            if asyncio.iscoroutinefunction(self.callbacks.on_error):
+                                asyncio.create_task(self.callbacks.on_error(str(e)))
+                            else:
+                                self.callbacks.on_error(str(e))
                         except Exception as callback_error:
                             logger.error(f"Error in error callback: {callback_error}")
                     
