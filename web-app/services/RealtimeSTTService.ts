@@ -48,10 +48,6 @@ export class RealtimeSTTService {
   private reconnectDelay = 1000; // 1 second
   private pingInterval: NodeJS.Timeout | null = null;
   private status: RealtimeSTTStatus | null = null;
-  private recognition: any = null;
-  private shouldBeRunning = false;
-  private restartAttempts = 0;
-  private maxRestartAttempts = 10;
 
   constructor(config: RealtimeSTTConfig, callbacks: RealtimeSTTCallbacks) {
     this.config = config;
@@ -66,83 +62,14 @@ export class RealtimeSTTService {
       console.log('🎤 Initializing RealtimeSTT service...');
       console.log('🔧 RealtimeSTT config:', this.config);
       
-      // Check if Web Speech API is available
-      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-        console.error('❌ Web Speech API not supported');
-        this.callbacks.onError?.('Web Speech API not supported in this browser');
+      // Connect to WebSocket for RealtimeSTT backend
+      const success = await this.connect();
+      if (!success) {
+        console.error('❌ Failed to connect to RealtimeSTT service');
+        this.isInitialized = false;
         return false;
       }
-      
-      // Initialize Web Speech API
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      this.recognition = new SpeechRecognition();
-      
-      // Configure recognition
-      this.recognition.continuous = true;
-      this.recognition.interimResults = true;
-      this.recognition.lang = this.config.language === 'en' ? 'en-US' : 'it-IT';
-      
-      // Set up event handlers
-      this.recognition.onstart = () => {
-        console.log('🎤 RealtimeSTT started');
-        this.isRecording = true;
-        this.restartAttempts = 0; // Reset restart attempts on successful start
-        this.callbacks.onStateChange?.(true);
-      };
-      
-      this.recognition.onresult = (event: any) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
-        
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcript;
-          } else {
-            interimTranscript += transcript;
-          }
-        }
-        
-        if (interimTranscript) {
-          this.callbacks.onRealtimeTranscription?.(interimTranscript, 0.8, false);
-        }
-        
-        if (finalTranscript) {
-          this.callbacks.onFinalTranscription?.(finalTranscript, 0.9);
-        }
-      };
-      
-      this.recognition.onerror = (event: any) => {
-        console.error('❌ RealtimeSTT error:', event.error);
-        this.callbacks.onError?.(event.error);
-        this.isRecording = false;
-        this.callbacks.onStateChange?.(false);
-      };
-      
-      this.recognition.onend = () => {
-        console.log('🛑 RealtimeSTT ended');
-        this.isRecording = false;
-        this.callbacks.onStateChange?.(false);
-        
-        // Auto-restart if it was supposed to be recording
-        if (this.isInitialized && this.recognition && this.shouldBeRunning && this.restartAttempts < this.maxRestartAttempts) {
-          this.restartAttempts++;
-          console.log(`🔄 Auto-restarting RealtimeSTT... (attempt ${this.restartAttempts}/${this.maxRestartAttempts})`);
-          setTimeout(() => {
-            try {
-              if (this.shouldBeRunning && this.recognition) {
-                this.recognition.start();
-              }
-            } catch (error) {
-              console.error('❌ Error auto-restarting RealtimeSTT:', error);
-            }
-          }, 100); // Small delay to prevent rapid restarts
-        } else if (this.restartAttempts >= this.maxRestartAttempts) {
-          console.error('❌ Max restart attempts reached, stopping auto-restart');
-          this.shouldBeRunning = false;
-        }
-      };
-      
+
       this.isInitialized = true;
       this.isConnected = true;
       
@@ -287,8 +214,8 @@ export class RealtimeSTTService {
    */
   async start(): Promise<boolean> {
     try {
-      if (!this.isInitialized || !this.recognition) {
-        console.error('❌ RealtimeSTT not initialized');
+      if (!this.isConnected || !this.ws) {
+        console.error('❌ RealtimeSTT not connected, cannot start');
         return false;
       }
 
@@ -299,12 +226,10 @@ export class RealtimeSTTService {
 
       console.log('🎤 Starting RealtimeSTT service...');
       
-      // Set flag to indicate we should be running
-      this.shouldBeRunning = true;
-      this.restartAttempts = 0; // Reset restart attempts
-      
-      // Start Web Speech API recognition
-      this.recognition.start();
+      // Send start command to backend
+      this.sendMessage({
+        type: 'start'
+      });
 
       return true;
     } catch (error) {
@@ -319,18 +244,18 @@ export class RealtimeSTTService {
    */
   stop(): void {
     try {
-      if (!this.recognition) {
-        console.log('⚠️ RealtimeSTT not initialized, cannot stop');
+      if (!this.isConnected || !this.ws) {
+        console.log('⚠️ RealtimeSTT not connected, cannot stop');
         return;
       }
 
       console.log('🛑 Stopping RealtimeSTT service...');
       
-      // Clear flag to prevent auto-restart
-      this.shouldBeRunning = false;
-      
-      // Stop Web Speech API recognition
-      this.recognition.stop();
+      // Send stop command to backend
+      this.sendMessage({
+        type: 'stop'
+      });
+
       this.isRecording = false;
     } catch (error) {
       console.error('❌ Error stopping RealtimeSTT service:', error);
@@ -344,9 +269,11 @@ export class RealtimeSTTService {
     try {
       this.config = { ...this.config, ...newConfig };
       
-      // Update recognition language if changed
-      if (this.recognition && newConfig.language) {
-        this.recognition.lang = newConfig.language === 'en' ? 'en-US' : 'it-IT';
+      if (this.isConnected && this.ws) {
+        this.sendMessage({
+          type: 'update_config',
+          ...newConfig
+        });
       }
       
       console.log('⚙️ RealtimeSTT configuration updated');
@@ -458,10 +385,6 @@ export class RealtimeSTTService {
       this.stop();
       this.stopPingInterval();
       
-      if (this.recognition) {
-        this.recognition = null;
-      }
-      
       if (this.ws) {
         this.ws.close(1000, 'Service destroyed');
         this.ws = null;
@@ -470,7 +393,6 @@ export class RealtimeSTTService {
       this.isInitialized = false;
       this.isRecording = false;
       this.isConnected = false;
-      this.shouldBeRunning = false;
       
       console.log('✅ RealtimeSTT service destroyed');
     } catch (error) {
