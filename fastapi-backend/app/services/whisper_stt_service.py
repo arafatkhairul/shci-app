@@ -90,7 +90,8 @@ class WhisperSTTService:
                 None, 
                 WhisperModel, 
                 self.model_size, 
-                self.device
+                self.device,
+                compute_type="float16" if self.device != "cpu" else "int8"
             )
             
             self.is_initialized = True
@@ -109,7 +110,8 @@ class WhisperSTTService:
                         None, 
                         WhisperModel, 
                         self.model_size, 
-                        "cpu"
+                        "cpu",
+                        compute_type="int8"
                     )
                     self.is_initialized = True
                     logger.info(f"Whisper model loaded successfully on CPU (fallback)")
@@ -126,7 +128,8 @@ class WhisperSTTService:
                         None, 
                         WhisperModel, 
                         self.model_size, 
-                        "cpu"
+                        "cpu",
+                        compute_type="int8"
                     )
                     self.is_initialized = True
                     logger.info(f"Whisper model loaded successfully on CPU (fallback)")
@@ -223,7 +226,6 @@ class WhisperSTTService:
             # Prepare options for Faster Whisper (optimized for speed)
             options = {
                 "task": task,
-                "fp16": self.device != "cpu",  # Use fp16 for GPU
                 "verbose": False,
                 "beam_size": 1,  # Faster inference
                 "best_of": 1,    # Faster inference
