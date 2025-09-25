@@ -60,20 +60,28 @@ export class RealtimeSTTService {
   async initialize(): Promise<boolean> {
     try {
       console.log('🎤 Initializing RealtimeSTT service...');
+      console.log('🔧 RealtimeSTT config:', this.config);
       
       // Connect to WebSocket
       const success = await this.connect();
       if (!success) {
         console.error('❌ Failed to connect to RealtimeSTT service');
+        this.isInitialized = false;
         return false;
       }
 
       this.isInitialized = true;
       console.log('✅ RealtimeSTT service initialized successfully');
+      console.log('📊 RealtimeSTT status:', {
+        isInitialized: this.isInitialized,
+        isConnected: this.isConnected,
+        isRecording: this.isRecording
+      });
       return true;
     } catch (error) {
       console.error('❌ Error initializing RealtimeSTT service:', error);
       this.callbacks.onError?.(`Initialization failed: ${error}`);
+      this.isInitialized = false;
       return false;
     }
   }
@@ -86,6 +94,13 @@ export class RealtimeSTTService {
       try {
         const wsUrl = `${this.getWebSocketUrl()}/realtime-stt/stream`;
         console.log('🔌 Connecting to RealtimeSTT WebSocket:', wsUrl);
+        console.log('🌐 Current location:', window.location.href);
+        console.log('🔧 WebSocket URL components:', {
+          protocol: window.location.protocol,
+          hostname: window.location.hostname,
+          port: process.env.NODE_ENV === 'production' ? '' : ':8000',
+          fullUrl: wsUrl
+        });
         
         this.ws = new WebSocket(wsUrl);
         
@@ -114,6 +129,11 @@ export class RealtimeSTTService {
 
         this.ws.onerror = (error) => {
           console.error('❌ RealtimeSTT WebSocket error:', error);
+          console.error('🔍 WebSocket error details:', {
+            readyState: this.ws?.readyState,
+            url: wsUrl,
+            error: error
+          });
           this.callbacks.onError?.(`WebSocket error: ${error}`);
           resolve(false);
         };
@@ -265,7 +285,20 @@ export class RealtimeSTTService {
           type: 'get_status'
         });
       }
-      return this.status;
+      
+      // Return current status or create a default one
+      return this.status || {
+        isInitialized: this.isInitialized,
+        isRecording: this.isRecording,
+        isConnected: this.isConnected,
+        model: this.config.model,
+        language: this.config.language,
+        totalTranscriptions: 0,
+        successfulTranscriptions: 0,
+        failedTranscriptions: 0,
+        uptimeSeconds: 0,
+        successRate: 0
+      };
     } catch (error) {
       console.error('❌ Error getting RealtimeSTT status:', error);
       return null;
