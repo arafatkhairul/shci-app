@@ -61,13 +61,16 @@ class WhisperSTTService:
             try:
                 import torch
                 if torch.cuda.is_available():
+                    logger.info("🚀 CUDA detected - Using GPU acceleration")
                     return "cuda"
-                # Force CPU for Apple Silicon to avoid MPS sparse tensor issues
-                # elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                #     return "mps"  # Apple Silicon
+                elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                    logger.info("🍎 Apple Silicon detected - Using Metal Performance Shaders")
+                    return "mps"  # Apple Silicon
                 else:
+                    logger.info("💻 Using CPU fallback")
                     return "cpu"
             except ImportError:
+                logger.warning("PyTorch not available - Using CPU")
                 return "cpu"
         return device
     
@@ -100,6 +103,23 @@ class WhisperSTTService:
             # If MPS failed, try CPU as fallback
             if self.device == "mps":
                 logger.info("MPS failed, trying CPU as fallback...")
+                try:
+                    self.device = "cpu"
+                    self.model = await loop.run_in_executor(
+                        None, 
+                        whisper.load_model, 
+                        self.model_size, 
+                        "cpu"
+                    )
+                    self.is_initialized = True
+                    logger.info(f"Whisper model loaded successfully on CPU (fallback)")
+                    return True
+                except Exception as cpu_error:
+                    logger.error(f"CPU fallback also failed: {cpu_error}")
+                    return False
+            # If CUDA failed, try CPU as fallback
+            elif self.device == "cuda":
+                logger.info("CUDA failed, trying CPU as fallback...")
                 try:
                     self.device = "cpu"
                     self.model = await loop.run_in_executor(
@@ -250,7 +270,9 @@ class WhisperSTTService:
             # Try to load as WAV first
             try:
                 with io.BytesIO(audio_data) as audio_io:
-                    audio_array, sr = librosa.load(audio_io, sr=self.sample_rate)
+                    audio_array, sr = librosa.load(audio_io, sr=self.sample_rate, dtype=np.float32)
+                    # Ensure float32 dtype to avoid dtype mismatches
+                    audio_array = audio_array.astype(np.float32)
                     return audio_array
             except Exception:
                 # If WAV loading fails, try to process as raw audio
@@ -269,12 +291,13 @@ class WhisperSTTService:
                     target_length = int(len(audio_array) * self.sample_rate / 44100)  # Assume 44.1kHz input
                     if target_length != len(audio_array):
                         audio_array = np.interp(
-                            np.linspace(0, len(audio_array), target_length),
-                            np.arange(len(audio_array)),
+                            np.linspace(0, len(audio_array), target_length, dtype=np.float32),
+                            np.arange(len(audio_array), dtype=np.float32),
                             audio_array
-                        )
+                        ).astype(np.float32)
                 
-                return audio_array
+                # Ensure final dtype is float32
+                return audio_array.astype(np.float32)
                 
             except Exception as e:
                 logger.error(f"Audio processing failed: {e}")
