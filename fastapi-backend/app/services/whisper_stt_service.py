@@ -24,7 +24,7 @@ import wave
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import numpy as np
-import whisper
+from faster_whisper import WhisperModel
 import librosa
 from app.utils.logger import get_logger
 
@@ -82,13 +82,13 @@ class WhisperSTTService:
             bool: True if initialization successful, False otherwise
         """
         try:
-            logger.info(f"Loading Whisper model: {self.model_size}")
+            logger.info(f"Loading Faster Whisper model: {self.model_size}")
             
             # Load model in a separate thread to avoid blocking
             loop = asyncio.get_event_loop()
             self.model = await loop.run_in_executor(
                 None, 
-                whisper.load_model, 
+                WhisperModel, 
                 self.model_size, 
                 self.device
             )
@@ -107,7 +107,7 @@ class WhisperSTTService:
                     self.device = "cpu"
                     self.model = await loop.run_in_executor(
                         None, 
-                        whisper.load_model, 
+                        WhisperModel, 
                         self.model_size, 
                         "cpu"
                     )
@@ -124,7 +124,7 @@ class WhisperSTTService:
                     self.device = "cpu"
                     self.model = await loop.run_in_executor(
                         None, 
-                        whisper.load_model, 
+                        WhisperModel, 
                         self.model_size, 
                         "cpu"
                     )
@@ -220,21 +220,40 @@ class WhisperSTTService:
     ) -> Dict[str, Any]:
         """Transcribe audio using Whisper model."""
         try:
-            # Prepare options for Whisper
+            # Prepare options for Faster Whisper (optimized for speed)
             options = {
                 "task": task,
                 "fp16": self.device != "cpu",  # Use fp16 for GPU
-                "verbose": False
+                "verbose": False,
+                "beam_size": 1,  # Faster inference
+                "best_of": 1,    # Faster inference
+                "patience": 1,   # Faster inference
+                "length_penalty": 1.0,
+                "repetition_penalty": 1.0,
+                "no_repeat_ngram_size": 0,
+                "temperature": [0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                "compression_ratio_threshold": 2.4,
+                "log_prob_threshold": -1.0,
+                "no_speech_threshold": 0.6,
+                "condition_on_previous_text": True,
+                "prompt_reset_on_temperature": 0.5,
+                "suppress_blank": True,
+                "suppress_tokens": [-1],
+                "without_timestamps": False,
+                "word_timestamps": False,
+                "vad_filter": False,
+                "max_new_tokens": 0
             }
             
             if language:
                 options["language"] = language
             
-            # Transcribe
-            result = self.model.transcribe(audio_array, **options)
+            # Transcribe using Faster Whisper
+            segments, info = self.model.transcribe(audio_array, **options)
             
-            # Extract transcript and confidence
-            transcript = result["text"].strip()
+            # Convert segments to list and extract transcript
+            segments_list = list(segments)
+            transcript = " ".join([seg.text for seg in segments_list]).strip()
             
             # Filter out gibberish results (patterns of repeated characters/numbers)
             if self._is_gibberish(transcript):
@@ -247,21 +266,33 @@ class WhisperSTTService:
                 }
             
             # Calculate average confidence from segments
-            segments = result.get("segments", [])
-            if segments:
-                avg_confidence = np.mean([seg.get("avg_logprob", 0) for seg in segments])
+            if segments_list:
+                avg_confidence = np.mean([seg.avg_logprob for seg in segments_list])
                 # Convert log probability to confidence (0-1)
                 confidence = min(1.0, max(0.0, np.exp(avg_confidence)))
             else:
                 confidence = 0.5  # Default confidence
             
+            # Convert segments to dict format for compatibility
+            segments_dict = [
+                {
+                    "id": i,
+                    "start": seg.start,
+                    "end": seg.end,
+                    "text": seg.text,
+                    "avg_logprob": seg.avg_logprob,
+                    "no_speech_prob": seg.no_speech_prob
+                }
+                for i, seg in enumerate(segments_list)
+            ]
+            
             return {
                 "success": True,
                 "transcript": transcript,
                 "confidence": float(confidence),
-                "language": result.get("language", language),
+                "language": info.language if hasattr(info, 'language') else language,
                 "duration": len(audio_array) / self.sample_rate,
-                "segments": segments
+                "segments": segments_dict
             }
             
         except Exception as e:
