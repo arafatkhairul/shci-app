@@ -617,15 +617,15 @@ export default function VoiceAgent() {
         interimResults: true,
         maxAlternatives: 1,
         confidenceThreshold: 0.5, // Lowered for faster detection
-        silenceTimeout: isMobile ? 999999999 : 2000, // Never timeout on mobile (999999999ms = ~11 days), 2 seconds on desktop
-        speechTimeout: isMobile ? 999999999 : 5000, // Never timeout on mobile, 5 seconds on desktop
+        silenceTimeout: isMobile ? 3000 : 2000, // 3 seconds on mobile, 2 seconds on desktop
+        speechTimeout: isMobile ? 8000 : 5000, // 8 seconds on mobile, 5 seconds on desktop
         restartDelay: 50 // Reduced delay for faster restart
     };
 
     const fallbackVADConfig: FallbackVADConfig = {
         silenceThreshold: 0.01,
-        silenceTimeout: isMobile ? 999999999 : 2000, // Never timeout on mobile, 2 seconds on desktop
-        speechTimeout: isMobile ? 999999999 : 5000, // Never timeout on mobile, 5 seconds on desktop  
+        silenceTimeout: isMobile ? 3000 : 2000, // 3 seconds on mobile, 2 seconds on desktop
+        speechTimeout: isMobile ? 8000 : 5000, // 8 seconds on mobile, 5 seconds on desktop  
         sampleRate: 48000,
         fftSize: 256,
         smoothingTimeConstant: 0.8
@@ -666,11 +666,23 @@ export default function VoiceAgent() {
                 setTranscript(transcript);
                 setFinalTranscript(transcript);
                 setInterimTranscript("");
-                console.log(isMobile ? '📱 Mobile transcript:' : '🖥️ Desktop transcript:', transcript);
+                console.log(isMobile ? '📱 Mobile final transcript:' : '🖥️ Desktop final transcript:', transcript);
                 
                 // Mobile-specific: Show transcription UI when final results come
                 if (isMobile) {
                     setShowTranscription(true);
+                    console.log('📱 Mobile: Final transcript processed:', transcript);
+                }
+            } else if (!isFinal && transcript.trim()) {
+                // Handle interim results in speech result callback
+                console.log(isMobile ? '📱 Mobile interim speech result:' : '🖥️ Desktop interim speech result:', { transcript, confidence });
+                
+                if (isMobile) {
+                    setInterimTranscript(transcript);
+                    setShowTranscription(true);
+                    console.log('📱 Mobile: Interim speech result processed:', transcript);
+                } else {
+                    setInterimTranscript(transcript);
                 }
             }
         },
@@ -683,13 +695,23 @@ export default function VoiceAgent() {
             
             // Enable interim results on BOTH mobile and desktop
             console.log(isMobile ? '📱 Mobile interim:' : '🖥️ Desktop interim:', { transcript, confidence });
-            setInterimTranscript(transcript);
-            setVadTranscript(transcript);
-            setVadConfidence(confidence);
             
-            // Mobile-specific: Show transcription UI when interim results come
-            if (isMobile && transcript.trim()) {
-                setShowTranscription(true);
+            // Mobile-specific: Ensure interim transcript is properly set and shown
+            if (isMobile) {
+                setInterimTranscript(transcript);
+                setVadTranscript(transcript);
+                setVadConfidence(confidence);
+                
+                // Show transcription UI when interim results come
+                if (transcript.trim()) {
+                    setShowTranscription(true);
+                    console.log('📱 Mobile: Showing interim transcript:', transcript);
+                }
+            } else {
+                // Desktop: Normal interim processing
+                setInterimTranscript(transcript);
+                setVadTranscript(transcript);
+                setVadConfidence(confidence);
             }
         },
         onFinalResult: (transcript: string, confidence: number) => {
@@ -768,7 +790,24 @@ export default function VoiceAgent() {
                 setTranscript(transcript);
                 setFinalTranscript(transcript);
                 setInterimTranscript("");
-                console.log(isMobile ? '📱 Mobile fallback transcript:' : '🖥️ Desktop fallback transcript:', transcript);
+                console.log(isMobile ? '📱 Mobile fallback final transcript:' : '🖥️ Desktop fallback final transcript:', transcript);
+                
+                // Mobile-specific: Show transcription UI when final results come
+                if (isMobile) {
+                    setShowTranscription(true);
+                    console.log('📱 Mobile Fallback: Final transcript processed:', transcript);
+                }
+            } else if (!isFinal && transcript.trim()) {
+                // Handle interim results in speech result callback
+                console.log(isMobile ? '📱 Mobile fallback interim speech result:' : '🖥️ Desktop fallback interim speech result:', { transcript, confidence });
+                
+                if (isMobile) {
+                    setInterimTranscript(transcript);
+                    setShowTranscription(true);
+                    console.log('📱 Mobile Fallback: Interim speech result processed:', transcript);
+                } else {
+                    setInterimTranscript(transcript);
+                }
             }
         },
         onInterimResult: (transcript: string, confidence: number) => {
@@ -780,9 +819,24 @@ export default function VoiceAgent() {
             
             // Enable interim results on BOTH mobile and desktop
             console.log(isMobile ? '📱 Mobile fallback interim:' : '🖥️ Desktop fallback interim:', { transcript, confidence });
-            setInterimTranscript(transcript);
-            setVadTranscript(transcript);
-            setVadConfidence(confidence);
+            
+            // Mobile-specific: Ensure interim transcript is properly set and shown
+            if (isMobile) {
+                setInterimTranscript(transcript);
+                setVadTranscript(transcript);
+                setVadConfidence(confidence);
+                
+                // Show transcription UI when interim results come
+                if (transcript.trim()) {
+                    setShowTranscription(true);
+                    console.log('📱 Mobile Fallback: Showing interim transcript:', transcript);
+                }
+            } else {
+                // Desktop: Normal interim processing
+                setInterimTranscript(transcript);
+                setVadTranscript(transcript);
+                setVadConfidence(confidence);
+            }
         },
         onFinalResult: (transcript: string, confidence: number) => {
             // CRITICAL: Don't process final results during AI speaking to prevent partial word sending
@@ -4020,7 +4074,7 @@ export default function VoiceAgent() {
                                                     {transcript.split(".").map((s, i) =>
                                                         s.trim() && (
                                                             <div key={i} className="bg-white/[0.02] rounded-lg p-3 border border-white/6 hover:border-white/8 transition-all duration-300 group shadow-sm hover:shadow-md">
-                                                                <p className="text-sm leading-relaxed text-zinc-300 group-hover:text-zinc-200 transition-colors duration-300">{s.trim()}.</p>
+                                                                <p className="text-sm leading-relaxed text-zinc-300 group-hover:text-zinc-200 transition-colors duration-300">{s.trim()}</p>
                                                             </div>
                                                         )
                                                     )}

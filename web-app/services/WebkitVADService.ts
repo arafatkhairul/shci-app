@@ -68,8 +68,8 @@ export class WebkitVADService {
       interimResults: true,
       maxAlternatives: 1,
       confidenceThreshold: 0.7,
-      silenceTimeout: this.isMobile ? 999999999 : 8000, // Never timeout on mobile (~11 days), 8 seconds on desktop
-      speechTimeout: this.isMobile ? 999999999 : 30000, // Never timeout on mobile, 30 seconds on desktop
+      silenceTimeout: this.isMobile ? 3000 : 8000, // 3 seconds on mobile, 8 seconds on desktop
+      speechTimeout: this.isMobile ? 8000 : 30000, // 8 seconds on mobile, 30 seconds on desktop
       restartDelay: 100,
       ...config
     };
@@ -342,12 +342,24 @@ export class WebkitVADService {
         timestamp: Date.now()
       };
 
-      // Call all relevant callbacks
-      this.callbacks.onSpeechResult?.(speechResult.transcript, false, speechResult.confidence);
-      this.callbacks.onInterimResult?.(speechResult.transcript, speechResult.confidence);
-      
-      // Send interim result to WebSocket immediately for instant feedback
-      this.sendToWebSocket('interim_transcript', speechResult.transcript, speechResult.confidence);
+      // Mobile-specific: Enhanced interim result processing
+      if (this.isMobile) {
+        console.log('📱 Mobile VAD: Processing interim result:', speechResult.transcript);
+        
+        // Call all relevant callbacks with mobile-specific logging
+        this.callbacks.onSpeechResult?.(speechResult.transcript, false, speechResult.confidence);
+        this.callbacks.onInterimResult?.(speechResult.transcript, speechResult.confidence);
+        
+        // Send interim result to WebSocket immediately for instant feedback
+        this.sendToWebSocket('interim_transcript', speechResult.transcript, speechResult.confidence);
+      } else {
+        // Desktop: Normal interim processing
+        this.callbacks.onSpeechResult?.(speechResult.transcript, false, speechResult.confidence);
+        this.callbacks.onInterimResult?.(speechResult.transcript, speechResult.confidence);
+        
+        // Send interim result to WebSocket immediately for instant feedback
+        this.sendToWebSocket('interim_transcript', speechResult.transcript, speechResult.confidence);
+      }
     }
   }
 
