@@ -31,7 +31,8 @@ class STTService:
         try:
             log.info(f"🎤 Initializing STT service on {self.device}")
             
-            # Load WhisperX model (transcription only, no alignment for real-time)
+            # Load WhisperX model following official example
+            # Reference: https://github.com/m-bain/whisperX
             self.model = whisperx.load_model(
                 "base", 
                 device=self.device, 
@@ -44,7 +45,16 @@ class STTService:
             
         except Exception as e:
             log.error(f"❌ Failed to initialize STT service: {e}")
-            return False
+            # Try fallback with different approach
+            try:
+                log.info("🔄 Trying fallback initialization...")
+                self.model = whisperx.load_model("base", device=self.device)
+                self.initialized = True
+                log.info("✅ STT service initialized with fallback")
+                return True
+            except Exception as e2:
+                log.error(f"❌ Fallback initialization also failed: {e2}")
+                return False
     
     def add_audio_frame(self, audio_data: bytes):
         """Add audio frame to buffer"""
@@ -91,7 +101,8 @@ class STTService:
             if len(audio_array) < self.sample_rate * 0.5:  # 0.5 seconds minimum
                 return None
             
-            # Transcribe using WhisperX (simple transcription for real-time)
+            # Transcribe using WhisperX following official example
+            # Reference: https://github.com/m-bain/whisperX
             result = self.model.transcribe(audio_array, batch_size=self.batch_size)
             
             if result and "segments" in result and len(result["segments"]) > 0:
@@ -124,7 +135,8 @@ class STTService:
             if audio_chunk is None:
                 return None
             
-            # Transcribe using WhisperX (simple transcription for real-time)
+            # Transcribe using WhisperX following official example
+            # Reference: https://github.com/m-bain/whisperX
             result = self.model.transcribe(audio_chunk, batch_size=self.batch_size)
             
             if result and "segments" in result and len(result["segments"]) > 0:
