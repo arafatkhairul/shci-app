@@ -279,43 +279,45 @@ class ChatHandler:
             # Add audio frame to STT service buffer
             stt_service.add_audio_frame(audio_data)
             
-            # Check if we have enough audio for transcription (3 seconds)
-            if stt_service.get_buffer_duration() >= 3.0:
-                # Transcribe audio buffer
-                transcription_result = await stt_service.transcribe_buffer()
+            # Check if we have enough audio for transcription (1 second minimum)
+            if stt_service.get_buffer_duration() >= 1.0:
+                # Process audio buffer with new API
+                transcription_result = await stt_service.process_buffer()
                 
-                if transcription_result and transcription_result.get("text"):
-                    text = transcription_result["text"].strip()
-                    confidence = transcription_result.get("confidence", 0.0)
-                    
-                    log.info(f"[{conn_id}] 🎤 STT Result: '{text}' (confidence: {confidence:.2f})")
-                    
-                    # Send interim result to client
-                    await self.send_json(websocket, {
-                        "type": "interim_transcript",
-                        "text": text,
-                        "confidence": confidence,
-                        "is_final": False
-                    })
-                    
-                    # If confidence is high enough, treat as final
-                    if confidence > -0.5:  # Adjust threshold as needed
-                        # Clear buffer after successful transcription
-                        stt_service.clear_buffer()
+                if transcription_result and "segments" in transcription_result:
+                    segments = transcription_result["segments"]
+                    if len(segments) > 0:
+                        # Get the latest segment
+                        latest_segment = segments[-1]
+                        text = latest_segment.get("text", "").strip()
+                        confidence = latest_segment.get("avg_logprob", 0.0)
                         
-                        # Send final transcript
-                        await self.send_json(websocket, {
-                            "type": "final_transcript",
-                            "text": text,
-                            "confidence": confidence,
-                            "is_final": True
-                        })
-                        
-                        # Process final transcript
-                        await self.handle_final_transcript(websocket, {
-                            "text": text,
-                            "confidence": confidence
-                        }, mem, None, conn_id)
+                        if text:  # Only process if we have actual text
+                            log.info(f"[{conn_id}] 🎤 STT Result: '{text}' (confidence: {confidence:.2f})")
+                            
+                            # Send interim result to client
+                            await self.send_json(websocket, {
+                                "type": "interim_transcript",
+                                "text": text,
+                                "confidence": confidence,
+                                "is_final": False
+                            })
+                            
+                            # If confidence is high enough, treat as final
+                            if confidence > -0.5:  # Adjust threshold as needed
+                                # Send final transcript
+                                await self.send_json(websocket, {
+                                    "type": "final_transcript",
+                                    "text": text,
+                                    "confidence": confidence,
+                                    "is_final": True
+                                })
+                                
+                                # Process final transcript
+                                await self.handle_final_transcript(websocket, {
+                                    "text": text,
+                                    "confidence": confidence
+                                }, mem, None, conn_id)
             
         except Exception as e:
             log.error(f"[{conn_id}] Error handling audio data: {e}")

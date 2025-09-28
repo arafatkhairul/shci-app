@@ -58,7 +58,8 @@ db_service = DatabaseService()
 async def initialize_stt():
     """Initialize STT service on startup"""
     try:
-        success = await stt_service.initialize()
+        from app.services.stt_service import initialize_stt_service
+        success = await initialize_stt_service()
         if success:
             log.info("✅ STT service initialized successfully")
         else:
