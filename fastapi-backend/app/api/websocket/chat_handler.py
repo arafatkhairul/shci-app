@@ -117,8 +117,19 @@ class ChatHandler:
                     last_memory_save = current_time
                     log.info(f"[{conn_id}] 💾 Periodic memory save - {mem.total_interactions} interactions")
                 
-                msg = await websocket.receive()
-                last_activity_time = current_time  # Update activity time
+                try:
+                    msg = await websocket.receive()
+                    last_activity_time = current_time  # Update activity time
+                except Exception as e:
+                    if "disconnect message has been received" in str(e):
+                        log.info(f"[{conn_id}] WebSocket disconnected by client")
+                        break
+                    elif "close message has been sent" in str(e):
+                        log.info(f"[{conn_id}] WebSocket closed by server")
+                        break
+                    else:
+                        log.error(f"[{conn_id}] WebSocket receive error: {e}")
+                        break
                 
                 # Update session activity
                 session_service.update_session_activity(session_id)
@@ -161,14 +172,19 @@ class ChatHandler:
                     pass
 
     async def send_json(self, websocket: WebSocket, payload: dict):
-        """Send JSON message through WebSocket"""
+        """Send JSON message through WebSocket with proper error handling"""
         try:
             if websocket.client_state.name == "CONNECTED":
                 await websocket.send_text(json.dumps(payload))
             else:
-                log.warning("WebSocket connection is closed, cannot send message")
+                log.debug("WebSocket connection is closed, cannot send message")
         except Exception as e:
-            log.warning(f"Failed to send WebSocket message: {e}")
+            if "close message has been sent" in str(e):
+                log.debug("WebSocket closed, cannot send message")
+            elif "disconnect message has been received" in str(e):
+                log.debug("WebSocket disconnected, cannot send message")
+            else:
+                log.warning(f"Failed to send WebSocket message: {e}")
 
     async def handle_final_transcript(self, websocket: WebSocket, data: dict, mem: SessionMemory, 
                                     mem_store: Optional[MemoryStore], conn_id: str):
