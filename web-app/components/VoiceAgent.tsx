@@ -814,20 +814,10 @@ export default function VoiceAgent() {
         }
     };
 
-    // Set WebSocket connection for VAD service when connected (only once per connection)
-    useEffect(() => {
-        if (connected && vadService.current && vadInitialized && ws.current?.readyState === WebSocket.OPEN) {
-            vadService.current.setWebSocket(ws.current);
-        }
-    }, [connected]); // Only depend on connected state
+    // VAD WebSocket connection - REMOVED (using server-side STT only)
 
     // Auto-activate VAD when WebSocket is connected and VAD is ready (but don't start listening)
-    useEffect(() => {
-        if (connected && vadSupported && vadInitialized && !useWebkitVAD && vadService.current) {
-            // Auto-activate VAD when everything is ready (but don't start listening)
-            setUseWebkitVAD(true);
-        }
-    }, [connected, vadSupported, vadInitialized]); // Remove useWebkitVAD from dependencies to prevent infinite loop
+    // VAD auto-activation - REMOVED (using server-side STT only)
 
     const handleLevelChange = (newLevel: "easy" | "medium" | "fast") => {
         setLevel(newLevel);
@@ -889,27 +879,14 @@ export default function VoiceAgent() {
             if (isInitialized) return;
             isInitialized = true;
 
-            // Try Webkit VAD first
-            const webkitSuccess = await initializeVAD();
-
-            // If Webkit VAD fails, initialize fallback VAD
-            if (!webkitSuccess) {
-                await initializeFallbackVAD();
-            }
+            // VAD initialization - REMOVED (using server-side STT only)
         };
 
         initializeServices();
 
         // Cleanup on unmount
         return () => {
-            if (vadService.current) {
-                vadService.current.destroy();
-                vadService.current = null;
-            }
-            if (fallbackVADService.current) {
-                fallbackVADService.current.destroy();
-                fallbackVADService.current = null;
-            }
+            // VAD service cleanup - REMOVED (using server-side STT only)
         };
     }, []); // Empty dependency array to run only once
 
@@ -1056,14 +1033,7 @@ export default function VoiceAgent() {
             return;
         }
         
-        // CRITICAL: Immediately pause VAD services to prevent audio loop
-        console.log('🔇 Pausing VAD services before server MP3 playback to prevent loop');
-        if (useWebkitVAD && vadService.current) {
-            vadService.current.stop();
-        }
-        if (useFallbackVAD && fallbackVADService.current) {
-            fallbackVADService.current.stop();
-        }
+        // VAD pause - REMOVED (using server-side STT only)
         
         if (isMobile) {
             setIsProcessingAudio(true);
@@ -1170,14 +1140,7 @@ export default function VoiceAgent() {
     // ---------- Helpers: Real-time Audio Chunk Playback ----------
     const playAudioChunk = async (base64: string, text?: string) => {
         try {
-            // CRITICAL: Immediately pause VAD services to prevent audio loop
-            console.log('🔇 Pausing VAD services before audio playback to prevent loop');
-            if (useWebkitVAD && vadService.current) {
-                vadService.current.stop();
-            }
-            if (useFallbackVAD && fallbackVADService.current) {
-                fallbackVADService.current.stop();
-            }
+            // VAD pause - REMOVED (using server-side STT only)
 
             if (!audioCtx.current) {
                 audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -1398,24 +1361,16 @@ export default function VoiceAgent() {
                             case "interim_transcript":
                                 console.log("🎤 Interim transcript received:", data.text);
                                 setInterimTranscript(data.text);
-                                setVadTranscript(data.text);
-                                setVadConfidence(data.confidence || 0);
+                                // VAD state setters - REMOVED (using server-side STT only)
                                 
-                                // Notify VAD services about server-side STT result
-                                if (vadService.current) {
-                                    vadService.current.handleServerSTTResult(data.text, false, data.confidence || 0);
-                                }
-                                if (fallbackVADService.current) {
-                                    fallbackVADService.current.handleServerSTTResult(data.text, false, data.confidence || 0);
-                                }
+                                // VAD notification - REMOVED (using server-side STT only)
                                 break;
 
                             case "final_transcript":
                                 console.log("🎤 Final transcript received:", data.text);
                                 setFinalTranscript(data.text);
                                 setInterimTranscript("");
-                                setVadTranscript(data.text);
-                                setVadConfidence(data.confidence || 0);
+                                // VAD state setters - REMOVED (using server-side STT only)
                                 
                                 // Add to transcription history
                                 setTranscriptionHistory(prev => [...prev, {
@@ -1425,13 +1380,7 @@ export default function VoiceAgent() {
                                     isFinal: true
                                 }]);
                                 
-                                // Notify VAD services about server-side STT result
-                                if (vadService.current) {
-                                    vadService.current.handleServerSTTResult(data.text, true, data.confidence || 0);
-                                }
-                                if (fallbackVADService.current) {
-                                    fallbackVADService.current.handleServerSTTResult(data.text, true, data.confidence || 0);
-                                }
+                                // VAD notification - REMOVED (using server-side STT only)
                                 break;
 
                             case "final_transcript":
@@ -1582,10 +1531,6 @@ export default function VoiceAgent() {
 
         console.log("🚀 START MIC INITIATED:", {
             timestamp: new Date().toLocaleTimeString(),
-            useWebkitVAD,
-            useFallbackVAD,
-            vadServiceExists: !!vadService.current,
-            fallbackVADServiceExists: !!fallbackVADService.current,
             audioContextExists: !!audioCtx.current,
             audioContextState: audioCtx.current?.state
         });
@@ -1894,22 +1839,8 @@ export default function VoiceAgent() {
 
     // ---------- Stop mic ----------
     const stopMic = () => {
-        console.log("stopMic called, listening:", listening, "useWebkitVAD:", useWebkitVAD);
-        // If VAD is enabled, stop appropriate VAD service
-        if (useWebkitVAD && vadService.current) {
-            stopVAD();
-            setListening(false);
-            setStatus(currentLang.status.connected);
-            return;
-        }
-
-        // If fallback VAD is enabled, stop fallback service
-        if (useFallbackVAD && fallbackVADService.current) {
-            stopFallbackVAD();
-            setListening(false);
-            setStatus(currentLang.status.connected);
-            return;
-        }
+        console.log("stopMic called, listening:", listening);
+        // VAD stop - REMOVED (using server-side STT only)
 
         // Stop traditional microphone
         listeningRef.current = false;
@@ -3178,12 +3109,7 @@ export default function VoiceAgent() {
 
                                             {/* Minimal Status Indicators */}
                                             <div className="flex items-center gap-1">
-                                                {(useWebkitVAD || useFallbackVAD) && (
-                                                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
-                                                        <div className="w-1 h-1 bg-emerald-400 rounded-full" />
-                                                        <span className="text-xs text-emerald-300">STT</span>
-                                                    </div>
-                                                )}
+                                                {/* VAD status indicator - REMOVED (using server-side STT only) */}
                                                 {listening && (
                                                     <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
                                                         <div className="w-1 h-1 bg-blue-400 rounded-full" />
@@ -3196,41 +3122,7 @@ export default function VoiceAgent() {
 
                                     {/* Soft Organized Content */}
                                     <div className="relative p-5 min-h-[180px]">
-                                        {/* Soft Live Processing */}
-                                        {(useWebkitVAD || useFallbackVAD) && (
-                                            <div className="mb-4">
-                                                <div className="relative group">
-                                                    {/* Soft Live Container */}
-                                                    <div className="min-h-[60px] p-3 bg-white/[0.02] rounded-xl border border-white/6 hover:border-white/8 transition-all duration-300 shadow-sm hover:shadow-md">
-                                                        {interimTranscript && (
-                                                            <div className="text-sm text-blue-300 italic leading-relaxed">
-                                                                {interimTranscript}
-                                                                <span className="animate-pulse text-blue-400 ml-1">|</span>
-                                                            </div>
-                                                        )}
-                                                        {!interimTranscript && !finalTranscript && (
-                                                            <div className="text-sm text-zinc-500 italic leading-relaxed">
-                                                                {listening ? "Listening..." : "Ready"}
-                                                            </div>
-                                                        )}
-                                                        {finalTranscript && !interimTranscript && (
-                                                            <div className="text-sm text-zinc-500 italic leading-relaxed">
-                                                                Processing complete...
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Soft Confidence Badge */}
-                                                    {vadConfidence > 0 && (
-                                                        <div className="absolute -top-1 -right-1 px-2 py-1 bg-white/[0.05] border border-white/8 rounded-lg backdrop-blur-sm shadow-sm">
-                                                            <span className="text-xs text-zinc-400 font-medium">
-                                                                {(vadConfidence * 100).toFixed(0)}%
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
+                                        {/* VAD live processing UI - REMOVED (using server-side STT only) */}
 
                                         {transcript ? (
                                             <div className="space-y-3">
@@ -3262,9 +3154,7 @@ export default function VoiceAgent() {
                                                         {currentLang.labels.readyToCapture}
                                                     </p>
                                                     <p className="text-xs text-zinc-600 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/6">
-                                                        {useWebkitVAD ? "STT Active" :
-                                                            useFallbackVAD ? "VAD Active" :
-                                                                "Start Conversation"}
+                                                        {"Start Conversation"}
                                                     </p>
                                                 </div>
                                             </div>
