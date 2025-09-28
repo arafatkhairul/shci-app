@@ -31,19 +31,11 @@ class STTService:
         try:
             log.info(f"🎤 Initializing STT service on {self.device}")
             
-            # Load WhisperX model with proper configuration
+            # Load WhisperX model (transcription only, no alignment for real-time)
             self.model = whisperx.load_model(
                 "base", 
                 device=self.device, 
-                compute_type="float16" if self.device == "cuda" else "int8",
-                language="en",  # Specify language to avoid detection
-                asr_options={
-                    "multilingual": False,
-                    "max_new_tokens": 448,
-                    "clip_timestamps": "0",
-                    "hallucination_silence_threshold": 1.0,
-                    "hotwords": []
-                }
+                compute_type="float16" if self.device == "cuda" else "int8"
             )
             
             self.initialized = True
@@ -99,19 +91,8 @@ class STTService:
             if len(audio_array) < self.sample_rate * 0.5:  # 0.5 seconds minimum
                 return None
             
-            # Transcribe with proper options
-            result = self.model.transcribe(
-                audio_array, 
-                batch_size=self.batch_size,
-                language="en",
-                asr_options={
-                    "multilingual": False,
-                    "max_new_tokens": 448,
-                    "clip_timestamps": "0",
-                    "hallucination_silence_threshold": 1.0,
-                    "hotwords": []
-                }
-            )
+            # Transcribe using WhisperX (simple transcription for real-time)
+            result = self.model.transcribe(audio_array, batch_size=self.batch_size)
             
             if result and "segments" in result and len(result["segments"]) > 0:
                 # Get the most recent segment
@@ -143,19 +124,8 @@ class STTService:
             if audio_chunk is None:
                 return None
             
-            # Transcribe with proper options
-            result = self.model.transcribe(
-                audio_chunk, 
-                batch_size=self.batch_size,
-                language="en",
-                asr_options={
-                    "multilingual": False,
-                    "max_new_tokens": 448,
-                    "clip_timestamps": "0",
-                    "hallucination_silence_threshold": 1.0,
-                    "hotwords": []
-                }
-            )
+            # Transcribe using WhisperX (simple transcription for real-time)
+            result = self.model.transcribe(audio_chunk, batch_size=self.batch_size)
             
             if result and "segments" in result and len(result["segments"]) > 0:
                 # Get the most recent segment
