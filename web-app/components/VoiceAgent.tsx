@@ -27,8 +27,7 @@ import {
     FaCheck
 } from "react-icons/fa";
 import RolePlayAnswers from "./RolePlayAnswers";
-import WebkitVADService, { VADConfig, VADCallbacks, SpeechResult } from "../services/WebkitVADService";
-import FallbackVADService, { FallbackVADConfig, FallbackVADCallbacks } from "../services/VADFallbackService";
+// VAD services removed - using server-side STT only
 
 export default function VoiceAgent() {
     // ---------- State ----------
@@ -42,14 +41,7 @@ export default function VoiceAgent() {
     // Default: server TTS ON (local TTS OFF)
     const [useLocalTTS, setUseLocalTTS] = useState(false);
 
-    // VAD Service State
-    const [useWebkitVAD, setUseWebkitVAD] = useState(false);
-    const [vadSupported, setVadSupported] = useState(false);
-    const [vadInitialized, setVadInitialized] = useState(false);
-    const [vadTranscript, setVadTranscript] = useState("");
-    const [vadConfidence, setVadConfidence] = useState(0);
-    const [useFallbackVAD, setUseFallbackVAD] = useState(false);
-    const [fallbackVADInitialized, setFallbackVADInitialized] = useState(false);
+    // VAD Service State - REMOVED (using server-side STT only)
 
     // Real-time Transcription State
     const [interimTranscript, setInterimTranscript] = useState("");
@@ -229,8 +221,7 @@ export default function VoiceAgent() {
     const audioCtx = useRef<AudioContext | null>(null);
     const sourceNode = useRef<MediaStreamAudioSourceNode | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
-    const vadService = useRef<WebkitVADService | null>(null);
-    const fallbackVADService = useRef<FallbackVADService | null>(null);
+    // VAD service refs removed - using server-side STT only
     const workletNode = useRef<AudioWorkletNode | null>(null);
     const processorNode = useRef<ScriptProcessorNode | null>(null);
     const analyser = useRef<AnalyserNode | null>(null);
@@ -561,134 +552,7 @@ export default function VoiceAgent() {
     }, [aiText]); // Remove displayedAiText from dependencies to prevent infinite loop
 
 
-    // ---------- VAD Service Configuration ----------
-    const vadConfig: VADConfig = {
-        language: selectedLanguage === 'en' ? 'en-US' : 'it-IT',
-        continuous: true,
-        interimResults: true,
-        maxAlternatives: 1,
-        confidenceThreshold: 0.5, // Lowered for faster detection
-        silenceTimeout: 2000, // Reduced to 2 seconds for instant response
-        speechTimeout: 5000, // Reduced to 5 seconds for faster processing
-        restartDelay: 50 // Reduced delay for faster restart
-    };
-
-    const fallbackVADConfig: FallbackVADConfig = {
-        silenceThreshold: 0.01,
-        silenceTimeout: 2000, // Reduced to 2 seconds for instant response
-        speechTimeout: 5000, // Reduced to 5 seconds for faster processing
-        sampleRate: 48000,
-        fftSize: 256,
-        smoothingTimeConstant: 0.8
-    };
-
-    const vadCallbacks: VADCallbacks = {
-        onSpeechStart: () => {
-            setListening(true);
-            setStatus(currentLang.status.listening);
-            setShowTranscription(true);
-        },
-        onSpeechEnd: () => {
-            // Don't automatically turn off microphone - keep it active for continuous listening
-            setStatus(currentLang.status.connected);
-        },
-        onSpeechResult: (transcript: string, isFinal: boolean, confidence: number) => {
-            setVadTranscript(transcript);
-            setVadConfidence(confidence);
-
-            if (isFinal && transcript.trim()) {
-                setTranscript(transcript);
-                setFinalTranscript(transcript);
-                setInterimTranscript("");
-            }
-        },
-        onInterimResult: (transcript: string, confidence: number) => {
-            console.log('VAD: Interim result', { transcript, confidence });
-            setInterimTranscript(transcript);
-            setVadTranscript(transcript);
-            setVadConfidence(confidence);
-        },
-        onFinalResult: (transcript: string, confidence: number) => {
-            console.log('VAD: Final result', { transcript, confidence });
-            setFinalTranscript(transcript);
-            setInterimTranscript("");
-        },
-        onSilenceDetected: () => {
-            console.log('VAD: Silence detected - keeping microphone active');
-            // Don't automatically turn off microphone - keep it active for continuous listening
-            setStatus(currentLang.status.connected);
-        },
-        onError: (error: string) => {
-            console.error('VAD Error:', error);
-            setStatus(`VAD Error: ${error}`);
-        },
-        onStateChange: (isListening: boolean) => {
-            console.log('VAD State changed:', isListening);
-            // Keep listening state active throughout the session - don't let VAD control the main listening state
-            // The microphone should only be controlled by Start/Stop button clicks
-            if (isListening) {
-                setListening(true);
-            }
-            // Don't set listening to false - let only the Stop button control that
-        },
-        onVoiceLevelUpdate: (level: number, source: string) => {
-            updateMicLevel(level, source);
-        }
-    };
-
-    const fallbackVADCallbacks: FallbackVADCallbacks = {
-        onSpeechStart: () => {
-            setListening(true);
-            setStatus(currentLang.status.listening);
-            setShowTranscription(true);
-        },
-        onSpeechEnd: () => {
-            // Don't automatically turn off microphone - keep it active for continuous listening
-            setStatus(currentLang.status.connected);
-        },
-        onSpeechResult: (transcript: string, isFinal: boolean, confidence: number) => {
-            setVadTranscript(transcript);
-            setVadConfidence(confidence);
-
-            if (isFinal && transcript.trim()) {
-                setTranscript(transcript);
-                setFinalTranscript(transcript);
-                setInterimTranscript("");
-            }
-        },
-        onInterimResult: (transcript: string, confidence: number) => {
-            console.log('Fallback VAD: Interim result', { transcript, confidence });
-            setInterimTranscript(transcript);
-            setVadTranscript(transcript);
-            setVadConfidence(confidence);
-        },
-        onFinalResult: (transcript: string, confidence: number) => {
-            console.log('Fallback VAD: Final result', { transcript, confidence });
-            setFinalTranscript(transcript);
-            setInterimTranscript("");
-        },
-        onSilenceDetected: () => {
-            console.log('Fallback VAD: Silence detected - keeping microphone active');
-            // Don't automatically turn off microphone - keep it active for continuous listening
-            setStatus(currentLang.status.connected);
-        },
-        onError: (error: string) => {
-            console.error('Fallback VAD Error:', error);
-            setStatus(`Fallback VAD Error: ${error}`);
-        },
-        onStateChange: (isListening: boolean) => {
-            console.log('Fallback VAD State changed:', isListening);
-            // Keep listening state active throughout the session - don't let VAD control the main listening state
-            // The microphone should only be controlled by Start/Stop button clicks
-            if (isListening) {
-                setListening(true);
-            }
-            // Don't set listening to false - let only the Stop button control that
-        },
-        onVoiceLevelUpdate: (level: number, source: string) => {
-            updateMicLevel(level, source);
-        }
-    };
+    // ---------- VAD Service Configuration - REMOVED (using server-side STT only) ----------
 
     // ---------- Send Level Preferences ----------
     // ✅ replace your sendPrefs with this version
@@ -756,227 +620,14 @@ export default function VoiceAgent() {
     }, [organizationContext, sendPrefs]);
 
 
-    // ---------- VAD Service Management ----------
-    const initializeVAD = useCallback(async () => {
-        if (!vadService.current) {
-            vadService.current = new WebkitVADService(vadConfig, vadCallbacks);
-        }
+    // ---------- VAD Service Management - REMOVED (using server-side STT only) ----------
 
-        const success = await vadService.current.initialize();
-        setVadSupported(success);
-        setVadInitialized(success);
-
-        if (success) {
-            console.log('VAD Service initialized successfully');
-            // Set WebSocket connection when available
-            if (ws.current?.readyState === WebSocket.OPEN) {
-                vadService.current.setWebSocket(ws.current);
-            }
-        } else {
-            console.log('VAD Service not supported or failed to initialize');
-        }
-
-        return success;
-    }, [vadConfig, vadCallbacks]);
-
-    const initializeFallbackVAD = useCallback(async () => {
-        if (!fallbackVADService.current) {
-            fallbackVADService.current = new FallbackVADService(fallbackVADConfig, fallbackVADCallbacks);
-        }
-
-        const success = await fallbackVADService.current.initialize();
-        setFallbackVADInitialized(success);
-
-        if (success) {
-            console.log('Fallback VAD Service initialized successfully');
-        } else {
-            console.log('Fallback VAD Service failed to initialize');
-        }
-
-        return success;
-    }, [fallbackVADConfig, fallbackVADCallbacks]);
-
-    const startVAD = useCallback(() => {
-        console.log('🎤 Starting VAD service...', {
-            webkitVADAvailable: !!vadService.current,
-            webkitVADInitialized: vadInitialized,
-            fallbackVADAvailable: !!fallbackVADService.current,
-            fallbackVADInitialized: fallbackVADInitialized
-        });
-
-        if (vadService.current && vadInitialized) {
-            const success = vadService.current.start();
-            if (success) {
-                setUseWebkitVAD(true);
-            } else {
-                console.log('❌ Failed to start Webkit VAD');
-            }
-            return success;
-        }
-        return false;
-    }, [vadInitialized]);
-
-    const stopVAD = useCallback(() => {
-        if (vadService.current) {
-            vadService.current.stop();
-            setUseWebkitVAD(false);
-            setVadTranscript("");
-            setVadConfidence(0);
-            console.log('VAD stopped');
-        }
-    }, []);
-
-    const startFallbackVAD = useCallback(() => {
-        if (fallbackVADService.current && fallbackVADInitialized) {
-            const success = fallbackVADService.current.start();
-            if (success) {
-                setUseFallbackVAD(true);
-            } else {
-                console.log('❌ Failed to start Fallback VAD');
-            }
-            return success;
-        }
-        return false;
-    }, [fallbackVADInitialized]);
-
-    const stopFallbackVAD = useCallback(() => {
-        if (fallbackVADService.current) {
-            fallbackVADService.current.stop();
-            setUseFallbackVAD(false);
-            console.log('Fallback VAD stopped');
-        }
-    }, []);
-
-    const toggleVAD = useCallback(() => {
-        if (useWebkitVAD) {
-            stopVAD();
-        } else {
-            startVAD();
-        }
-    }, [useWebkitVAD, startVAD, stopVAD]);
-
-    const toggleFallbackVAD = useCallback(() => {
-        if (useFallbackVAD) {
-            stopFallbackVAD();
-        } else {
-            startFallbackVAD();
-        }
-    }, [useFallbackVAD, startFallbackVAD, stopFallbackVAD]);
-
-    // Update VAD config when language changes
-    useEffect(() => {
-        if (vadService.current && vadInitialized) {
-            vadService.current.updateConfig({
-                language: selectedLanguage === 'en' ? 'en-US' : 'it-IT'
-            });
-        }
-    }, [selectedLanguage, vadInitialized]);
+    // VAD config update - REMOVED (using server-side STT only)
 
     // Monitor TTS speaking state - Ensure continuous speech recognition
-    useEffect(() => {
-        if (aiSpeaking) {
-            // CRITICAL: Immediately pause VAD services during audio playback to prevent feedback
-            console.log('🔇 Pausing VAD services during AI speaking to prevent audio loop');
-            if (useWebkitVAD && vadService.current) {
-                vadService.current.stop();
-                console.log('🔇 Webkit VAD paused');
-            }
-            if (useFallbackVAD && fallbackVADService.current) {
-                fallbackVADService.current.stop();
-                console.log('🔇 Fallback VAD paused');
-            }
-        } else {
-            // CRITICAL: Restart VAD services after audio playback with longer delay to prevent audio loop
-            console.log('🔊 Scheduling VAD restart after AI speaking ends');
-            setTimeout(() => {
-                if (listening && !aiSpeaking) {
-                    console.log('🔊 Restarting VAD services after audio playback');
+    // VAD TTS monitoring - REMOVED (using server-side STT only)
 
-                    if (useWebkitVAD && vadService.current && vadInitialized) {
-                        try {
-                            // Ensure WebSocket is still connected for VAD service
-                            if (ws.current?.readyState === WebSocket.OPEN) {
-                                vadService.current.setWebSocket(ws.current);
-                            }
-                            vadService.current.start();
-                            console.log('🔊 Webkit VAD restarted');
-                        } catch (error) {
-                            // Try to reinitialize if restart fails
-                            console.log('Failed to restart VAD, reinitializing...');
-                            setTimeout(() => {
-                                initializeVAD().then((success) => {
-                                    if (success && listening) {
-                                        startVAD();
-                                    }
-                                });
-                            }, 2000);
-                        }
-                    }
-
-                    if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized) {
-                        try {
-                            fallbackVADService.current.start();
-                            console.log('🔊 Fallback VAD restarted');
-                        } catch (error) {
-                            // Try to reinitialize if restart fails
-                            console.log('Failed to restart Fallback VAD, reinitializing...');
-                            setTimeout(() => {
-                                initializeFallbackVAD().then((success) => {
-                                    if (success && listening) {
-                                        startFallbackVAD();
-                                    }
-                                });
-                            }, 2000);
-                        }
-                    }
-                }
-            }, 2000); // Increased delay to 2 seconds to ensure audio has completely stopped
-        }
-    }, [aiSpeaking, useWebkitVAD, useFallbackVAD, listening, vadInitialized, fallbackVADInitialized]);
-
-    // VAD Health Check - Ensure speech recognition continues working
-    useEffect(() => {
-        if (!listening) return;
-
-        const healthCheckInterval = setInterval(() => {
-            if (listening && !aiSpeaking) {
-                // Check if VAD services are still active
-                const webkitVADStatus = vadService.current?.getStatus();
-                const fallbackVADStatus = fallbackVADService.current?.getStatus();
-
-                console.log('🔍 VAD Health Check:', {
-                    webkitVADActive: webkitVADStatus?.isListening,
-                    fallbackVADActive: fallbackVADStatus?.isListening,
-                    useWebkitVAD,
-                    useFallbackVAD
-                });
-
-                // If Webkit VAD should be active but isn't, restart it
-                if (useWebkitVAD && vadService.current && vadInitialized && !webkitVADStatus?.isListening) {
-                    console.log('🔄 Webkit VAD not listening - restarting...');
-                    try {
-                        vadService.current.start();
-                        console.log('✅ Webkit VAD restarted via health check');
-                    } catch (error) {
-                        console.log('❌ Failed to restart Webkit VAD via health check:', error);
-                    }
-                }
-
-                // If Fallback VAD should be active but isn't, restart it
-                if (useFallbackVAD && fallbackVADService.current && fallbackVADInitialized && !fallbackVADStatus?.isListening) {
-                    console.log('🔄 Fallback VAD not listening - restarting...');
-                    try {
-                        fallbackVADService.current.start();
-                        console.log('✅ Fallback VAD restarted via health check');
-                    } catch (error) {
-                        console.log('❌ Failed to restart Fallback VAD via health check:', error);
-                    }
-                }
-            }
-        }, 10000); // Check every 10 seconds
-
-        return () => clearInterval(healthCheckInterval);
-    }, [listening, aiSpeaking, useWebkitVAD, useFallbackVAD, vadInitialized, fallbackVADInitialized]);
+    // VAD Health Check - REMOVED (using server-side STT only)
 
     // Click outside handler for language and voice dropdowns
     useEffect(() => {
