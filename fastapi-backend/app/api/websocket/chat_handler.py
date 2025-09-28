@@ -292,11 +292,17 @@ class ChatHandler:
             if not audio_data:
                 return
             
+            # Log audio data received
+            log.debug(f"[{conn_id}] 🎤 Audio data received: {len(audio_data)} bytes")
+            
             # Add audio frame to STT service buffer
             stt_service.add_audio_frame(audio_data)
             
             # Check if we have enough audio for transcription (1 second minimum)
-            if stt_service.get_buffer_duration() >= 1.0:
+            buffer_duration = stt_service.get_buffer_duration()
+            if buffer_duration >= 1.0:
+                log.info(f"[{conn_id}] 🎤 Buffer ready for STT: {buffer_duration:.2f}s")
+                
                 # Process audio buffer with new API
                 transcription_result = await stt_service.process_buffer()
                 
@@ -319,6 +325,8 @@ class ChatHandler:
                                 "is_final": False
                             })
                             
+                            log.info(f"[{conn_id}] 📤 Sent interim transcript to client")
+                            
                             # If confidence is high enough, treat as final
                             if confidence > -0.5:  # Adjust threshold as needed
                                 # Send final transcript
@@ -329,11 +337,21 @@ class ChatHandler:
                                     "is_final": True
                                 })
                                 
+                                log.info(f"[{conn_id}] 📤 Sent final transcript to client")
+                                
                                 # Process final transcript
                                 await self.handle_final_transcript(websocket, {
                                     "text": text,
                                     "confidence": confidence
                                 }, mem, None, conn_id)
+                        else:
+                            log.debug(f"[{conn_id}] 🎤 Empty transcript received")
+                    else:
+                        log.debug(f"[{conn_id}] 🎤 No segments in transcription result")
+                else:
+                    log.debug(f"[{conn_id}] 🎤 No transcription result")
+            else:
+                log.debug(f"[{conn_id}] 🎤 Buffer not ready: {buffer_duration:.2f}s < 1.0s")
             
         except Exception as e:
             log.error(f"[{conn_id}] Error handling audio data: {e}")

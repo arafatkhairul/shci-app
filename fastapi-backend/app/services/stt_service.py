@@ -166,6 +166,12 @@ class STTService:
         try:
             audio_array = np.frombuffer(audio_data, dtype=np.int16)
             self.audio_buffer.extend(audio_array)
+            
+            # Log audio frame details every 100 frames to avoid spam
+            if len(self.audio_buffer) % (self.sample_rate // 10) == 0:  # Every 0.1 seconds
+                buffer_duration = self.get_buffer_duration()
+                log.debug(f"🎤 Audio buffer: {len(self.audio_buffer)} samples, {buffer_duration:.2f}s duration")
+                
         except Exception as e:
             log.error(f"Error adding audio frame: {e}")
 
@@ -174,27 +180,37 @@ class STTService:
         Processes the current audio buffer if it contains enough new data.
         """
         if not self.is_ready():
+            log.debug("🎤 STT not ready, skipping processing")
             return None
 
         if len(self.audio_buffer) < self.min_chunk_samples:
+            log.debug(f"🎤 Audio buffer too small: {len(self.audio_buffer)} < {self.min_chunk_samples}")
             return None
 
         if self.processing_lock.locked():
-            log.debug("Processing lock is acquired, skipping this cycle.")
+            log.debug("🎤 Processing lock acquired, skipping this cycle")
             return None
 
         async with self.processing_lock:
             try:
                 buffer_duration = self.get_buffer_duration()
-                log.info(f"Processing audio buffer of {buffer_duration:.2f}s...")
+                log.info(f"🎤 STT Processing: {len(self.audio_buffer)} samples, {buffer_duration:.2f}s duration")
                 
                 # Convert audio data to float32 and normalize
                 audio_chunk = np.array(self.audio_buffer, dtype=np.float32) / 32768.0
+                
+                # Log audio statistics
+                audio_rms = np.sqrt(np.mean(audio_chunk**2))
+                audio_max = np.max(np.abs(audio_chunk))
+                log.debug(f"🎤 Audio stats: RMS={audio_rms:.4f}, Max={audio_max:.4f}")
                 
                 # Clear buffer before processing to avoid processing same audio twice
                 self.clear_buffer()
 
                 # Transcribe with proper error handling
+                log.info(f"🎤 Starting WhisperX transcription...")
+                start_time = asyncio.get_event_loop().time()
+                
                 result = await asyncio.to_thread(
                     self.model.transcribe,
                     audio_chunk,
@@ -203,15 +219,28 @@ class STTService:
                     task="transcribe"  # Specify the task
                 )
                 
+                transcription_time = asyncio.get_event_loop().time() - start_time
                 segments_count = len(result.get('segments', []))
-                log.info(f"Transcription complete. Segments found: {segments_count}")
+                
+                log.info(f"🎤 STT Complete: {segments_count} segments in {transcription_time:.2f}s")
                 
                 if segments_count > 0:
+                    # Log transcription details
+                    for i, segment in enumerate(result.get('segments', [])):
+                        text = segment.get('text', '').strip()
+                        confidence = segment.get('avg_logprob', 0.0)
+                        start_time = segment.get('start', 0.0)
+                        end_time = segment.get('end', 0.0)
+                        
+                        log.info(f"🎤 Segment {i+1}: '{text}' (conf: {confidence:.2f}, {start_time:.2f}s-{end_time:.2f}s)")
+                    
                     return result
-                return None
+                else:
+                    log.info("🎤 No speech segments detected")
+                    return None
                 
             except Exception as e:
-                log.error(f"Error during transcription: {e}")
+                log.error(f"🎤 STT Error: {e}")
                 # Don't clear buffer on transcription error so we can retry
                 return None
 
