@@ -1656,7 +1656,7 @@ export default function VoiceAgent() {
 
                 workletNode.current = new AudioWorkletNode(
                     audioCtx.current,
-                    "pcm16-downsampler",
+                    "pcm-worklet-processor",
                     { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] }
                 );
                 console.log("🔧 Audio Worklet Node Created:", {
@@ -1667,10 +1667,8 @@ export default function VoiceAgent() {
 
                 workletNode.current.port.onmessage = (ev) => {
                     const { type, value, buffer } = ev.data || {};
-                    if (type === "rms" && typeof value === "number") {
-                        // Enhanced mic level calculation with better sensitivity
-                        updateMicLevel(value, 'worklet');
-                    } else if (type === "frame" && buffer) {
+                    // New PCM Worklet Processor - direct buffer handling
+                    if (buffer && buffer.byteLength > 0) {
                         if (listeningRef.current && ws.current?.readyState === WebSocket.OPEN) {
                             try {
                                 ws.current.send(new Uint8Array(buffer));
