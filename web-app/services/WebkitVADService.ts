@@ -171,3 +171,5 @@ export class WebkitVADService {
     console.error('🎤 WebkitVADService: Server STT error:', error);
   }
 }
+
+export default WebkitVADService;

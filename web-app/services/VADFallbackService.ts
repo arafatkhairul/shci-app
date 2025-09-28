@@ -155,3 +155,5 @@ export class FallbackVADService {
     console.error('🎤 FallbackVADService: Server STT error:', error);
   }
 }
+
+export default FallbackVADService;
