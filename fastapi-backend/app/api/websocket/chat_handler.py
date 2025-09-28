@@ -178,11 +178,14 @@ class ChatHandler:
                 await websocket.send_text(json.dumps(payload))
             else:
                 # WebSocket connection is closed, cannot send message
+                pass
         except Exception as e:
             if "close message has been sent" in str(e):
                 # WebSocket closed, cannot send message
+                pass
             elif "disconnect message has been received" in str(e):
                 # WebSocket disconnected, cannot send message
+                pass
             else:
                 log.warning(f"Failed to send WebSocket message: {e}")
 
