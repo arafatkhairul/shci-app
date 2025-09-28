@@ -75,7 +75,11 @@ whisperx==3.1.1
 
 # Additional audio processing for STT
 librosa==0.10.1
-scipy==1.11.4
+scipy==1.15.2
+
+# Fix dependency conflicts
+coqpit>=0.0.16
+gruut[de,es,fr]>=2.4.0
 
 # ===================================================================
 # UTILITIES & STANDARD LIBRARIES
