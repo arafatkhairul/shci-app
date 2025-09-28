@@ -31,12 +31,14 @@ class STTService:
         try:
             log.info(f"🎤 Initializing STT service on {self.device}")
             
-            # Load WhisperX model following official example
+            # Load WhisperX model with latest API
             # Reference: https://github.com/m-bain/whisperX
+            compute_type = "int8"  # Use int8 for CPU compatibility
+            
             self.model = whisperx.load_model(
                 "base", 
                 device=self.device, 
-                compute_type="float16" if self.device == "cuda" else "int8"
+                compute_type=compute_type
             )
             
             self.initialized = True
@@ -45,7 +47,7 @@ class STTService:
             
         except Exception as e:
             log.error(f"❌ Failed to initialize STT service: {e}")
-            # Try fallback with different approach
+            # Try fallback with minimal parameters
             try:
                 log.info("🔄 Trying fallback initialization...")
                 self.model = whisperx.load_model("base", device=self.device)
@@ -54,7 +56,16 @@ class STTService:
                 return True
             except Exception as e2:
                 log.error(f"❌ Fallback initialization also failed: {e2}")
-                return False
+                # Try with tiny model as last resort
+                try:
+                    log.info("🔄 Trying tiny model as last resort...")
+                    self.model = whisperx.load_model("tiny", device=self.device)
+                    self.initialized = True
+                    log.info("✅ STT service initialized with tiny model")
+                    return True
+                except Exception as e3:
+                    log.error(f"❌ All initialization attempts failed: {e3}")
+                    return False
     
     def add_audio_frame(self, audio_data: bytes):
         """Add audio frame to buffer"""
@@ -101,7 +112,7 @@ class STTService:
             if len(audio_array) < self.sample_rate * 0.5:  # 0.5 seconds minimum
                 return None
             
-            # Transcribe using WhisperX following official example
+            # Transcribe using WhisperX with latest API
             # Reference: https://github.com/m-bain/whisperX
             result = self.model.transcribe(audio_array, batch_size=self.batch_size)
             
@@ -135,7 +146,7 @@ class STTService:
             if audio_chunk is None:
                 return None
             
-            # Transcribe using WhisperX following official example
+            # Transcribe using WhisperX with latest API
             # Reference: https://github.com/m-bain/whisperX
             result = self.model.transcribe(audio_chunk, batch_size=self.batch_size)
             
