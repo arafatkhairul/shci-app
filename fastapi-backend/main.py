@@ -23,6 +23,7 @@ from app.models.session_memory import SessionMemory, MemoryStore
 from app.services.llm_service import LLMService
 from app.services.tts_service import TTSService
 from app.services.database_service import DatabaseService
+from app.services.stt_service import stt_service
 from app.api.endpoints import router as endpoints_router
 from app.api.websocket.chat_handler import ChatHandler
 
@@ -53,6 +54,18 @@ llm_service = LLMService()
 tts_service = TTSService()
 db_service = DatabaseService()
 
+# Initialize STT service
+async def initialize_stt():
+    """Initialize STT service on startup"""
+    try:
+        success = await stt_service.initialize()
+        if success:
+            log.info("✅ STT service initialized successfully")
+        else:
+            log.warning("⚠️ STT service initialization failed")
+    except Exception as e:
+        log.error(f"❌ STT service initialization error: {e}")
+
 # Initialize chat handler
 chat_handler = ChatHandler(llm_service, tts_service, db_service)
 
@@ -64,6 +77,9 @@ async def startup_event():
     log.info(f"🤖 LLM: {settings.LLM_API_URL} (model={settings.LLM_MODEL})")
     log.info(f"👤 Assistant: {settings.ASSISTANT_NAME} by {settings.ASSISTANT_AUTHOR}")
     log.info(f"🎤 VAD: trigger={settings.TRIGGER_VOICED_FRAMES}, silence={settings.END_SILENCE_MS}ms")
+    
+    # Initialize STT service
+    await initialize_stt()
 
 @app.on_event("shutdown")
 async def shutdown_event():

@@ -1744,6 +1744,29 @@ export default function VoiceAgent() {
                                 setIsWaitingForResponse(false);
                                 break;
 
+                            case "interim_transcript":
+                                console.log("🎤 Interim transcript received:", data.text);
+                                setInterimTranscript(data.text);
+                                setVadTranscript(data.text);
+                                setVadConfidence(data.confidence || 0);
+                                break;
+
+                            case "final_transcript":
+                                console.log("🎤 Final transcript received:", data.text);
+                                setFinalTranscript(data.text);
+                                setInterimTranscript("");
+                                setVadTranscript(data.text);
+                                setVadConfidence(data.confidence || 0);
+                                
+                                // Add to transcription history
+                                setTranscriptionHistory(prev => [...prev, {
+                                    text: data.text,
+                                    timestamp: Date.now(),
+                                    confidence: data.confidence || 0,
+                                    isFinal: true
+                                }]);
+                                break;
+
                             case "final_transcript":
                                 console.log("📝 Final transcript received:", data.text);
                                 setTranscript(data.text || "");

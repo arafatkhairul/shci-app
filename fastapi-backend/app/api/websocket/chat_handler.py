@@ -266,9 +266,60 @@ class ChatHandler:
     async def handle_audio_data(self, websocket: WebSocket, msg: dict, mem: SessionMemory, 
                               conn_id: str, pre_buffer: deque, triggered: bool, 
                               voiced_frames: deque, voiced_count: int, silence_count: int, utter_frames: int):
-        """Handle incoming audio data"""
-        # This is a simplified version - you can expand this based on your VAD needs
-        pass
+        """Handle incoming audio data for real-time STT processing"""
+        try:
+            # Import STT service
+            from app.services.stt_service import stt_service
+            
+            # Get audio data from WebSocket message
+            audio_data = msg.get("bytes")
+            if not audio_data:
+                return
+            
+            # Add audio frame to STT service buffer
+            stt_service.add_audio_frame(audio_data)
+            
+            # Check if we have enough audio for transcription (3 seconds)
+            if stt_service.get_buffer_duration() >= 3.0:
+                # Transcribe audio buffer
+                transcription_result = await stt_service.transcribe_buffer()
+                
+                if transcription_result and transcription_result.get("text"):
+                    text = transcription_result["text"].strip()
+                    confidence = transcription_result.get("confidence", 0.0)
+                    
+                    log.info(f"[{conn_id}] 🎤 STT Result: '{text}' (confidence: {confidence:.2f})")
+                    
+                    # Send interim result to client
+                    await self.send_json(websocket, {
+                        "type": "interim_transcript",
+                        "text": text,
+                        "confidence": confidence,
+                        "is_final": False
+                    })
+                    
+                    # If confidence is high enough, treat as final
+                    if confidence > -0.5:  # Adjust threshold as needed
+                        # Clear buffer after successful transcription
+                        stt_service.clear_buffer()
+                        
+                        # Send final transcript
+                        await self.send_json(websocket, {
+                            "type": "final_transcript",
+                            "text": text,
+                            "confidence": confidence,
+                            "is_final": True
+                        })
+                        
+                        # Process final transcript
+                        await self.handle_final_transcript(websocket, {
+                            "text": text,
+                            "confidence": confidence
+                        }, mem, None, conn_id)
+            
+        except Exception as e:
+            log.error(f"[{conn_id}] Error handling audio data: {e}")
+            # Don't re-raise to avoid breaking WebSocket connection
 
     async def generate_and_send_response(self, websocket: WebSocket, transcript: str, 
                                        mem: SessionMemory, mem_store: Optional[MemoryStore], conn_id: str):

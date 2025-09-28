@@ -68,6 +68,16 @@ numpy==1.26.4
 # wave, tempfile, inspect - Python standard library modules
 
 # ===================================================================
+# SPEECH-TO-TEXT (STT) DEPENDENCIES
+# ===================================================================
+# WhisperX for real-time speech recognition
+whisperx==3.1.1
+
+# Additional audio processing for STT
+librosa==0.10.1
+scipy==1.11.4
+
+# ===================================================================
 # UTILITIES & STANDARD LIBRARIES
 # ===================================================================
 # The following are Python standard library modules (no pip install needed):
