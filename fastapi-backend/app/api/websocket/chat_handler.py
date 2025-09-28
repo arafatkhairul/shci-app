@@ -349,12 +349,16 @@ class ChatHandler:
                                 }, mem, None, conn_id)
                         else:
                             # Empty transcript received
+                            pass
                     else:
                         # No segments in transcription result
+                        pass
                 else:
                     # No transcription result
+                    pass
             else:
                 # Buffer not ready
+                pass
             
         except Exception as e:
             log.error(f"[{conn_id}] Error handling audio data: {e}")
