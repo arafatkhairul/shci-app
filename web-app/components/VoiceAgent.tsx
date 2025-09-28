@@ -1901,17 +1901,17 @@ export default function VoiceAgent() {
         // Force mic level reset
         updateMicLevel(0, 'reset');
 
-        // Auto-activate Webkit VAD if available and not already active
-        if (vadSupported && vadInitialized && !useWebkitVAD && vadService.current) {
-            const success = startVAD();
-            if (success) {
-                setUseWebkitVAD(true);
-                setListening(true);
-                setStatus(currentLang.status.listening);
-                setShowTranscription(true);
-                return;
-            }
-        }
+        // DISABLED: Auto-activate Webkit VAD - using server-side STT instead
+        // if (vadSupported && vadInitialized && !useWebkitVAD && vadService.current) {
+        //     const success = startVAD();
+        //     if (success) {
+        //         setUseWebkitVAD(true);
+        //         setListening(true);
+        //         setStatus(currentLang.status.listening);
+        //         setShowTranscription(true);
+        //         return;
+        //     }
+        // }
 
         console.log("🚀 START MIC INITIATED:", {
             timestamp: new Date().toLocaleTimeString(),
@@ -1923,33 +1923,33 @@ export default function VoiceAgent() {
             audioContextState: audioCtx.current?.state
         });
 
-        // If VAD is enabled, use appropriate VAD service
-        if (useWebkitVAD && vadService.current) {
-            const success = startVAD();
-            if (success) {
-                setListening(true);
-                setStatus(currentLang.status.listening);
-                setShowTranscription(true);
-                console.log("✅ Webkit VAD Started Successfully");
-                return;
-            } else {
-                console.log("❌ Webkit VAD Failed to Start");
-            }
-        }
+        // DISABLED: If VAD is enabled, use appropriate VAD service - using server-side STT instead
+        // if (useWebkitVAD && vadService.current) {
+        //     const success = startVAD();
+        //     if (success) {
+        //         setListening(true);
+        //         setStatus(currentLang.status.listening);
+        //         setShowTranscription(true);
+        //         console.log("✅ Webkit VAD Started Successfully");
+        //         return;
+        //     } else {
+        //         console.log("❌ Webkit VAD Failed to Start");
+        //     }
+        // }
 
-        // If fallback VAD is enabled, use fallback service
-        if (useFallbackVAD && fallbackVADService.current) {
-            const success = startFallbackVAD();
-            if (success) {
-                setListening(true);
-                setStatus(currentLang.status.listening);
-                setShowTranscription(true);
-                console.log("✅ Fallback VAD Started Successfully");
-                return;
-            } else {
-                console.log("❌ Fallback VAD Failed to Start");
-            }
-        }
+        // DISABLED: If fallback VAD is enabled, use fallback service - using server-side STT instead
+        // if (useFallbackVAD && fallbackVADService.current) {
+        //     const success = startFallbackVAD();
+        //     if (success) {
+        //         setListening(true);
+        //         setStatus(currentLang.status.listening);
+        //         setShowTranscription(true);
+        //         console.log("✅ Fallback VAD Started Successfully");
+        //         return;
+        //     } else {
+        //         console.log("❌ Fallback VAD Failed to Start");
+        //     }
+        // }
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
