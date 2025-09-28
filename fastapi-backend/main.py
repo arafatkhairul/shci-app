@@ -22,6 +22,16 @@ def load_audio_env():
 # Load environment variables
 load_audio_env()
 
+# Additional warning suppression
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+# Suppress specific library warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0' if os.environ.get('CUDA_VISIBLE_DEVICES') is None else os.environ.get('CUDA_VISIBLE_DEVICES')
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
