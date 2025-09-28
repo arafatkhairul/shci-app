@@ -1749,6 +1749,14 @@ export default function VoiceAgent() {
                                 setInterimTranscript(data.text);
                                 setVadTranscript(data.text);
                                 setVadConfidence(data.confidence || 0);
+                                
+                                // Notify VAD services about server-side STT result
+                                if (vadService.current) {
+                                    vadService.current.handleServerSTTResult(data.text, false, data.confidence || 0);
+                                }
+                                if (fallbackVADService.current) {
+                                    fallbackVADService.current.handleServerSTTResult(data.text, false, data.confidence || 0);
+                                }
                                 break;
 
                             case "final_transcript":
@@ -1765,6 +1773,14 @@ export default function VoiceAgent() {
                                     confidence: data.confidence || 0,
                                     isFinal: true
                                 }]);
+                                
+                                // Notify VAD services about server-side STT result
+                                if (vadService.current) {
+                                    vadService.current.handleServerSTTResult(data.text, true, data.confidence || 0);
+                                }
+                                if (fallbackVADService.current) {
+                                    fallbackVADService.current.handleServerSTTResult(data.text, true, data.confidence || 0);
+                                }
                                 break;
 
                             case "final_transcript":
