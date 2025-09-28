@@ -232,6 +232,64 @@ export default function VoiceAgent() {
     const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
     const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Audio batching system
+    const BATCH_SAMPLES = 2048;
+    const HEADER_BYTES = 8;
+    const FRAME_BYTES = BATCH_SAMPLES * 2;
+    const MESSAGE_BYTES = HEADER_BYTES + FRAME_BYTES;
+    
+    const bufferPool = useRef<ArrayBuffer[]>([]);
+    const batchBuffer = useRef<ArrayBuffer | null>(null);
+    const batchView = useRef<DataView | null>(null);
+    const batchInt16 = useRef<Int16Array | null>(null);
+    const batchOffset = useRef<number>(0);
+
+    // ---------- Audio Batching Functions ----------
+    const base64ToInt16Array = (b64: string) => {
+        const raw = atob(b64);
+        const buf = new ArrayBuffer(raw.length);
+        const view = new Uint8Array(buf);
+        for (let i = 0; i < raw.length; i++) {
+            view[i] = raw.charCodeAt(i);
+        }
+        return new Int16Array(buf);
+    };
+
+    const initBatch = () => {
+        if (!batchBuffer.current) {
+            batchBuffer.current = bufferPool.current.pop() || new ArrayBuffer(MESSAGE_BYTES);
+            batchView.current = new DataView(batchBuffer.current);
+            batchInt16.current = new Int16Array(batchBuffer.current, HEADER_BYTES);
+            batchOffset.current = 0;
+        }
+    };
+
+    const flushBatch = () => {
+        if (!batchView.current || !batchBuffer.current) return;
+        
+        const ts = Date.now() & 0xFFFFFFFF;
+        batchView.current.setUint32(0, ts, false);
+        const flags = aiSpeaking ? 1 : 0;
+        batchView.current.setUint32(4, flags, false);
+
+        if (ws.current?.readyState === WebSocket.OPEN) {
+            ws.current.send(batchBuffer.current);
+            console.log("🎤 Audio batch sent:", batchBuffer.current.byteLength, "bytes");
+        }
+
+        bufferPool.current.push(batchBuffer.current);
+        batchBuffer.current = null;
+    };
+
+    const flushRemainder = () => {
+        if (batchOffset.current > 0 && batchInt16.current) {
+            for (let i = batchOffset.current; i < BATCH_SAMPLES; i++) {
+                batchInt16.current[i] = 0;
+            }
+            flushBatch();
+        }
+    };
+
     // ---------- Mobile Detection ----------
     useEffect(() => {
         const mobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -909,9 +967,17 @@ export default function VoiceAgent() {
                     if (type === 'ttsPlaybackStarted') {
                         console.log("🔊 TTS Playback Started");
                         setAiSpeaking(true);
+                        // Send TTS start message to server
+                        if (ws.current?.readyState === WebSocket.OPEN) {
+                            ws.current.send(JSON.stringify({ type: 'tts_start' }));
+                        }
                     } else if (type === 'ttsPlaybackStopped') {
                         console.log("🔇 TTS Playback Stopped");
                         setAiSpeaking(false);
+                        // Send TTS stop message to server
+                        if (ws.current?.readyState === WebSocket.OPEN) {
+                            ws.current.send(JSON.stringify({ type: 'tts_stop' }));
+                        }
                     }
                 };
 
@@ -1169,6 +1235,9 @@ export default function VoiceAgent() {
             audioPlaybackTimeoutRef.current = null;
         }
         
+        // Flush remaining audio batch
+        flushRemainder();
+        
         // Clear TTS worklet buffer
         if (ttsWorkletNode.current) {
             ttsWorkletNode.current.port.postMessage({ type: 'clear' });
@@ -1342,6 +1411,33 @@ export default function VoiceAgent() {
                                 // Play audio chunk immediately for real-time experience
                                 if (!useLocalTTS && data.audio_base64) {
                                     await playAudioChunk(data.audio_base64, data.text);
+                                }
+                                break;
+
+                            case "tts_chunk":
+                                console.log("🔊 TTS chunk received:", data.content ? "Yes" : "No");
+                                if (data.content && ttsWorkletNode.current) {
+                                    const int16Data = base64ToInt16Array(data.content);
+                                    ttsWorkletNode.current.port.postMessage(int16Data);
+                                }
+                                break;
+
+                            case "tts_interruption":
+                                console.log("🔇 TTS interruption received");
+                                if (ttsWorkletNode.current) {
+                                    ttsWorkletNode.current.port.postMessage({ type: "clear" });
+                                }
+                                setAiSpeaking(false);
+                                break;
+
+                            case "stop_tts":
+                                console.log("🛑 Stop TTS received");
+                                if (ttsWorkletNode.current) {
+                                    ttsWorkletNode.current.port.postMessage({ type: "clear" });
+                                }
+                                setAiSpeaking(false);
+                                if (ws.current?.readyState === WebSocket.OPEN) {
+                                    ws.current.send(JSON.stringify({ type: 'tts_stop' }));
                                 }
                                 break;
 
@@ -1674,22 +1770,30 @@ export default function VoiceAgent() {
                 });
 
                 workletNode.current.port.onmessage = (ev) => {
-                    const { type, value, buffer } = ev.data || {};
-                    // New PCM Worklet Processor - direct buffer handling
-                    if (buffer && buffer.byteLength > 0) {
-                        if (listeningRef.current && ws.current?.readyState === WebSocket.OPEN) {
-                            try {
-                                ws.current.send(new Uint8Array(buffer));
-                                console.log("🎤 Audio frame sent to backend:", buffer.byteLength, "bytes");
-                            } catch (error) {
-                                console.error("❌ Error sending audio frame:", error);
+                    const buffer = ev.data;
+                    if (buffer && buffer.byteLength > 0 && listeningRef.current) {
+                        const incoming = new Int16Array(buffer);
+                        let read = 0;
+                        
+                        while (read < incoming.length) {
+                            initBatch();
+                            const toCopy = Math.min(
+                                incoming.length - read,
+                                BATCH_SAMPLES - batchOffset.current
+                            );
+                            
+                            if (batchInt16.current) {
+                                batchInt16.current.set(
+                                    incoming.subarray(read, read + toCopy),
+                                    batchOffset.current
+                                );
+                                batchOffset.current += toCopy;
+                                read += toCopy;
+                                
+                                if (batchOffset.current === BATCH_SAMPLES) {
+                                    flushBatch();
+                                }
                             }
-                        } else {
-                            console.log("⚠️ Cannot send audio frame:", {
-                                listening: listeningRef.current,
-                                wsState: ws.current?.readyState,
-                                wsOpen: ws.current?.readyState === WebSocket.OPEN
-                            });
                         }
                     }
                 };
