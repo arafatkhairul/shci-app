@@ -7,6 +7,21 @@ import sys
 # Add the current directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Load audio environment variables to suppress warnings
+def load_audio_env():
+    """Load audio-related environment variables to suppress warnings"""
+    env_file = os.path.join(os.path.dirname(__file__), 'env.audio')
+    if os.path.exists(env_file):
+        with open(env_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key] = value
+
+# Load environment variables
+load_audio_env()
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
