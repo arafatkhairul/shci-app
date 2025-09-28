@@ -177,12 +177,12 @@ class ChatHandler:
             if websocket.client_state.name == "CONNECTED":
                 await websocket.send_text(json.dumps(payload))
             else:
-                log.debug("WebSocket connection is closed, cannot send message")
+                # WebSocket connection is closed, cannot send message
         except Exception as e:
             if "close message has been sent" in str(e):
-                log.debug("WebSocket closed, cannot send message")
+                # WebSocket closed, cannot send message
             elif "disconnect message has been received" in str(e):
-                log.debug("WebSocket disconnected, cannot send message")
+                # WebSocket disconnected, cannot send message
             else:
                 log.warning(f"Failed to send WebSocket message: {e}")
 
@@ -293,7 +293,7 @@ class ChatHandler:
                 return
             
             # Log audio data received
-            log.debug(f"[{conn_id}] 🎤 Audio data received: {len(audio_data)} bytes")
+            # Audio data received
             
             # Add audio frame to STT service buffer
             stt_service.add_audio_frame(audio_data)
@@ -345,13 +345,13 @@ class ChatHandler:
                                     "confidence": confidence
                                 }, mem, None, conn_id)
                         else:
-                            log.debug(f"[{conn_id}] 🎤 Empty transcript received")
+                            # Empty transcript received
                     else:
-                        log.debug(f"[{conn_id}] 🎤 No segments in transcription result")
+                        # No segments in transcription result
                 else:
-                    log.debug(f"[{conn_id}] 🎤 No transcription result")
+                    # No transcription result
             else:
-                log.debug(f"[{conn_id}] 🎤 Buffer not ready: {buffer_duration:.2f}s < 1.0s")
+                # Buffer not ready
             
         except Exception as e:
             log.error(f"[{conn_id}] Error handling audio data: {e}")
@@ -643,7 +643,7 @@ If the input is grammatically correct, respond normally without any grammar corr
             # CRITICAL: Break at sentence boundaries to prevent punctuation separation
             if word.endswith(('.', '!', '?', ';', ':')):
                 should_break = True
-                log.debug(f"Breaking at sentence boundary: '{word}'")
+                # Breaking at sentence boundary
             
             # Break if we've reached the chunk size (but only if not in middle of sentence)
             elif current_word_count >= chunk_size:

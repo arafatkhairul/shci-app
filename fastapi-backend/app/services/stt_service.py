@@ -170,7 +170,7 @@ class STTService:
             # Log audio frame details every 100 frames to avoid spam
             if len(self.audio_buffer) % (self.sample_rate // 10) == 0:  # Every 0.1 seconds
                 buffer_duration = self.get_buffer_duration()
-                log.debug(f"🎤 Audio buffer: {len(self.audio_buffer)} samples, {buffer_duration:.2f}s duration")
+                # Audio buffer status
                 
         except Exception as e:
             log.error(f"Error adding audio frame: {e}")
@@ -180,15 +180,15 @@ class STTService:
         Processes the current audio buffer if it contains enough new data.
         """
         if not self.is_ready():
-            log.debug("🎤 STT not ready, skipping processing")
+            # STT not ready, skipping processing
             return None
 
         if len(self.audio_buffer) < self.min_chunk_samples:
-            log.debug(f"🎤 Audio buffer too small: {len(self.audio_buffer)} < {self.min_chunk_samples}")
+            # Audio buffer too small
             return None
 
         if self.processing_lock.locked():
-            log.debug("🎤 Processing lock acquired, skipping this cycle")
+            # Processing lock acquired, skipping this cycle
             return None
 
         async with self.processing_lock:
@@ -202,7 +202,7 @@ class STTService:
                 # Log audio statistics
                 audio_rms = np.sqrt(np.mean(audio_chunk**2))
                 audio_max = np.max(np.abs(audio_chunk))
-                log.debug(f"🎤 Audio stats: RMS={audio_rms:.4f}, Max={audio_max:.4f}")
+                # Audio stats
                 
                 # Clear buffer before processing to avoid processing same audio twice
                 self.clear_buffer()
