@@ -223,6 +223,7 @@ export default function VoiceAgent() {
     const streamRef = useRef<MediaStream | null>(null);
     // VAD service refs removed - using server-side STT only
     const workletNode = useRef<AudioWorkletNode | null>(null);
+    const ttsWorkletNode = useRef<AudioWorkletNode | null>(null);
     const processorNode = useRef<ScriptProcessorNode | null>(null);
     const analyser = useRef<AnalyserNode | null>(null);
     const muteGain = useRef<GainNode | null>(null);
@@ -879,7 +880,45 @@ export default function VoiceAgent() {
             if (isInitialized) return;
             isInitialized = true;
 
-            // VAD initialization - REMOVED (using server-side STT only)
+            // Initialize TTS playback worklet
+            await initializeTTSWorklet();
+        };
+
+        const initializeTTSWorklet = async () => {
+            try {
+                if (!audioCtx.current) {
+                    audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+                }
+
+                const workletUrl = '/pcm16-worklet.js';
+                await audioCtx.current.audioWorklet.addModule(workletUrl);
+                console.log("✅ TTS Worklet Loaded Successfully");
+
+                ttsWorkletNode.current = new AudioWorkletNode(
+                    audioCtx.current,
+                    "tts-playback-processor",
+                    { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] }
+                );
+
+                // Connect TTS worklet to audio output
+                ttsWorkletNode.current.connect(audioCtx.current.destination);
+
+                // Listen for TTS playback events
+                ttsWorkletNode.current.port.onmessage = (event) => {
+                    const { type } = event.data || {};
+                    if (type === 'ttsPlaybackStarted') {
+                        console.log("🔊 TTS Playback Started");
+                        setAiSpeaking(true);
+                    } else if (type === 'ttsPlaybackStopped') {
+                        console.log("🔇 TTS Playback Stopped");
+                        setAiSpeaking(false);
+                    }
+                };
+
+                console.log("✅ TTS Worklet Initialized Successfully");
+            } catch (error) {
+                console.error("❌ Failed to initialize TTS worklet:", error);
+            }
         };
 
         initializeServices();
@@ -1130,6 +1169,12 @@ export default function VoiceAgent() {
             audioPlaybackTimeoutRef.current = null;
         }
         
+        // Clear TTS worklet buffer
+        if (ttsWorkletNode.current) {
+            ttsWorkletNode.current.port.postMessage({ type: 'clear' });
+            console.log("🛑 TTS worklet buffer cleared");
+        }
+        
         // Reset audio state
         setAiSpeaking(false);
         setIsWaitingForResponse(false);
@@ -1140,8 +1185,6 @@ export default function VoiceAgent() {
     // ---------- Helpers: Real-time Audio Chunk Playback ----------
     const playAudioChunk = async (base64: string, text?: string) => {
         try {
-            // VAD pause - REMOVED (using server-side STT only)
-
             if (!audioCtx.current) {
                 audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
             }
@@ -1152,27 +1195,31 @@ export default function VoiceAgent() {
             for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
 
             const audioBuf = await audioCtx.current.decodeAudioData(array.buffer);
-            const src = audioCtx.current.createBufferSource();
-            src.buffer = audioBuf;
-            src.connect(audioCtx.current.destination);
+            
+            // Convert AudioBuffer to Int16Array for TTS worklet
+            const leftChannel = audioBuf.getChannelData(0);
+            const int16Array = new Int16Array(leftChannel.length);
+            for (let i = 0; i < leftChannel.length; i++) {
+                const sample = Math.max(-1, Math.min(1, leftChannel[i]));
+                int16Array[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+            }
+
+            // Send audio data to TTS worklet
+            if (ttsWorkletNode.current) {
+                ttsWorkletNode.current.port.postMessage(int16Array);
+                console.log(`🎵 Audio chunk sent to TTS worklet (${int16Array.length} samples)`);
+            } else {
+                console.error("❌ TTS worklet not initialized");
+            }
             
             // Store text for highlighting
             if (text) {
-                (src as any).text = text;
+                setCurrentSpeakingText(text);
             }
-            
-            // Add to queue instead of playing immediately
-            audioQueueRef.current.push(src);
-            console.log(`🎵 Audio chunk added to queue (${audioQueueRef.current.length} in queue)`);
             
             // Set speaking state
             setAiSpeaking(true);
             setIsWaitingForResponse(false);
-            
-            // Play next audio if not already playing
-            if (!isPlayingAudioRef.current) {
-                playNextAudioInQueue();
-            }
             
         } catch (error) {
             console.error("Error playing audio chunk:", error);
@@ -1180,48 +1227,9 @@ export default function VoiceAgent() {
     };
 
     const playNextAudioInQueue = () => {
-        if (audioQueueRef.current.length === 0) {
-            console.log("🎵 No more audio in queue");
-            isPlayingAudioRef.current = false;
-            setAiSpeaking(false);
-            setIsWaitingForResponse(false);
-            setHighlightedText("");
-            setCurrentSpeakingText("");
-            return;
-        }
-
-        if (isPlayingAudioRef.current) {
-            console.log("🎵 Already playing audio, waiting...");
-            return;
-        }
-
-        const src = audioQueueRef.current.shift(); // Remove first item from queue
-        if (!src) return;
-
-        console.log(`🎵 Playing audio chunk (${audioQueueRef.current.length} remaining in queue)`);
-        isPlayingAudioRef.current = true;
-
-        // Highlight the text being spoken
-        if ((src as any).text) {
-            setCurrentSpeakingText((src as any).text);
-            setHighlightedText((src as any).text);
-            speakingTextRef.current = (src as any).text;
-        }
-
-        src.onended = () => {
-            console.log("🎵 Audio chunk finished");
-            isPlayingAudioRef.current = false;
-            
-            // Clear highlighting for this chunk
-            setHighlightedText("");
-            
-            // Play next audio in queue after a short delay
-            setTimeout(() => {
-                playNextAudioInQueue();
-            }, 50); // Small delay to prevent overlap
-        };
-
-        src.start(0);
+        // TTS worklet handles playback automatically
+        // This function is kept for compatibility but simplified
+        console.log("🎵 TTS worklet handles playback automatically");
     };
 
 
