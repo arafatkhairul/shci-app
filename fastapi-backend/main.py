@@ -101,6 +101,19 @@ async def initialize_stt():
 chat_handler = ChatHandler(llm_service, tts_service, db_service)
 stt_handler = STTHandler()
 
+# Pre-initialize STT handler
+async def pre_initialize_stt():
+    """Pre-initialize RealtimeSTT recorder on startup"""
+    try:
+        log.info("🚀 Pre-initializing RealtimeSTT recorder...")
+        success = await stt_handler.pre_initialize()
+        if success:
+            log.info("✅ RealtimeSTT recorder pre-initialized successfully")
+        else:
+            log.warning("⚠️ RealtimeSTT recorder pre-initialization failed")
+    except Exception as e:
+        log.error(f"❌ RealtimeSTT recorder pre-initialization error: {e}")
+
 @app.on_event("startup")
 async def startup_event():
     """Application startup event"""
@@ -112,11 +125,17 @@ async def startup_event():
     
     # Initialize STT service
     await initialize_stt()
+    
+    # Pre-initialize RealtimeSTT recorder
+    await pre_initialize_stt()
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Application shutdown event"""
     log.info("🛑 Shutting down SHCI Voice Agent API")
+    
+    # Clean up pre-validated STT config
+    stt_handler.clear_pre_initialized_config()
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

@@ -155,6 +155,7 @@ export default function VoiceAgent() {
     // ---------- State ----------
     const [connected, setConnected] = useState(false);
     const [listening, setListening] = useState(false);
+    const [isInitializingSTT, setIsInitializingSTT] = useState(false);
     
     // Mobile-specific state
     const [isMobile, setIsMobile] = useState(false);
@@ -1768,6 +1769,10 @@ export default function VoiceAgent() {
             return;
         }
 
+        // Show loading state during STT initialization
+        setIsInitializingSTT(true);
+        setStatus("Initializing speech recognition...");
+
         // Force mic level reset
         updateMicLevel(0, 'reset');
 
@@ -1777,7 +1782,13 @@ export default function VoiceAgent() {
             sttStatus: sttStatus
         });
 
-        await startSTT();
+        try {
+            await startSTT();
+        } catch (error) {
+            console.error("Failed to start STT:", error);
+            setIsInitializingSTT(false);
+            setStatus(`STT Error: ${error instanceof Error ? error.message : String(error)}`);
+        }
     };
 
     // ---------- Stop mic ----------
@@ -1806,8 +1817,9 @@ export default function VoiceAgent() {
                 onStatus: (status) => {
                     setSttStatus(status);
                     if (status === "ready") {
-            setListening(true);
-            setStatus(currentLang.status.listening);
+                        setIsInitializingSTT(false);
+                        setListening(true);
+                        setStatus(currentLang.status.listening);
                         setShowTranscription(true);
                     }
                 },
@@ -1845,6 +1857,7 @@ export default function VoiceAgent() {
                     }
                 },
                 onError: (error) => {
+                    setIsInitializingSTT(false);
                     setSttStatus(`error: ${error}`);
                     setStatus(`STT Error: ${error}`);
                 }
@@ -1855,6 +1868,7 @@ export default function VoiceAgent() {
             await sttStream.startAudio();
             } catch (error) {
             console.error("Failed to start STT:", error);
+            setIsInitializingSTT(false);
             setSttStatus(`error: ${error instanceof Error ? error.message : String(error)}`);
             setStatus(`STT Error: ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -2990,9 +3004,11 @@ export default function VoiceAgent() {
                                                     : "bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white shadow-lg"
                                                 : !connected
                                                     ? "bg-zinc-600/80 text-white cursor-not-allowed shadow-lg"
-                                                    : "bg-blue-600/80 text-white hover:bg-blue-600 shadow-lg"
+                                                    : isInitializingSTT
+                                                        ? "bg-yellow-600/80 text-white cursor-not-allowed shadow-lg"
+                                                        : "bg-blue-600/80 text-white hover:bg-blue-600 shadow-lg"
                                                 }`}
-                                            disabled={!connected}
+                                            disabled={!connected || isInitializingSTT}
                                             style={{
                                                 pointerEvents: 'auto',
                                                 ...(listening && micLevel > 0.01 ? {
@@ -3065,6 +3081,11 @@ export default function VoiceAgent() {
                                                         <>
                                                             <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                                             <span>Connecting...</span>
+                                                        </>
+                                                    ) : isInitializingSTT ? (
+                                                        <>
+                                                            <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                            <span>Initializing...</span>
                                                         </>
                                                     ) : (
                                                         <>

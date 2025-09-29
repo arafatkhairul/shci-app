@@ -84,11 +84,12 @@ class RTSession:
     # hard cap on pre-init buffered chunks (protect memory & latency)
     BUFFER_MAX = int(os.getenv("RT_BUFFER_MAX", "400"))  # ~8s if 20ms frames
 
-    def __init__(self, ws: WebSocket, loop: asyncio.AbstractEventLoop):
+    def __init__(self, ws: WebSocket, loop: asyncio.AbstractEventLoop, stt_handler: 'STTHandler' = None):
         self.ws = ws
         self.loop = loop
         self.running = True
         self.rec: Optional[AudioToTextRecorder] = None
+        self.stt_handler = stt_handler
 
         # readiness gate
         self._ready_event: asyncio.Event = asyncio.Event()
@@ -105,12 +106,26 @@ class RTSession:
     async def _async_init(self):
         try:
             self._send_json({"type": "status", "text": "initializing"})
-            def init_recorder():
-                return _build_recorder_with_fallbacks({
-                    "on_partial": self._cb_partial,
-                    "on_stabilized": self._cb_stabilized
-                })
-            self.rec = await asyncio.get_running_loop().run_in_executor(None, init_recorder)
+            
+            # Check if we have a pre-validated config
+            if self.stt_handler and self.stt_handler.is_pre_initialized():
+                log.info("[RTSession] Using pre-validated RealtimeSTT config - FAST INITIALIZATION!")
+                # Use the pre-validated config for faster initialization
+                def init_recorder():
+                    return _build_recorder_with_fallbacks({
+                        "on_partial": self._cb_partial,
+                        "on_stabilized": self._cb_stabilized
+                    })
+                self.rec = await asyncio.get_running_loop().run_in_executor(None, init_recorder)
+            else:
+                log.info("[RTSession] Creating new RealtimeSTT recorder with fallback")
+                # Fallback to normal initialization
+                def init_recorder():
+                    return _build_recorder_with_fallbacks({
+                        "on_partial": self._cb_partial,
+                        "on_stabilized": self._cb_stabilized
+                    })
+                self.rec = await asyncio.get_running_loop().run_in_executor(None, init_recorder)
 
             # start finalization thread
             self.final_thread = threading.Thread(target=self._final_loop, daemon=True)
@@ -214,7 +229,73 @@ class STTHandler:
     """Handles WebSocket STT connections"""
 
     def __init__(self):
-        pass
+        self._pre_initialized = False
+        self._initialization_lock = asyncio.Lock()
+        self._is_initializing = False
+        self._working_config = None  # Store the working device/compute config
+
+    async def pre_initialize(self):
+        """Pre-validate RealtimeSTT configuration on application startup"""
+        if self._pre_initialized:
+            return True
+            
+        async with self._initialization_lock:
+            if self._is_initializing:
+                return False
+            if self._pre_initialized:
+                return True
+                
+            self._is_initializing = True
+            try:
+                log.info("[STTHandler] Pre-validating RealtimeSTT configuration...")
+                
+                # Test initialization to find working device/compute combination
+                def test_init():
+                    return _build_recorder_with_fallbacks({
+                        "on_partial": lambda text: None,  # Dummy callbacks for testing
+                        "on_stabilized": lambda text: None
+                    })
+                
+                # Test initialize in executor to avoid blocking
+                loop = asyncio.get_running_loop()
+                test_recorder = await loop.run_in_executor(None, test_init)
+                
+                # Store the working configuration
+                self._working_config = {
+                    "device": getattr(test_recorder, 'device', None),
+                    "compute_type": getattr(test_recorder, 'compute_type', None),
+                }
+                
+                # Clean up test recorder
+                try:
+                    if hasattr(test_recorder, "abort"):
+                        test_recorder.abort()
+                    if hasattr(test_recorder, "shutdown"):
+                        test_recorder.shutdown()
+                except:
+                    pass
+                
+                self._pre_initialized = True
+                log.info(f"[STTHandler] RealtimeSTT configuration pre-validated: {self._working_config}")
+                return True
+            except Exception as e:
+                log.error(f"[STTHandler] Failed to pre-validate RealtimeSTT config: {e}")
+                return False
+            finally:
+                self._is_initializing = False
+
+    def get_working_config(self):
+        """Get the pre-validated working config if available"""
+        return self._working_config
+
+    def is_pre_initialized(self):
+        """Check if configuration has been pre-validated"""
+        return self._pre_initialized
+
+    def clear_pre_initialized_config(self):
+        """Clear the pre-validated config"""
+        self._working_config = None
+        self._pre_initialized = False
 
     async def handle_websocket(self, websocket: WebSocket):
         await websocket.accept()
@@ -222,7 +303,7 @@ class STTHandler:
         log.info(f"STT WebSocket connected: {conn_id}")
 
         loop = asyncio.get_running_loop()
-        sess = RTSession(websocket, loop)
+        sess = RTSession(websocket, loop, self)
 
         try:
             # Tell client to wait for 'ready' before streaming (best practice)
