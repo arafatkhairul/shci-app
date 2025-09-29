@@ -660,6 +660,8 @@ setup_backend() {
     
     # Install PyTorch with CUDA support for RTX 5090
     log_step "Installing PyTorch with CUDA 12.1 support for RTX 5090..."
+    # First uninstall old PyTorch, then install new version
+    pip uninstall torch torchvision torchaudio -y 2>/dev/null || true
     # Use PyTorch 2.4.0+ for better RTX 5090 support
     pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu121
     log_success "PyTorch with CUDA 12.1 installed"
@@ -684,6 +686,18 @@ setup_backend() {
     else
         log_error "Python imports test failed"
         exit 1
+    fi
+    
+    # Check PyTorch version and reinstall if needed
+    log_step "Checking PyTorch version..."
+    local pytorch_version=$(python -c "import torch; print(torch.__version__)" 2>/dev/null || echo "not_found")
+    if [[ "$pytorch_version" == "2.3.1"* ]]; then
+        log_warning "PyTorch 2.3.1 detected, upgrading to 2.4.0 for RTX 5090 support..."
+        pip uninstall torch torchvision torchaudio -y
+        pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu121
+        log_success "PyTorch upgraded to 2.4.0"
+    else
+        log_success "PyTorch version: $pytorch_version"
     fi
     
     # Test GPU detection and CUDA availability
@@ -857,7 +871,12 @@ NEXT_PUBLIC_APP_URL=https://nodecel.com
 EOF
     log_success "Environment file created"
     
-    # Build frontend
+    # Clear Next.js cache and build frontend
+    log_step "Clearing Next.js cache..."
+    rm -rf .next
+    rm -rf node_modules/.cache
+    log_success "Next.js cache cleared"
+    
     log_step "Building Next.js frontend..."
     NODE_ENV=production npm run build
     log_success "Frontend built successfully"
