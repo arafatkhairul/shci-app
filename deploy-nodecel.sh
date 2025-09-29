@@ -27,7 +27,7 @@ NC='\033[0m' # No Color
 # Configuration
 PROJECT_DIR="/var/www/shci-app"
 REPO_URL="git@github.com:arafatkhairul/shci-app.git"
-BRANCH="feature/tts-medium-variants"
+BRANCH="feature/realtime-stt-audioworklet"
 SERVICE_USER="root"
 SERVICE_GROUP="root"
 LOG_FILE="/var/log/shci-deployment.log"
@@ -357,26 +357,72 @@ install_python() {
     fi
 }
 
-# Configure GPU for TTS
+# Configure GPU for RTX 5090 optimization
 configure_gpu() {
-    log_step "Configuring GPU for TTS..."
+    log_step "Configuring RTX 5090 GPU for optimal performance..."
     
     # Check if NVIDIA GPU is available
     if command -v nvidia-smi &> /dev/null; then
         log_success "NVIDIA GPU detected"
         
-        # Show GPU information
-        local gpu_info=$(nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader,nounits 2>/dev/null | head -1)
+        # Show detailed GPU information
+        local gpu_info=$(nvidia-smi --query-gpu=name,memory.total,memory.used,driver_version,compute_cap --format=csv,noheader,nounits 2>/dev/null | head -1)
         if [ -n "$gpu_info" ]; then
             log_success "GPU Info: $gpu_info"
         fi
         
-        # Set GPU environment variables
-        export CUDA_VISIBLE_DEVICES=0
-        export TORCH_DEVICE=cuda
-        export TTS_DEVICE=cuda
-        export PIPER_DEVICE=cuda
-        export PIPER_FORCE_CUDA=true
+        # Check if RTX 5090 is detected
+        if nvidia-smi --query-gpu=name --format=csv,noheader | grep -i "rtx 5090\|geforce rtx 5090" &> /dev/null; then
+            log_success "RTX 5090 detected - applying optimized configuration"
+            
+            # RTX 5090 specific optimizations
+            export CUDA_VISIBLE_DEVICES=0
+            export TORCH_DEVICE=cuda
+            export TTS_DEVICE=cuda
+            export PIPER_DEVICE=cuda
+            export PIPER_FORCE_CUDA=true
+            
+            # RTX 5090 memory optimization (24GB VRAM)
+            export TORCH_CUDA_ALLOC_CONF=max_split_size_mb:2048,roundup_power2_divisions:16
+            export CUDA_MEMORY_POOL_DISABLE=0
+            export CUDA_CACHE_DISABLE=0
+            export CUDA_LAUNCH_BLOCKING=0
+            
+            # RTX 5090 compute optimization
+            export CUDA_ARCHITECTURES=89  # RTX 5090 is Ada Lovelace architecture
+            export TORCH_CUDA_ARCH_LIST=8.9
+            
+            # Memory management for 24GB VRAM
+            export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:2048
+            export CUDA_DEVICE_ORDER=PCI_BUS_ID
+            
+            # RTX 5090 specific TTS optimizations
+            export PIPER_USE_CUDA=1
+            export PIPER_CUDA_DEVICE=0
+            export PIPER_BATCH_SIZE=32  # Larger batch size for RTX 5090
+            
+            # RealtimeSTT optimizations for RTX 5090
+            export RT_DEVICE=cuda
+            export RT_COMPUTE=float16  # Use FP16 for better performance on RTX 5090
+            export RT_MODEL=large-v3   # Use large model for better accuracy
+            export RT_GPU_INDEX=0
+            
+            log_success "RTX 5090 optimized configuration applied"
+        else
+            log_warning "RTX 5090 not detected, using standard GPU configuration"
+            
+            # Standard GPU configuration
+            export CUDA_VISIBLE_DEVICES=0
+            export TORCH_DEVICE=cuda
+            export TTS_DEVICE=cuda
+            export PIPER_DEVICE=cuda
+            export PIPER_FORCE_CUDA=true
+            
+            # Standard optimizations
+            export TORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+            export CUDA_CACHE_DISABLE=0
+            export CUDA_LAUNCH_BLOCKING=0
+        fi
         
         log_success "GPU configuration completed"
     else
@@ -592,8 +638,18 @@ setup_backend() {
     pip install --upgrade pip wheel setuptools
     log_success "pip upgraded"
     
-    # Install dependencies
-    log_step "Installing Python dependencies..."
+    # Install PyTorch with CUDA support for RTX 5090
+    log_step "Installing PyTorch with CUDA 12.1 support for RTX 5090..."
+    pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu121
+    log_success "PyTorch with CUDA 12.1 installed"
+    
+    # Install ONNX Runtime with CUDA support
+    log_step "Installing ONNX Runtime with CUDA support..."
+    pip install onnxruntime-gpu==1.22.1
+    log_success "ONNX Runtime with CUDA installed"
+    
+    # Install other dependencies
+    log_step "Installing remaining Python dependencies..."
     pip install -r requirements.txt
     log_success "Dependencies installed"
     
@@ -607,12 +663,50 @@ setup_backend() {
         exit 1
     fi
     
+    # Test GPU detection and CUDA availability
+    log_step "Testing GPU detection and CUDA availability..."
+    python -c "
+import torch
+import sys
+
+print(f'PyTorch version: {torch.__version__}')
+print(f'CUDA available: {torch.cuda.is_available()}')
+
+if torch.cuda.is_available():
+    print(f'CUDA version: {torch.version.cuda}')
+    print(f'Number of GPUs: {torch.cuda.device_count()}')
+    
+    for i in range(torch.cuda.device_count()):
+        gpu_name = torch.cuda.get_device_name(i)
+        gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+        print(f'GPU {i}: {gpu_name} ({gpu_memory:.1f} GB)')
+        
+        # Test tensor operations on GPU
+        try:
+            x = torch.randn(1000, 1000).cuda()
+            y = torch.randn(1000, 1000).cuda()
+            z = torch.mm(x, y)
+            print(f'GPU {i}: Tensor operations successful')
+        except Exception as e:
+            print(f'GPU {i}: Tensor operations failed - {e}')
+            sys.exit(1)
+else:
+    print('CUDA not available - GPU acceleration disabled')
+    sys.exit(1)
+"
+    if [ $? -eq 0 ]; then
+        log_success "GPU detection and CUDA test passed"
+    else
+        log_error "GPU detection and CUDA test failed"
+        exit 1
+    fi
+    
     # Copy production environment file
     if [ -f "$PROJECT_DIR/production.env" ]; then
         cp "$PROJECT_DIR/production.env" .env
         print_success "Production environment file copied"
     else
-        # Create production environment file
+        # Create production environment file optimized for RTX 5090
         cat > .env << 'EOF'
 # Environment
 TTS_ENVIRONMENT=production
@@ -622,9 +716,17 @@ PIPER_FORCE_CUDA=true
 # TTS Configuration
 TTS_DEVICE=cuda
 
-# GPU Configuration
+# RTX 5090 GPU Configuration
 CUDA_VISIBLE_DEVICES=0
 TORCH_DEVICE=cuda
+CUDA_ARCHITECTURES=89
+TORCH_CUDA_ARCH_LIST=8.9
+
+# RTX 5090 Memory Optimization (24GB VRAM)
+TORCH_CUDA_ALLOC_CONF=max_split_size_mb:2048,roundup_power2_divisions:16
+PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:2048
+CUDA_MEMORY_POOL_DISABLE=0
+CUDA_DEVICE_ORDER=PCI_BUS_ID
 
 # API Configuration
 OPENAI_API_KEY=your_openai_key_here
@@ -636,16 +738,29 @@ HOST=0.0.0.0
 PORT=8000
 DEBUG=false
 
-# TTS Configuration
+# TTS Configuration optimized for RTX 5090
 PIPER_LENGTH_SCALE=0.6
 PIPER_NOISE_SCALE=0.667
 PIPER_NOISE_W=0.8
+PIPER_USE_CUDA=1
+PIPER_CUDA_DEVICE=0
+PIPER_BATCH_SIZE=32
 
-# Performance Optimization
-OMP_NUM_THREADS=8
-MKL_NUM_THREADS=8
-NUMEXPR_NUM_THREADS=8
-OPENBLAS_NUM_THREADS=8
+# RealtimeSTT Configuration for RTX 5090
+RT_DEVICE=cuda
+RT_COMPUTE=float16
+RT_MODEL=large-v3
+RT_GPU_INDEX=0
+RT_VAD_SENS=2
+RT_POST_SILENCE=0.2
+RT_MIN_UTT=0.15
+RT_REALTIME_PAUSE=0.02
+
+# Performance Optimization for RTX 5090
+OMP_NUM_THREADS=16
+MKL_NUM_THREADS=16
+NUMEXPR_NUM_THREADS=16
+OPENBLAS_NUM_THREADS=16
 MKL_DYNAMIC=false
 OMP_DYNAMIC=false
 
@@ -656,10 +771,24 @@ PYTHONDONTWRITEBYTECODE=1
 MALLOC_TRIM_THRESHOLD_=131072
 MALLOC_MMAP_THRESHOLD_=131072
 
-# CUDA Optimization
-TORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+# CUDA Optimization for RTX 5090
 CUDA_CACHE_DISABLE=0
 CUDA_LAUNCH_BLOCKING=0
+CUDA_LAUNCH_BLOCKING=0
+
+# Language Support
+DEFAULT_LANGUAGE=en
+RT_LANG=
+
+# LLM Configuration
+LLM_TIMEOUT=15.0
+LLM_RETRIES=1
+MAX_TOKENS=100
+
+# TTS Performance
+TTS_BATCH_SIZE=32
+TTS_CHUNK_SIZE=50
+TTS_OVERLAP=10
 EOF
     fi
     
@@ -1046,32 +1175,65 @@ configure_firewall() {
 
 # Optimize system
 optimize_system() {
-    print_step "Optimizing system settings..."
+    print_step "Optimizing system settings for RTX 5090..."
     
-    # Increase file limits
-    echo "* soft nofile 65536" | tee -a /etc/security/limits.conf
-    echo "* hard nofile 65536" | tee -a /etc/security/limits.conf
+    # RTX 5090 specific file limits
+    echo "* soft nofile 65535" | tee -a /etc/security/limits.conf
+    echo "* hard nofile 65535" | tee -a /etc/security/limits.conf
+    echo "* soft nproc 65535" | tee -a /etc/security/limits.conf
+    echo "* hard nproc 65535" | tee -a /etc/security/limits.conf
     
-    # Optimize kernel parameters
+    # RTX 5090 optimized kernel parameters
     cat << 'EOF' | tee -a /etc/sysctl.conf
-# Network optimizations
-net.core.somaxconn = 65536
-net.ipv4.tcp_max_syn_backlog = 65536
+# RTX 5090 Network optimizations
+net.core.somaxconn = 65535
+net.ipv4.tcp_max_syn_backlog = 65535
 net.core.netdev_max_backlog = 5000
 net.ipv4.tcp_keepalive_time = 600
 net.ipv4.tcp_keepalive_intvl = 30
 net.ipv4.tcp_keepalive_probes = 3
+net.core.rmem_max = 268435456
+net.core.wmem_max = 268435456
+net.ipv4.tcp_rmem = 4096 87380 268435456
+net.ipv4.tcp_wmem = 4096 65536 268435456
 
-# Memory optimizations
-vm.swappiness = 10
+# RTX 5090 Memory optimizations
+vm.swappiness = 1
 vm.dirty_ratio = 15
 vm.dirty_background_ratio = 5
+vm.overcommit_memory = 1
+vm.zone_reclaim_mode = 0
+vm.max_map_count = 262144
+kernel.pid_max = 4194304
+fs.file-max = 2097152
+
+# RTX 5090 GPU optimizations
+kernel.nmi_watchdog = 0
+kernel.perf_cpu_time_max_percent = 1
 EOF
     
     # Apply settings
     sysctl -p
     
-    print_success "System optimized"
+    # Set CPU governor to performance for RTX 5090
+    echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor > /dev/null 2>&1 || true
+    
+    # RTX 5090 specific NVIDIA optimizations
+    if command -v nvidia-smi &> /dev/null; then
+        # Enable GPU persistence mode
+        nvidia-smi -pm 1
+        print_success "NVIDIA GPU persistence mode enabled"
+        
+        # Set power limit for RTX 5090 (350W)
+        nvidia-smi -pl 350
+        print_success "NVIDIA GPU power limit set to 350W"
+        
+        # Set GPU clocks to maximum performance
+        nvidia-smi -ac 3000,2000 2>/dev/null || true
+        print_success "NVIDIA GPU clocks set to maximum performance"
+    fi
+    
+    print_success "System optimized for RTX 5090"
 }
 
 # Start services
@@ -1150,11 +1312,12 @@ show_final_info() {
     echo -e "${GREEN}✅ Installation Summary:${NC}"
     echo -e "   • Python 3.12 with virtual environment"
     echo -e "   • Node.js $(node --version)"
-    echo -e "   • FastAPI backend with GPU support"
+    echo -e "   • FastAPI backend with RTX 5090 GPU support"
     echo -e "   • Next.js frontend"
     echo -e "   • Nginx reverse proxy"
     echo -e "   • Systemd services"
     echo -e "   • Firewall configured"
+    echo -e "   • RTX 5090 optimized for maximum performance"
     
     echo -e "\n${BLUE}🌐 Access Information:${NC}"
     echo -e "   • Frontend: https://nodecel.com"
@@ -1174,8 +1337,46 @@ show_final_info() {
     echo -e "   2. Test the application: https://nodecel.com"
     echo -e "   3. Monitor logs: journalctl -u shci-backend -f"
     echo -e "   4. Check SSL: certbot certificates"
+    echo -e "   5. Monitor GPU usage: nvidia-smi -l 1"
     
-    echo -e "\n${GREEN}🚀 Your SHCI Voice Assistant is ready!${NC}\n"
+    # RTX 5090 verification
+    echo -e "\n${BLUE}🎮 RTX 5090 Verification:${NC}"
+    if command -v nvidia-smi &> /dev/null; then
+        local gpu_info=$(nvidia-smi --query-gpu=name,memory.total,memory.used,temperature.gpu,utilization.gpu --format=csv,noheader,nounits 2>/dev/null | head -1)
+        if [ -n "$gpu_info" ]; then
+            echo -e "   • GPU Status: $gpu_info"
+        fi
+        
+        # Test GPU functionality
+        echo -e "   • Testing GPU functionality..."
+        cd "$PROJECT_DIR/fastapi-backend"
+        source venv/bin/activate
+        python -c "
+import torch
+if torch.cuda.is_available():
+    print(f'   • CUDA Available: Yes (Version {torch.version.cuda})')
+    print(f'   • GPU Count: {torch.cuda.device_count()}')
+    for i in range(torch.cuda.device_count()):
+        gpu_name = torch.cuda.get_device_name(i)
+        gpu_memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+        print(f'   • GPU {i}: {gpu_name} ({gpu_memory:.1f} GB)')
+        
+        # Test tensor operations
+        try:
+            x = torch.randn(1000, 1000).cuda()
+            y = torch.randn(1000, 1000).cuda()
+            z = torch.mm(x, y)
+            print(f'   • GPU {i}: Tensor operations successful ✅')
+        except Exception as e:
+            print(f'   • GPU {i}: Tensor operations failed ❌ - {e}')
+else:
+    print('   • CUDA Available: No ❌')
+" 2>/dev/null || echo -e "   • GPU test failed - check logs"
+    else
+        echo -e "   • NVIDIA drivers not detected ❌"
+    fi
+    
+    echo -e "\n${GREEN}🚀 Your RTX 5090 optimized SHCI Voice Assistant is ready!${NC}\n"
 }
 
 # Deployment summary
