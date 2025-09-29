@@ -284,7 +284,7 @@ export default function VoiceAgent() {
     const [aiSpeaking, setAiSpeaking] = useState(false);
     const [selectedLanguage, setSelectedLanguage] = useState<"en" | "it">("en");
     const [isLanguageDropdownOpen, setIsLanguageDropdownOpen] = useState(false);
-    const [selectedVoice, setSelectedVoice] = useState<string>("en_US-libritts-high");
+    const [selectedVoice, setSelectedVoice] = useState<string>("en_GB-cori-medium");
     const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
