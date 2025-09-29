@@ -27,7 +27,7 @@ import {
     FaCheck
 } from "react-icons/fa";
 import RolePlayAnswers from "./RolePlayAnswers";
-import { RSStream } from "../lib/rtsttClient";
+import { RSStream } from "@/lib/rtsttClient";
 // VAD services removed - using server-side STT only
 
 export default function VoiceAgent() {
