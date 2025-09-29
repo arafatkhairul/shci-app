@@ -286,7 +286,7 @@ update_system() {
     apt update && apt upgrade -y
     
     # Install essential packages only if not already installed
-    local essential_packages=("curl" "wget" "git" "build-essential" "software-properties-common" "apt-transport-https" "ca-certificates" "gnupg" "lsb-release")
+    local essential_packages=("curl" "wget" "git" "build-essential" "software-properties-common" "apt-transport-https" "ca-certificates" "gnupg" "lsb-release" "python3.12-dev" "portaudio19-dev" "libasound2-dev" "libsndfile1-dev" "ffmpeg")
     
     for package in "${essential_packages[@]}"; do
         if check_package_installed "$package"; then
@@ -572,6 +572,26 @@ clone_repository() {
     # Set proper ownership
     chown -R root:root "$PROJECT_DIR"
     log_success "Repository ownership set correctly"
+}
+
+# Install audio dependencies
+install_audio_dependencies() {
+    log_step "Installing audio dependencies for PyAudio and audio processing..."
+    
+    # Install Python development headers and audio libraries
+    local audio_packages=("python3.12-dev" "portaudio19-dev" "libasound2-dev" "libsndfile1-dev" "ffmpeg" "libportaudio2" "libasound2" "alsa-utils")
+    
+    for package in "${audio_packages[@]}"; do
+        if check_package_installed "$package"; then
+            log_success "$package is already installed"
+        else
+            log_step "Installing $package..."
+            apt install -y "$package"
+            log_success "$package installed"
+        fi
+    done
+    
+    log_success "Audio dependencies installed"
 }
 
 # Setup backend
@@ -1502,6 +1522,7 @@ main() {
     install_nodejs
     configure_gpu
     install_nginx
+    install_audio_dependencies
     clone_repository
     setup_backend
     setup_frontend
