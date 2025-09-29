@@ -15,6 +15,9 @@
 
 set -e
 
+# Set up FFmpeg library path for torchaudio compatibility
+export DYLD_LIBRARY_PATH="/opt/homebrew/opt/ffmpeg@6/lib:$DYLD_LIBRARY_PATH"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'

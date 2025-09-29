@@ -51,6 +51,7 @@ from app.services.database_service import DatabaseService
 from app.services.stt_service import stt_service
 from app.api.endpoints import router as endpoints_router
 from app.api.websocket.chat_handler import ChatHandler
+from app.api.websocket.stt_handler import STTHandler
 
 # Initialize logger
 log = get_logger("main")
@@ -92,8 +93,9 @@ async def initialize_stt():
     except Exception as e:
         log.error(f"❌ STT service initialization error: {e}")
 
-# Initialize chat handler
+# Initialize handlers
 chat_handler = ChatHandler(llm_service, tts_service, db_service)
+stt_handler = STTHandler()
 
 @app.on_event("startup")
 async def startup_event():
@@ -116,6 +118,11 @@ async def shutdown_event():
 async def websocket_endpoint(websocket: WebSocket):
     """Main WebSocket endpoint for chat"""
     await chat_handler.handle_websocket(websocket)
+
+@app.websocket("/ws/stt")
+async def stt_websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time speech-to-text"""
+    await stt_handler.handle_websocket(websocket)
 
 @app.get("/")
 async def root():

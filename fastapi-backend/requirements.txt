@@ -73,6 +73,9 @@ numpy==1.26.4
 # WhisperX for real-time speech recognition
 whisperx==3.1.1
 
+# RealtimeSTT for real-time speech-to-text with WebSocket support
+RealtimeSTT==0.3.104
+
 # Additional audio processing for STT
 librosa==0.10.1
 scipy==1.15.2
