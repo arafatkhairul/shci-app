@@ -1864,7 +1864,7 @@ export default function VoiceAgent() {
             });
             
             sttStreamRef.current = sttStream;
-            await sttStream.connect(url);
+            await sttStream.connect(url, selectedLanguage);
             await sttStream.startAudio();
             } catch (error) {
             console.error("Failed to start STT:", error);

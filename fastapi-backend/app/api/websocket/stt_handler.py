@@ -30,7 +30,7 @@ def _pick_fallback_chain():
     else:
         return [("cuda", "float16"), ("cuda", "float32"), ("cpu", "int8"), ("cpu", "float32")]
 
-def _build_recorder_with_fallbacks(callbacks: dict) -> AudioToTextRecorder:
+def _build_recorder_with_fallbacks(callbacks: dict, language: str = "en") -> AudioToTextRecorder:
     # Disable RealtimeSTT internal logging
     import logging
     logging.getLogger('RealtimeSTT').setLevel(logging.CRITICAL)
@@ -47,12 +47,12 @@ def _build_recorder_with_fallbacks(callbacks: dict) -> AudioToTextRecorder:
                 compute_type=compute,
                 gpu_device_index=int(os.getenv("RT_GPU_INDEX", "0")),
                 # ---- Models / language ----
-                model=os.getenv("RT_MODEL", "base.en"),   # dev on M2; use large-v3 on 5090
-                language=os.getenv("RT_LANG", ""),     # ""=auto; set "bn"/"en" to lock
+                model=os.getenv("RT_MODEL", "base.en" if language == "en" else "base"),   # Use base.en for English, base for Italian
+                language=language,     # Use the selected language
                 # ---- Realtime partials ----
                 enable_realtime_transcription=True,
                 use_main_model_for_realtime=True,  # Use main model for better quality
-                realtime_model_type=os.getenv("RT_REALTIME_MODEL", "base.en"),
+                realtime_model_type=os.getenv("RT_REALTIME_MODEL", "base.en" if language == "en" else "base"),
                 realtime_processing_pause=float(os.getenv("RT_REALTIME_PAUSE", "0.05")),  # Faster processing
                 on_realtime_transcription_update=callbacks["on_partial"],
                 on_realtime_transcription_stabilized=callbacks["on_stabilized"],
@@ -84,12 +84,13 @@ class RTSession:
     # hard cap on pre-init buffered chunks (protect memory & latency)
     BUFFER_MAX = int(os.getenv("RT_BUFFER_MAX", "400"))  # ~8s if 20ms frames
 
-    def __init__(self, ws: WebSocket, loop: asyncio.AbstractEventLoop, stt_handler: 'STTHandler' = None):
+    def __init__(self, ws: WebSocket, loop: asyncio.AbstractEventLoop, stt_handler: 'STTHandler' = None, language: str = "en"):
         self.ws = ws
         self.loop = loop
         self.running = True
         self.rec: Optional[AudioToTextRecorder] = None
         self.stt_handler = stt_handler
+        self.language = language
 
         # readiness gate
         self._ready_event: asyncio.Event = asyncio.Event()
@@ -115,7 +116,7 @@ class RTSession:
                     return _build_recorder_with_fallbacks({
                         "on_partial": self._cb_partial,
                         "on_stabilized": self._cb_stabilized
-                    })
+                    }, self.language)
                 self.rec = await asyncio.get_running_loop().run_in_executor(None, init_recorder)
             else:
                 log.info("[RTSession] Creating new RealtimeSTT recorder with fallback")
@@ -124,7 +125,7 @@ class RTSession:
                     return _build_recorder_with_fallbacks({
                         "on_partial": self._cb_partial,
                         "on_stabilized": self._cb_stabilized
-                    })
+                    }, self.language)
                 self.rec = await asyncio.get_running_loop().run_in_executor(None, init_recorder)
 
             # start finalization thread
@@ -302,8 +303,23 @@ class STTHandler:
         conn_id = f"stt_{id(websocket)}"
         log.info(f"STT WebSocket connected: {conn_id}")
 
+        # Default language
+        language = "en"
+        
+        # Wait for language parameter from client
+        try:
+            # Wait for initial message with language
+            msg = await websocket.receive()
+            if "text" in msg:
+                data = json.loads(msg["text"])
+                if "language" in data:
+                    language = data["language"]
+                    log.info(f"STT Language set to: {language}")
+        except Exception as e:
+            log.warning(f"Failed to get language parameter: {e}, using default: {language}")
+
         loop = asyncio.get_running_loop()
-        sess = RTSession(websocket, loop, self)
+        sess = RTSession(websocket, loop, self, language)
 
         try:
             # Tell client to wait for 'ready' before streaming (best practice)
