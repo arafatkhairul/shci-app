@@ -193,6 +193,9 @@ class ChatHandler:
                                     mem_store: Optional[MemoryStore], conn_id: str):
         """Handle final transcript from client"""
         try:
+            import time
+            start_time = time.time()
+            
             transcript = data.get("text", "").strip()
             if not transcript:
                 return
@@ -204,6 +207,9 @@ class ChatHandler:
             
             # Generate AI response
             await self.generate_and_send_response(websocket, transcript, mem, mem_store, conn_id)
+            
+            processing_time = time.time() - start_time
+            log.info(f"[{conn_id}] ⚡ Total processing time: {processing_time:.2f}s")
             
             # Save memory
             if mem_store:
@@ -452,7 +458,7 @@ If the input is grammatically correct, respond normally without any grammar corr
             async for text_chunk in self.llm_service.generate_streaming_response(
                 messages=messages,
                 temperature=0.7,
-                max_tokens=100  # Reduced for faster response
+                max_tokens=50  # Further reduced for faster response
             ):
                 if text_chunk:
                     full_response += text_chunk

@@ -53,15 +53,15 @@ def _build_recorder_with_fallbacks(callbacks: dict) -> AudioToTextRecorder:
                 enable_realtime_transcription=True,
                 use_main_model_for_realtime=True,  # Use main model for better quality
                 realtime_model_type=os.getenv("RT_REALTIME_MODEL", "base.en"),
-                realtime_processing_pause=float(os.getenv("RT_REALTIME_PAUSE", "0.1")),
+                realtime_processing_pause=float(os.getenv("RT_REALTIME_PAUSE", "0.05")),  # Faster processing
                 on_realtime_transcription_update=callbacks["on_partial"],
                 on_realtime_transcription_stabilized=callbacks["on_stabilized"],
                 # ---- VAD / endpointing ----
-                webrtc_sensitivity=int(os.getenv("RT_VAD_SENS", "1")),  # More sensitive
+                webrtc_sensitivity=int(os.getenv("RT_VAD_SENS", "2")),  # More sensitive for faster detection
                 silero_deactivity_detection=bool(int(os.getenv("RT_SILERO_DEACT", "1"))),
-                pre_recording_buffer_duration=float(os.getenv("RT_PRE_ROLL", "0.1")),
-                post_speech_silence_duration=float(os.getenv("RT_POST_SILENCE", "0.5")),
-                min_length_of_recording=float(os.getenv("RT_MIN_UTT", "0.3")),
+                pre_recording_buffer_duration=float(os.getenv("RT_PRE_ROLL", "0.05")),  # Reduced for faster start
+                post_speech_silence_duration=float(os.getenv("RT_POST_SILENCE", "0.3")),  # Reduced for faster finalization
+                min_length_of_recording=float(os.getenv("RT_MIN_UTT", "0.2")),  # Reduced minimum utterance
                 # ---- Text polish ----
                 ensure_sentence_starting_uppercase=True,
                 ensure_sentence_ends_with_period=True,
@@ -162,7 +162,7 @@ class RTSession:
                 def on_final(sentence: str):
                     s = (sentence or "").strip()
                     if s:
-                        log.debug(f"[RTSession] Final: {s}")
+                        log.debug(f"[RTSession] Final Text: {s}")
                         self._send_json({"type": "final", "text": s})
                 self.rec.text(on_final)  # blocks until next final sentence
             except Exception as e:
