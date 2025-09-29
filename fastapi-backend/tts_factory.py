@@ -48,12 +48,12 @@ def preprocess_text_for_tts(text: str) -> str:
     text = re.sub(r'[!]{2,}', '!', text)  # Multiple exclamation marks -> single
     text = re.sub(r'[,]{2,}', ',', text)  # Multiple commas -> single comma
     
-    # 3. Fix punctuation at the beginning of text
-    text = re.sub(r'^[.!?,;:]+', '', text)  # Remove leading punctuation
+    # 3. Fix punctuation at the beginning of text - but be more careful
+    # Only remove if it's truly standalone punctuation
+    text = re.sub(r'^[.!?,;:]+(?=\s|$)', '', text)  # Remove leading punctuation only if followed by space or end
     
-    # 4. Fix punctuation at the end of text - but keep it if it's part of a word
-    # Only remove if it's standalone punctuation
-    text = re.sub(r'[.!?,;:]+$', '', text)  # Remove trailing punctuation
+    # 4. Keep punctuation at the end of text - this is important for natural speech
+    # Don't remove trailing punctuation as it's part of the word/sentence
     
     # 5. Ensure proper sentence ending
     if text and not text[-1] in '.!?':

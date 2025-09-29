@@ -601,7 +601,7 @@ If the input is grammatically correct, respond normally without any grammar corr
             log.error(f"[{conn_id}] Error in complete audio generation: {e}")
 
     def split_text_into_audio_chunks(self, text: str) -> list:
-        """Split text into optimal audio chunks for perfect serial playback"""
+        """Split text into optimal audio chunks with punctuation properly attached to words"""
         if not text.strip():
             return []
         
@@ -609,30 +609,38 @@ If the input is grammatically correct, respond normally without any grammar corr
         text = text.strip()
         text = ' '.join(text.split())
         
-        # Split by sentences first (natural speech boundaries)
+        # Split into words while keeping punctuation attached
         import re
-        sentences = re.split(r'(?<=[.!?])\s+', text)
+        # This regex keeps punctuation attached to the word it belongs to
+        words = re.findall(r'\S+', text)
         
         chunks = []
         current_chunk = ""
         
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if not sentence:
+        for word in words:
+            word = word.strip()
+            if not word:
                 continue
-                
-            # If adding this sentence would make chunk too long, start new chunk
-            if current_chunk and len(current_chunk + " " + sentence) > 150:
+            
+            # If adding this word would make chunk too long, start new chunk
+            if current_chunk and len(current_chunk + " " + word) > 120:
                 if current_chunk:
                     chunks.append(current_chunk.strip())
-                current_chunk = sentence
+                current_chunk = word
             else:
                 if current_chunk:
-                    current_chunk += " " + sentence
+                    current_chunk += " " + word
                 else:
-                    current_chunk = sentence
+                    current_chunk = word
+            
+            # Check if this word ends a sentence (has sentence-ending punctuation)
+            if re.search(r'[.!?]$', word):
+                # This word ends a sentence, so we can end the chunk here
+                if current_chunk.strip():
+                    chunks.append(current_chunk.strip())
+                    current_chunk = ""
         
-        # Add the last chunk
+        # Add the last chunk if there's any remaining text
         if current_chunk.strip():
             chunks.append(current_chunk.strip())
         
@@ -640,8 +648,23 @@ If the input is grammatically correct, respond normally without any grammar corr
         if not chunks:
             chunks = [text]
         
-        log.info(f"Split text into {len(chunks)} audio chunks")
-        return chunks
+        # Post-process chunks to ensure punctuation is properly attached
+        processed_chunks = []
+        for chunk in chunks:
+            if chunk.strip():
+                # Ensure the chunk doesn't start with punctuation
+                chunk = chunk.strip()
+                if chunk and not chunk[0].isalnum() and chunk[0] not in ['"', "'", '(']:
+                    # If chunk starts with punctuation, attach it to previous chunk if possible
+                    if processed_chunks:
+                        processed_chunks[-1] += chunk
+                    else:
+                        processed_chunks.append(chunk)
+                else:
+                    processed_chunks.append(chunk)
+        
+        log.info(f"Split text into {len(processed_chunks)} audio chunks with proper punctuation")
+        return processed_chunks
 
     def extract_ai_response_for_tts(self, text: str) -> str:
         """Extract only the AI response part for TTS, excluding grammar correction"""
@@ -680,7 +703,43 @@ If the input is grammatically correct, respond normally without any grammar corr
         
         # Apply text preprocessing to fix punctuation issues
         from tts_factory import preprocess_text_for_tts
-        return preprocess_text_for_tts(text)
+        processed_text = preprocess_text_for_tts(text)
+        
+        # Additional fix: Ensure punctuation stays attached to words
+        processed_text = self._fix_punctuation_attachment(processed_text)
+        
+        return processed_text
+
+    def _fix_punctuation_attachment(self, text: str) -> str:
+        """Ensure punctuation marks stay properly attached to words to prevent weird sounds"""
+        if not text or not text.strip():
+            return text
+        
+        import re
+        
+        # Fix common punctuation separation issues
+        # 1. Fix spaces before punctuation (e.g., "word ." -> "word.")
+        text = re.sub(r'\s+([.!?,;:])', r'\1', text)
+        
+        # 2. Fix spaces after punctuation when it should be attached (e.g., "word . next" -> "word. next")
+        text = re.sub(r'([.!?])\s+([a-zA-Z])', r'\1 \2', text)
+        
+        # 3. Fix multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+        
+        # 4. Ensure punctuation is properly attached to the word it belongs to
+        # This prevents the "eeehhh ohhhhh eeeehha" sound issue
+        words = text.split()
+        fixed_words = []
+        
+        for i, word in enumerate(words):
+            # If this word is only punctuation, attach it to the previous word
+            if re.match(r'^[.!?,;:]+$', word) and fixed_words:
+                fixed_words[-1] += word
+            else:
+                fixed_words.append(word)
+        
+        return ' '.join(fixed_words)
 
     def _create_smart_chunks(self, text: str, chunk_size: int = 8) -> list:
         """
