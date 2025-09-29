@@ -34,8 +34,8 @@ export default function VoiceAgent() {
     // ---------- CSS Styles ----------
     const typingAnimationStyle = `
         .typing-animation {
-            animation: voiceTyping 0.1s steps(1, end), voiceGlow 1.5s ease-in-out infinite alternate;
-            text-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+            animation: voiceTyping 0.08s steps(1, end), voiceGlow 1.2s ease-in-out infinite alternate, voicePulse 0.5s ease-in-out infinite;
+            text-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 40px rgba(59, 130, 246, 0.4);
             position: relative;
             overflow: hidden;
         }
@@ -47,42 +47,79 @@ export default function VoiceAgent() {
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.3), transparent);
-            animation: voiceSweep 2s ease-in-out infinite;
+            animation: voiceSweep 1.5s ease-in-out infinite;
+        }
+        
+        
+        .voice-mic-icon {
+            display: inline-block;
+            animation: micPulse 1s ease-in-out infinite, micFloat 2s ease-in-out infinite;
+            margin-right: 8px;
+            filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.8));
         }
         
         @keyframes voiceTyping {
             from { 
                 opacity: 0; 
-                transform: translateY(20px) scale(0.9); 
-                filter: blur(3px);
-                letter-spacing: 2px;
+                transform: translateY(25px) scale(0.8) rotateX(90deg); 
+                filter: blur(4px) hue-rotate(180deg);
+                letter-spacing: 3px;
             }
             to { 
                 opacity: 1; 
-                transform: translateY(0) scale(1); 
-                filter: blur(0);
+                transform: translateY(0) scale(1) rotateX(0deg); 
+                filter: blur(0) hue-rotate(0deg);
                 letter-spacing: normal;
             }
         }
         
         @keyframes voiceGlow {
             0% { 
-                text-shadow: 0 0 15px rgba(59, 130, 246, 0.6), 0 0 25px rgba(59, 130, 246, 0.4);
+                text-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 40px rgba(59, 130, 246, 0.4), 0 0 60px rgba(59, 130, 246, 0.2);
                 transform: scale(1);
-                filter: brightness(1);
+                filter: brightness(1) saturate(1);
             }
             100% { 
-                text-shadow: 0 0 25px rgba(59, 130, 246, 0.9), 0 0 35px rgba(59, 130, 246, 0.6), 0 0 45px rgba(59, 130, 246, 0.3);
+                text-shadow: 0 0 30px rgba(59, 130, 246, 1), 0 0 50px rgba(59, 130, 246, 0.6), 0 0 70px rgba(59, 130, 246, 0.3), 0 0 90px rgba(147, 51, 234, 0.2);
+                transform: scale(1.02);
+                filter: brightness(1.3) saturate(1.5);
+            }
+        }
+        
+        @keyframes voicePulse {
+            0%, 100% { 
+                transform: scale(1);
+                box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+            }
+            50% { 
                 transform: scale(1.01);
-                filter: brightness(1.1);
+                box-shadow: 0 0 30px rgba(59, 130, 246, 0.5), 0 0 50px rgba(147, 51, 234, 0.3);
             }
         }
         
         @keyframes voiceSweep {
-            0% { left: -100%; }
-            50% { left: 100%; }
-            100% { left: 100%; }
+            0% { left: -100%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { left: 100%; opacity: 0; }
+        }
+        
+        
+        @keyframes micPulse {
+            0%, 100% { 
+                transform: scale(1);
+                filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.8));
+            }
+            50% { 
+                transform: scale(1.2);
+                filter: drop-shadow(0 0 20px rgba(59, 130, 246, 1), 0 0 30px rgba(147, 51, 234, 0.6));
+            }
+        }
+        
+        @keyframes micFloat {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            25% { transform: translateY(-3px) rotate(5deg); }
+            75% { transform: translateY(3px) rotate(-5deg); }
         }
         
         .gradient-text {
@@ -1560,7 +1597,7 @@ export default function VoiceAgent() {
                                 setPartialTranscript(data.text);
                                 setInterimTranscript(data.text);
                                 break;
-
+                                
                             case "stabilized":
                                 console.log("🎤 Stabilized transcript received:", data.text);
                                 setStabilizedTranscript(data.text);
@@ -1769,8 +1806,8 @@ export default function VoiceAgent() {
                 onStatus: (status) => {
                     setSttStatus(status);
                     if (status === "ready") {
-                        setListening(true);
-                        setStatus(currentLang.status.listening);
+            setListening(true);
+            setStatus(currentLang.status.listening);
                         setShowTranscription(true);
                     }
                 },
@@ -1805,7 +1842,7 @@ export default function VoiceAgent() {
             sttStreamRef.current = sttStream;
             await sttStream.connect(url);
             await sttStream.startAudio();
-        } catch (error) {
+            } catch (error) {
             console.error("Failed to start STT:", error);
             setSttStatus(`error: ${error instanceof Error ? error.message : String(error)}`);
             setStatus(`STT Error: ${error instanceof Error ? error.message : String(error)}`);
@@ -3058,35 +3095,49 @@ export default function VoiceAgent() {
 
                             {/* Minimal Panels */}
                             <div className="grid lg:grid-cols-2 gap-3 sm:gap-4">
-                                {/* Minimal Voice Panel */}
-                                <div className="group relative rounded-lg border border-white/5 bg-white/[0.01] backdrop-blur-xl overflow-hidden transition-colors hover:border-white/10">
-                                    <div className="relative px-3 py-3 border-b border-white/5">
+                                {/* Unified Voice Panel */}
+                                <div className="group relative rounded-2xl border border-white/8 bg-white/[0.02] backdrop-blur-xl shadow-[0_12px_40px_-12px_rgba(0,0,0,0.8)] overflow-hidden transition-all duration-400 hover:shadow-[0_16px_50px_-12px_rgba(0,0,0,0.9)] hover:border-white/12">
+                                    {/* Soft animated background */}
+                                    <div className="absolute inset-0 bg-white/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                                    <div className="relative px-5 py-4 border-b border-white/8 bg-white/[0.01]">
                                         <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-3">
                                                 {/* Soft Icon */}
                                                 <div className="relative">
-                                                    <div className="h-6 w-6 rounded-md bg-white/[0.03] flex items-center justify-center border border-white/5 transition-colors">
-                                                        <User className="h-3 w-3 text-zinc-400" />
+                                                    <div className="h-9 w-9 rounded-lg bg-white/[0.05] flex items-center justify-center border border-white/10 shadow-sm group-hover:shadow-md transition-all duration-300">
+                                                        {partialTranscript ? (
+                                                            <Mic className="h-4.5 w-4.5 text-blue-400 animate-pulse group-hover:text-blue-300 transition-colors duration-300" />
+                                                        ) : finalTranscripts.length > 0 ? (
+                                                            <Database className="h-4.5 w-4.5 text-emerald-400 group-hover:text-emerald-300 transition-colors duration-300" />
+                                                        ) : (
+                                                            <User className="h-4.5 w-4.5 text-zinc-400 group-hover:text-zinc-300 transition-colors duration-300" />
+                                                        )}
                                                     </div>
                                                 </div>
 
                                                 <div>
-                                                    <h3 className="text-sm font-medium text-zinc-200">
-                                                        {currentLang.labels.yourVoice}
+                                                    <h3 className="text-lg font-semibold text-zinc-200 mb-0.5 group-hover:text-zinc-100 transition-colors duration-300">
+                                                        {partialTranscript ? "Live text" : finalTranscripts.length > 0 ? "Transcription" : currentLang.labels.yourVoice}
                                                     </h3>
-                                                    <p className="text-xs text-zinc-500">
+                                                    <p className="text-xs text-zinc-500 group-hover:text-zinc-400 transition-colors duration-300">
                                                         {currentLang.labels.yourVoiceDesc}
                                                     </p>
                                                 </div>
                                             </div>
 
-                                            {/* Minimal Status Indicators */}
-                                            <div className="flex items-center gap-1">
-                                                {/* VAD status indicator - REMOVED (using server-side STT only) */}
+                                            {/* Soft Status Indicators */}
+                                            <div className="flex items-center gap-2">
                                                 {listening && (
-                                                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/[0.02] border border-white/5">
-                                                        <div className="w-1 h-1 bg-blue-400 rounded-full" />
-                                                        <span className="text-xs text-blue-300">Live</span>
+                                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/8 shadow-sm">
+                                                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+                                                        <span className="text-xs font-medium text-blue-300">Live</span>
+                                                    </div>
+                                                )}
+                                                {partialTranscript && (
+                                                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-400/30 shadow-sm">
+                                                        <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+                                                        <span className="text-xs font-medium text-blue-300">Listening</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -3095,92 +3146,40 @@ export default function VoiceAgent() {
 
                                     {/* Soft Organized Content */}
                                     <div className="relative p-5 min-h-[180px]">
-                                        {/* VAD live processing UI - REMOVED (using server-side STT only) */}
-
-                                        {(transcript || partialTranscript || finalTranscripts.length > 0) ? (
-                                            <div className="space-y-3">
-                                                {/* Real-time STT Status */}
-                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.02] rounded-lg border border-white/6 shadow-sm">
-                                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-                                                    <span className="text-xs font-medium text-blue-300">Real-time STT</span>
-                                                    <div className="ml-auto">
-                                                        <span className="text-xs text-zinc-500">{sttStatus}</span>
-                                                    </div>
+                                        {/* Content Display */}
+                                        <div className="min-h-[120px] flex items-start">
+                                            {partialTranscript ? (
+                                                <div className="text-sm text-blue-300 w-full text-left">
+                                                    <span className="typing-animation">
+                                                        {partialTranscript.split('').map((char, index) => (
+                                                            <span 
+                                                                key={index}
+                                                                className="inline-block"
+                                                                style={{
+                                                                    animationDelay: `${index * 0.05}s`,
+                                                                    animation: 'voiceTyping 0.1s steps(1, end) forwards'
+                                                                }}
+                                                            >
+                                                                {char === ' ' ? '\u00A0' : char}
+                                                            </span>
+                                                        ))}
+                                                        <span className="animate-pulse text-blue-400 ml-1">|</span>
+                                                    </span>
                                                 </div>
-
-                                                {/* Real-time Transcript Display - Only Live or Final */}
-                                                <div className="space-y-2">
-                                                    {/* Show live partial transcript while speaking, or final text when complete */}
-                                                    {(partialTranscript || finalTranscripts.length > 0) ? (
-                                                        <div className={`rounded-lg p-3 transition-all duration-500 ${
-                                                            partialTranscript 
-                                                                ? "bg-blue-500/[0.1] shadow-lg shadow-blue-500/10" 
-                                                                : "bg-gradient-to-r from-emerald-500/[0.1] via-blue-500/[0.1] to-purple-500/[0.1] shadow-lg shadow-emerald-500/10"
-                                                        }`}>
-                                                            <p className={`text-xs mb-1 font-medium ${
-                                                                partialTranscript 
-                                                                    ? "text-blue-400" 
-                                                                    : "gradient-text"
-                                                            }`}>
-                                                                {partialTranscript ? "Live:" : "Final:"}
-                                                            </p>
-                                                            <p className={`text-sm leading-relaxed ${
-                                                                partialTranscript 
-                                                                    ? "text-blue-300" 
-                                                                    : "gradient-text"
-                                                            }`}>
-                                                                {partialTranscript ? (
-                                                                    <span className="typing-animation">
-                                                                        {partialTranscript.split('').map((char, index) => (
-                                                                            <span 
-                                                                                key={index}
-                                                                                className="inline-block"
-                                                                                style={{
-                                                                                    animationDelay: `${index * 0.05}s`,
-                                                                                    animation: 'voiceTyping 0.1s steps(1, end) forwards'
-                                                                                }}
-                                                                            >
-                                                                                {char === ' ' ? '\u00A0' : char}
-                                                                            </span>
-                                                                        ))}
-                                                                        <span className="animate-pulse text-blue-400 ml-1">|</span>
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="gradient-text">
-                                                                        {finalTranscripts[finalTranscripts.length - 1] || ""}
-                                                                    </span>
-                                                                )}
-                                                            </p>
-                                                        </div>
-                                                    ) : null}
-                                                    
-                                                    {/* Legacy transcript display */}
-                                                    {transcript && !partialTranscript && finalTranscripts.length === 0 && (
-                                                        <div className="space-y-2">
-                                                            {transcript.split(".").map((s, i) =>
-                                                                s.trim() && (
-                                                                    <div key={i} className="bg-white/[0.02] rounded-lg p-3 border border-white/6 hover:border-white/8 transition-all duration-300 group shadow-sm hover:shadow-md">
-                                                                        <p className="text-sm leading-relaxed text-zinc-300 group-hover:text-zinc-200 transition-colors duration-300">{s.trim()}.</p>
-                                                                    </div>
-                                                                )
-                                                            )}
-                                                        </div>
-                                                    )}
+                                            ) : finalTranscripts.length > 0 ? (
+                                                <div className="text-sm text-zinc-300 w-full text-left">
+                                                    {finalTranscripts[finalTranscripts.length - 1] || ""}
                                                 </div>
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center justify-center h-full text-zinc-500">
-                                                <div className="text-center">
-                                                    <Mic className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                                                    <p className="text-xs font-medium mb-1 text-zinc-400">
-                                                        {currentLang.labels.readyToCapture}
-                                                    </p>
-                                                    <p className="text-xs text-zinc-600 bg-white/[0.02] px-3 py-1.5 rounded-lg border border-white/6">
-                                                        {"Start Conversation"}
-                                                    </p>
+                                            ) : transcript && !partialTranscript && finalTranscripts.length === 0 ? (
+                                                <div className="text-sm text-zinc-300 w-full text-left">
+                                                    {transcript}
                                                 </div>
-                                            </div>
-                                        )}
+                                            ) : (
+                                                <div className="text-sm text-zinc-500 italic w-full text-left">
+                                                    Ready to listen...
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
