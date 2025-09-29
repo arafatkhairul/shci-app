@@ -98,7 +98,7 @@ class LLMService:
         
         try:
             log.info(f"🔄 LLM streaming request to {self.api_url}")
-            timeout_config = aiohttp.ClientTimeout(total=self.timeout, connect=10.0)
+            timeout_config = aiohttp.ClientTimeout(total=10.0, connect=2.0)  # Much faster timeout
             async with aiohttp.ClientSession(timeout=timeout_config) as session:
                 async with session.post(self.api_url, json=payload, headers=headers) as response:
                     log.info(f"📡 LLM streaming API response status: {response.status}")

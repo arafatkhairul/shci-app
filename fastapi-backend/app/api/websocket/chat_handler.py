@@ -370,6 +370,22 @@ class ChatHandler:
             log.error(f"[{conn_id}] Error handling audio data: {e}")
             # Don't re-raise to avoid breaking WebSocket connection
 
+    async def generate_and_send_audio_async(self, websocket: WebSocket, text: str, 
+                                           mem: SessionMemory, conn_id: str):
+        """Generate and send audio asynchronously for faster response"""
+        try:
+            audio_chunk = await self.generate_audio_for_text_chunk(text, mem, conn_id)
+            if audio_chunk:
+                await self.send_json(websocket, {
+                    "type": "ai_audio_chunk",
+                    "text": text,
+                    "audio_base64": audio_chunk,
+                    "audio_size": len(audio_chunk),
+                    "is_final": False
+                })
+        except Exception as e:
+            log.warning(f"[{conn_id}] Audio generation error: {e}")
+
     async def generate_and_send_response(self, websocket: WebSocket, transcript: str, 
                                        mem: SessionMemory, mem_store: Optional[MemoryStore], conn_id: str):
         """Generate AI response with real-time streaming TTS"""
@@ -391,9 +407,16 @@ class ChatHandler:
             word_count = 0
             self.in_grammar_correction = False  # Reset grammar correction state
             
-            # Send audio start signal
+            # Send immediate response signal for instant feedback
             await self.send_json(websocket, {
                 "type": "ai_audio_start",
+                "is_final": False
+            })
+            
+            # Send immediate acknowledgment for instant user feedback
+            await self.send_json(websocket, {
+                "type": "ai_text",
+                "text": "I'm thinking...",
                 "is_final": False
             })
             
@@ -458,7 +481,7 @@ If the input is grammatically correct, respond normally without any grammar corr
             async for text_chunk in self.llm_service.generate_streaming_response(
                 messages=messages,
                 temperature=0.7,
-                max_tokens=50  # Further reduced for faster response
+                max_tokens=25  # Much smaller for instant response
             ):
                 if text_chunk:
                     full_response += text_chunk
@@ -486,8 +509,9 @@ If the input is grammatically correct, respond normally without any grammar corr
                         log.info(f"[{conn_id}] 🔍 Skipping audio generation - in grammar correction section")
                         continue
                     
-                    # Generate audio for text chunk if it contains complete sentences
-                    if self.should_generate_audio_chunk(text_buffer):
+                    # Generate audio for every 2-3 words for instant response
+                    word_count = len(text_buffer.split())
+                    if word_count >= 2:  # Much more aggressive audio generation
                         # Clean up text for better speech
                         clean_text = text_buffer.strip()
                         # Remove extra spaces and normalize text
@@ -496,18 +520,12 @@ If the input is grammatically correct, respond normally without any grammar corr
                         # Extract TTS text (exclude grammar correction)
                         tts_text = self.extract_ai_response_for_tts(clean_text)
                         
-                        audio_chunk = await self.generate_audio_for_text_chunk(
-                            clean_text, mem, conn_id
-                        )
-                        if audio_chunk:
-                            await self.send_json(websocket, {
-                                "type": "ai_audio_chunk",
-                                "text": clean_text,  # Send original text for display
-                                "audio_base64": audio_chunk,
-                                "audio_size": len(audio_chunk),
-                                "is_final": False
-                            })
-                            text_buffer = ""  # Clear buffer after generating audio
+                        # Generate audio asynchronously for faster response
+                        import asyncio
+                        asyncio.create_task(self.generate_and_send_audio_async(
+                            websocket, clean_text, mem, conn_id
+                        ))
+                        text_buffer = ""  # Clear buffer immediately
             
             # Generate audio for any remaining text (only if not in grammar correction)
             if text_buffer.strip() and not self.in_grammar_correction:
