@@ -31,6 +31,67 @@ import { RSStream } from "../lib/rtsttClient";
 // VAD services removed - using server-side STT only
 
 export default function VoiceAgent() {
+    // ---------- CSS Styles ----------
+    const typingAnimationStyle = `
+        .typing-animation {
+            animation: typing 0.05s steps(1, end), glow 2s ease-in-out infinite alternate;
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+        
+        @keyframes typing {
+            from { 
+                opacity: 0; 
+                transform: translateY(15px) scale(0.95); 
+                filter: blur(2px);
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0) scale(1); 
+                filter: blur(0);
+            }
+        }
+        
+        @keyframes glow {
+            0% { 
+                text-shadow: 0 0 10px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3);
+                transform: scale(1);
+            }
+            100% { 
+                text-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 30px rgba(59, 130, 246, 0.5), 0 0 40px rgba(59, 130, 246, 0.3);
+                transform: scale(1.02);
+            }
+        }
+        
+        .gradient-text {
+            background: linear-gradient(45deg, #10b981, #3b82f6, #8b5cf6, #f59e0b, #ef4444, #10b981);
+            background-size: 400% 400%;
+            animation: gradientShift 3s ease-in-out infinite, textGlow 2s ease-in-out infinite alternate;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 30px rgba(16, 185, 129, 0.3);
+        }
+        
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            25% { background-position: 100% 50%; }
+            50% { background-position: 100% 100%; }
+            75% { background-position: 0% 100%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        @keyframes textGlow {
+            0% { 
+                filter: brightness(1) saturate(1);
+                text-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+            }
+            100% { 
+                filter: brightness(1.2) saturate(1.3);
+                text-shadow: 0 0 40px rgba(16, 185, 129, 0.6), 0 0 60px rgba(59, 130, 246, 0.4);
+            }
+        }
+    `;
+
     // ---------- State ----------
     const [connected, setConnected] = useState(false);
     const [listening, setListening] = useState(false);
@@ -1871,6 +1932,7 @@ export default function VoiceAgent() {
     // ---------------- UI ----------------
     return (
         <>
+            <style dangerouslySetInnerHTML={{ __html: typingAnimationStyle }} />
             <div className="min-h-screen text-zinc-100 bg-black">
                 {/* User Type Selection Modal */}
                 {showUserTypeModal && (
@@ -3027,12 +3089,33 @@ export default function VoiceAgent() {
                                                 <div className="space-y-2">
                                                     {/* Show live partial transcript while speaking, or final text when complete */}
                                                     {(partialTranscript || finalTranscripts.length > 0) ? (
-                                                        <div className="bg-blue-500/[0.1] rounded-lg p-3 border border-blue-500/20">
-                                                            <p className="text-xs text-blue-400 mb-1">
+                                                        <div className={`rounded-lg p-3 border transition-all duration-500 ${
+                                                            partialTranscript 
+                                                                ? "bg-blue-500/[0.1] border-blue-500/20 shadow-lg shadow-blue-500/10" 
+                                                                : "bg-gradient-to-r from-emerald-500/[0.1] via-blue-500/[0.1] to-purple-500/[0.1] border-gradient-to-r from-emerald-500/30 via-blue-500/30 to-purple-500/30 shadow-lg shadow-gradient-to-r shadow-emerald-500/10"
+                                                        }`}>
+                                                            <p className={`text-xs mb-1 font-medium ${
+                                                                partialTranscript 
+                                                                    ? "text-blue-400" 
+                                                                    : "gradient-text"
+                                                            }`}>
                                                                 {partialTranscript ? "Live:" : "Final:"}
                                                             </p>
-                                                            <p className="text-sm leading-relaxed text-blue-300">
-                                                                {partialTranscript || finalTranscripts[finalTranscripts.length - 1] || ""}
+                                                            <p className={`text-sm leading-relaxed ${
+                                                                partialTranscript 
+                                                                    ? "text-blue-300" 
+                                                                    : "gradient-text"
+                                                            }`}>
+                                                                {partialTranscript ? (
+                                                                    <span className="typing-animation">
+                                                                        {partialTranscript}
+                                                                        <span className="animate-pulse text-blue-400 ml-1">|</span>
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="gradient-text">
+                                                                        {finalTranscripts[finalTranscripts.length - 1] || ""}
+                                                                    </span>
+                                                                )}
                                                             </p>
                                                         </div>
                                                     ) : null}
