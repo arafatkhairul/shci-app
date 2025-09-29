@@ -1488,6 +1488,7 @@ export default function VoiceAgent() {
                                 setFinalTranscript(data.text);
                                 setTranscript(data.text);
                                 setInterimTranscript("");
+                                // Clear partial transcript so final text replaces live text
                                 setPartialTranscript("");
                                 setStabilizedTranscript("");
                                 
@@ -3011,7 +3012,7 @@ export default function VoiceAgent() {
                                     <div className="relative p-5 min-h-[180px]">
                                         {/* VAD live processing UI - REMOVED (using server-side STT only) */}
 
-                                        {(transcript || partialTranscript || stabilizedTranscript) ? (
+                                        {(transcript || partialTranscript || finalTranscripts.length > 0) ? (
                                             <div className="space-y-3">
                                                 {/* Real-time STT Status */}
                                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.02] rounded-lg border border-white/6 shadow-sm">
@@ -3022,37 +3023,22 @@ export default function VoiceAgent() {
                                                     </div>
                                                 </div>
 
-                                                {/* Real-time Transcript Display */}
+                                                {/* Real-time Transcript Display - Only Live or Final */}
                                                 <div className="space-y-2">
-                                                    {/* Partial transcript (live) */}
-                                                    {partialTranscript && (
+                                                    {/* Show live partial transcript while speaking, or final text when complete */}
+                                                    {(partialTranscript || finalTranscripts.length > 0) ? (
                                                         <div className="bg-blue-500/[0.1] rounded-lg p-3 border border-blue-500/20">
-                                                            <p className="text-xs text-blue-400 mb-1">Live:</p>
-                                                            <p className="text-sm leading-relaxed text-blue-300">{partialTranscript}</p>
+                                                            <p className="text-xs text-blue-400 mb-1">
+                                                                {partialTranscript ? "Live:" : "Final:"}
+                                                            </p>
+                                                            <p className="text-sm leading-relaxed text-blue-300">
+                                                                {partialTranscript || finalTranscripts[finalTranscripts.length - 1] || ""}
+                                                            </p>
                                                         </div>
-                                                    )}
-                                                    
-                                                    {/* Stabilized transcript */}
-                                                    {stabilizedTranscript && (
-                                                        <div className="bg-green-500/[0.1] rounded-lg p-3 border border-green-500/20">
-                                                            <p className="text-xs text-green-400 mb-1">Stabilized:</p>
-                                                            <p className="text-sm leading-relaxed text-green-300">{stabilizedTranscript}</p>
-                                                        </div>
-                                                    )}
-                                                    
-                                                    {/* Final transcripts */}
-                                                    {finalTranscripts.length > 0 && (
-                                                        <div className="space-y-1">
-                                                            {finalTranscripts.map((text, i) => (
-                                                                <div key={i} className="bg-white/[0.02] rounded-lg p-3 border border-white/6 hover:border-white/8 transition-all duration-300 group shadow-sm hover:shadow-md">
-                                                                    <p className="text-sm leading-relaxed text-zinc-300 group-hover:text-zinc-200 transition-colors duration-300">{text}</p>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
+                                                    ) : null}
                                                     
                                                     {/* Legacy transcript display */}
-                                                    {transcript && !partialTranscript && !stabilizedTranscript && finalTranscripts.length === 0 && (
+                                                    {transcript && !partialTranscript && finalTranscripts.length === 0 && (
                                                         <div className="space-y-2">
                                                             {transcript.split(".").map((s, i) =>
                                                                 s.trim() && (
