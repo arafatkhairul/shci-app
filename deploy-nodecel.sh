@@ -645,7 +645,7 @@ setup_backend() {
     
     # Install ONNX Runtime with CUDA support
     log_step "Installing ONNX Runtime with CUDA support..."
-    pip install onnxruntime-gpu==1.22.1
+    pip install onnxruntime-gpu==1.22.0
     log_success "ONNX Runtime with CUDA installed"
     
     # Install other dependencies
