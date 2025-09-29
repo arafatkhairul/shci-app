@@ -51,17 +51,17 @@ def _build_recorder_with_fallbacks(callbacks: dict) -> AudioToTextRecorder:
                 language=os.getenv("RT_LANG", ""),     # ""=auto; set "bn"/"en" to lock
                 # ---- Realtime partials ----
                 enable_realtime_transcription=True,
-                use_main_model_for_realtime=False,
-                realtime_model_type=os.getenv("RT_REALTIME_MODEL", "small"),
-                realtime_processing_pause=float(os.getenv("RT_REALTIME_PAUSE", "0.5")),
+                use_main_model_for_realtime=True,  # Use main model for better quality
+                realtime_model_type=os.getenv("RT_REALTIME_MODEL", "base"),
+                realtime_processing_pause=float(os.getenv("RT_REALTIME_PAUSE", "0.1")),
                 on_realtime_transcription_update=callbacks["on_partial"],
                 on_realtime_transcription_stabilized=callbacks["on_stabilized"],
                 # ---- VAD / endpointing ----
-                webrtc_sensitivity=int(os.getenv("RT_VAD_SENS", "2")),
+                webrtc_sensitivity=int(os.getenv("RT_VAD_SENS", "1")),  # More sensitive
                 silero_deactivity_detection=bool(int(os.getenv("RT_SILERO_DEACT", "1"))),
-                pre_recording_buffer_duration=float(os.getenv("RT_PRE_ROLL", "0.2")),
-                post_speech_silence_duration=float(os.getenv("RT_POST_SILENCE", "0.25")),
-                min_length_of_recording=float(os.getenv("RT_MIN_UTT", "0.8")),
+                pre_recording_buffer_duration=float(os.getenv("RT_PRE_ROLL", "0.1")),
+                post_speech_silence_duration=float(os.getenv("RT_POST_SILENCE", "0.5")),
+                min_length_of_recording=float(os.getenv("RT_MIN_UTT", "0.3")),
                 # ---- Text polish ----
                 ensure_sentence_starting_uppercase=True,
                 ensure_sentence_ends_with_period=True,
@@ -146,12 +146,14 @@ class RTSession:
 
     # ---------- Realtime callbacks ----------
     def _cb_partial(self, text: str):
-        if text:
-            self._send_json({"type": "partial", "text": text})
+        if text and text.strip():
+            log.debug(f"[RTSession] Partial: {text}")
+            self._send_json({"type": "partial", "text": text.strip()})
 
     def _cb_stabilized(self, text: str):
-        if text:
-            self._send_json({"type": "stabilized", "text": text})
+        if text and text.strip():
+            log.debug(f"[RTSession] Stabilized: {text}")
+            self._send_json({"type": "stabilized", "text": text.strip()})
 
     # ---------- Finalization loop ----------
     def _final_loop(self):
@@ -160,6 +162,7 @@ class RTSession:
                 def on_final(sentence: str):
                     s = (sentence or "").strip()
                     if s:
+                        log.debug(f"[RTSession] Final: {s}")
                         self._send_json({"type": "final", "text": s})
                 self.rec.text(on_final)  # blocks until next final sentence
             except Exception as e:
