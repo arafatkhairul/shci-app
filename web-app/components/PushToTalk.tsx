@@ -26,11 +26,16 @@ export default function PushToTalk() {
       await cli.startAudio();
     } catch (error) {
       console.error("Failed to start STT:", error);
-      setStatus(`error: ${error.message}`);
+      setStatus(`error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
   
-  const stop = () => ref.current?.stop();
+  const stop = () => {
+    if (ref.current) {
+      ref.current.stopAudio();
+      ref.current.disconnect();
+    }
+  };
 
   return (
     <div style={{display:'grid', gap:8, padding: '20px', border: '1px solid #ccc', borderRadius: '8px', maxWidth: '500px'}}>
