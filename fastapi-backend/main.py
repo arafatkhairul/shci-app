@@ -100,7 +100,7 @@ stt_handler = STTHandler()
 @app.on_event("startup")
 async def startup_event():
     """Application startup event"""
-    log.info(f"🚀 Starting SHCI Voice Agent API")
+    log.info(f"🚀 Starting SHCI Voice Agent APIX")
     log.info(f"🔧 Environment: {settings.ENVIRONMENT}")
     log.info(f"🤖 LLM: {settings.LLM_API_URL} (model={settings.LLM_MODEL})")
     log.info(f"👤 Assistant: {settings.ASSISTANT_NAME} by {settings.ASSISTANT_AUTHOR}")
