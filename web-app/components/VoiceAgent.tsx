@@ -1470,19 +1470,55 @@ export default function VoiceAgent() {
                                 setIsWaitingForResponse(false);
                                 break;
 
-                            case "interim_transcript":
-                                console.log("🎤 Interim transcript received:", data.text);
+                            // RealtimeSTT message types
+                            case "partial":
+                                console.log("🎤 Partial transcript received:", data.text);
+                                setPartialTranscript(data.text);
                                 setInterimTranscript(data.text);
-                                // VAD state setters - REMOVED (using server-side STT only)
+                                break;
+
+                            case "stabilized":
+                                console.log("🎤 Stabilized transcript received:", data.text);
+                                setStabilizedTranscript(data.text);
+                                break;
+
+                            case "final":
+                                console.log("🎤 Final transcript received:", data.text);
+                                setFinalTranscripts(prev => [...prev, data.text]);
+                                setFinalTranscript(data.text);
+                                setTranscript(data.text);
+                                setInterimTranscript("");
+                                setPartialTranscript("");
+                                setStabilizedTranscript("");
                                 
-                                // VAD notification - REMOVED (using server-side STT only)
+                                // Add to transcription history
+                                setTranscriptionHistory(prev => [...prev, {
+                                    text: data.text,
+                                    timestamp: Date.now(),
+                                    confidence: 1.0, // RealtimeSTT provides high confidence
+                                    isFinal: true
+                                }]);
+                                break;
+
+                            case "status":
+                                console.log("🎤 STT Status:", data.text);
+                                setSttStatus(data.text);
+                                if (data.text === "ready") {
+                                    setStatus(currentLang.status.listening);
+                                }
+                                break;
+
+                            // Legacy WhisperX message types (for backward compatibility)
+                            case "interim_transcript":
+                                console.log("🎤 Legacy interim transcript received:", data.text);
+                                setInterimTranscript(data.text);
                                 break;
 
                             case "final_transcript":
-                                console.log("🎤 Final transcript received:", data.text);
+                                console.log("🎤 Legacy final transcript received:", data.text);
                                 setFinalTranscript(data.text);
+                                setTranscript(data.text);
                                 setInterimTranscript("");
-                                // VAD state setters - REMOVED (using server-side STT only)
                                 
                                 // Add to transcription history
                                 setTranscriptionHistory(prev => [...prev, {
@@ -1491,22 +1527,6 @@ export default function VoiceAgent() {
                                     confidence: data.confidence || 0,
                                     isFinal: true
                                 }]);
-                                
-                                // VAD notification - REMOVED (using server-side STT only)
-                                break;
-
-                            case "final_transcript":
-                                console.log("📝 Final transcript received:", data.text);
-                                setTranscript(data.text || "");
-                                setFinalTranscript(data.text || "");
-                                setInterimTranscript("");
-                                if (data.text && selectedLanguage === "en") {
-                                }
-                                break;
-
-                            case "interim_transcript":
-                                console.log("📝 Interim transcript received:", data.text);
-                                setInterimTranscript(data.text || "");
                                 break;
 
                             case "stop_audio":
@@ -1629,292 +1649,13 @@ export default function VoiceAgent() {
         // Force mic level reset
         updateMicLevel(0, 'reset');
 
-        // Use new Real-time STT implementation
-        console.log("🚀 STARTING REAL-TIME STT:", {
+        // Use RealtimeSTT implementation (handles all audio processing)
+        console.log("🚀 STARTING REALTIMESTT:", {
             timestamp: new Date().toLocaleTimeString(),
             sttStatus: sttStatus
         });
 
         await startSTT();
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    channelCount: 1,
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false,
-                    sampleRate: 48000,
-                },
-            });
-            streamRef.current = stream;
-
-            console.log("🎤 Microphone Access Granted:", {
-                tracks: stream.getTracks().length,
-                audioTracks: stream.getAudioTracks().length,
-                trackSettings: stream.getAudioTracks()[0]?.getSettings(),
-                trackConstraints: stream.getAudioTracks()[0]?.getConstraints()
-            });
-
-            if (!audioCtx.current) {
-                audioCtx.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-                console.log("🎵 Audio Context Created:", {
-                    sampleRate: audioCtx.current.sampleRate,
-                    state: audioCtx.current.state,
-                    baseLatency: audioCtx.current.baseLatency
-                });
-            }
-
-            if (audioCtx.current.state === 'suspended') {
-                await audioCtx.current.resume();
-                console.log("🎵 Audio Context Resumed:", {
-                    sampleRate: audioCtx.current.sampleRate,
-                    state: audioCtx.current.state
-                });
-            }
-
-            const src = new MediaStreamAudioSourceNode(audioCtx.current, { mediaStream: stream });
-            sourceNode.current = src;
-
-            analyser.current = audioCtx.current.createAnalyser();
-            analyser.current.fftSize = 256;
-            analyser.current.smoothingTimeConstant = 0.2;
-            src.connect(analyser.current);
-
-            console.log("🔊 Analyser Setup:", {
-                fftSize: analyser.current.fftSize,
-                frequencyBinCount: analyser.current.frequencyBinCount,
-                smoothingTimeConstant: analyser.current.smoothingTimeConstant,
-                connected: true
-            });
-
-            // Start mic level monitoring with analyser
-            const micDataArray = new Uint8Array(analyser.current.frequencyBinCount);
-            let frameCount = 0;
-            const monitorMicLevel = () => {
-                if (analyser.current && listeningRef.current) {
-                    analyser.current.getByteFrequencyData(micDataArray);
-                    const rms = Math.sqrt(micDataArray.reduce((sum, value) => sum + (value * value), 0) / micDataArray.length) / 255;
-
-                    // Enhanced debugging every 30 frames (about 0.5 seconds at 60fps)
-                    if (frameCount % 30 === 0) {
-                        console.log("🎤 Analyser Monitoring:", {
-                            frame: frameCount,
-                            rms: rms.toFixed(4),
-                            maxValue: Math.max(...micDataArray),
-                            avgValue: micDataArray.reduce((a, b) => a + b, 0) / micDataArray.length,
-                            nonZeroValues: micDataArray.filter(v => v > 0).length
-                        });
-                    }
-
-                    updateMicLevel(rms, 'analyser');
-                    frameCount++;
-                    requestAnimationFrame(monitorMicLevel);
-                } else {
-                    console.log("🎤 Analyser Monitoring Stopped:", {
-                        analyserExists: !!analyser.current,
-                        listening: listeningRef.current
-                    });
-                }
-            };
-            console.log("🎤 Starting Analyser Monitoring...");
-            monitorMicLevel();
-
-            muteGain.current = audioCtx.current.createGain();
-            muteGain.current.gain.value = 0.0;
-
-            try {
-                const workletUrl = `${window.location.origin}/pcm16-worklet.js`;
-                console.log("🔧 Loading Audio Worklet:", workletUrl);
-                await audioCtx.current.audioWorklet.addModule(workletUrl);
-                console.log("✅ Audio Worklet Loaded Successfully");
-
-                workletNode.current = new AudioWorkletNode(
-                    audioCtx.current,
-                    "pcm-worklet-processor",
-                    { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] }
-                );
-                console.log("🔧 Audio Worklet Node Created:", {
-                    numberOfInputs: workletNode.current.numberOfInputs,
-                    numberOfOutputs: workletNode.current.numberOfOutputs,
-                    channelCount: workletNode.current.channelCount
-                });
-
-                workletNode.current.port.onmessage = (ev) => {
-                    const buffer = ev.data;
-                    if (buffer && buffer.byteLength > 0 && listeningRef.current) {
-                        const incoming = new Int16Array(buffer);
-                        let read = 0;
-                        
-                        while (read < incoming.length) {
-                            initBatch();
-                            const toCopy = Math.min(
-                                incoming.length - read,
-                                BATCH_SAMPLES - batchOffset.current
-                            );
-                            
-                            if (batchInt16.current) {
-                                batchInt16.current.set(
-                                    incoming.subarray(read, read + toCopy),
-                                    batchOffset.current
-                                );
-                                batchOffset.current += toCopy;
-                                read += toCopy;
-                                
-                                if (batchOffset.current === BATCH_SAMPLES) {
-                                    flushBatch();
-                                }
-                            }
-                        }
-                    }
-                };
-
-                src.connect(workletNode.current);
-                workletNode.current.connect(muteGain.current);
-                muteGain.current.connect(audioCtx.current.destination);
-
-                console.log("🔗 Audio Worklet Connected:", {
-                    sourceToWorklet: true,
-                    workletToGain: true,
-                    gainToDestination: true,
-                    audioGraphComplete: true
-                });
-            } catch (error) {
-                console.log("⚠️ Audio Worklet Failed, Using Script Processor:", error);
-                processorNode.current = audioCtx.current.createScriptProcessor(4096, 1, 1);
-                const inputRate = audioCtx.current.sampleRate;
-                const targetRate = 16000;
-                const ratio = inputRate / targetRate;
-                let floatBuf: number[] = [];
-                let readIndex = 0;
-
-                console.log("🔧 Script Processor Setup:", {
-                    bufferSize: 4096,
-                    inputRate: inputRate,
-                    targetRate: targetRate,
-                    ratio: ratio
-                });
-
-                processorNode.current.onaudioprocess = (e) => {
-                    const ch = e.inputBuffer.getChannelData(0);
-                    let sum = 0;
-                    for (let i = 0; i < ch.length; i++) sum += ch[i] * ch[i];
-                    const rms = Math.sqrt(sum / Math.max(1, ch.length));
-                    // Enhanced mic level calculation with better sensitivity
-                    updateMicLevel(rms, 'script-processor');
-
-                    floatBuf = floatBuf.concat(Array.from(ch));
-                    const out: number[] = [];
-                    while (readIndex + 1 < floatBuf.length) {
-                        const i0 = Math.floor(readIndex);
-                        const frac = readIndex - i0;
-                        const s0 = floatBuf[i0] || 0;
-                        const s1 = floatBuf[i0 + 1] || s0;
-                        out.push(s0 + (s1 - s0) * frac);
-                        readIndex += ratio;
-                    }
-                    const consumed = Math.floor(readIndex);
-                    if (consumed > 0) {
-                        floatBuf = floatBuf.slice(consumed);
-                        readIndex -= consumed;
-                    }
-
-                    const FRAME = 480;
-                    while (out.length >= FRAME) {
-                        const slice = out.splice(0, FRAME);
-                        const i16 = new Int16Array(FRAME);
-                        for (let i = 0; i < FRAME; i++) {
-                            const s = Math.max(-1, Math.min(1, slice[i] || 0));
-                            i16[i] = (s * 32767) | 0;
-                        }
-                        if (listeningRef.current && ws.current?.readyState === WebSocket.OPEN) {
-                            try {
-                                ws.current.send(new Uint8Array(i16.buffer));
-                                console.log("🎤 Audio data sent to backend:", i16.buffer.byteLength, "bytes");
-                            } catch (error) {
-                                console.error("❌ Error sending audio data:", error);
-                            }
-                        } else {
-                            console.log("⚠️ Cannot send audio data:", {
-                                listening: listeningRef.current,
-                                wsState: ws.current?.readyState,
-                                wsOpen: ws.current?.readyState === WebSocket.OPEN
-                            });
-                        }
-                    }
-                };
-
-                src.connect(processorNode.current);
-                processorNode.current.connect(muteGain.current);
-                muteGain.current.connect(audioCtx.current.destination);
-
-                console.log("🔗 Script Processor Connected:", {
-                    sourceToProcessor: true,
-                    processorToGain: true,
-                    gainToDestination: true,
-                    fallbackAudioGraphComplete: true
-                });
-            }
-
-            const dataArray = new Uint8Array(analyser.current.frequencyBinCount);
-            const updateMic = () => {
-                if (!listeningRef.current) return;
-                try {
-                    analyser.current?.getByteFrequencyData(dataArray);
-                    const avg = dataArray.reduce((a, b) => a + b, 0) / Math.max(1, dataArray.length);
-                    const normalized = Math.min(avg / 128, 1.0);
-                    setMicLevel((prev) => Math.max(prev * 0.7, normalized * 0.8));
-                    requestAnimationFrame(updateMic);
-                } catch {
-                    requestAnimationFrame(updateMic);
-                }
-            };
-
-            listeningRef.current = true;
-            setListening(true);
-            setStatus(currentLang.status.listening);
-            requestAnimationFrame(updateMic);
-
-            console.log("✅ MICROPHONE STARTED SUCCESSFULLY:", {
-                timestamp: new Date().toLocaleTimeString(),
-                sampleRate: audioCtx.current.sampleRate,
-                analyserExists: !!analyser.current,
-                workletExists: !!workletNode.current,
-                processorExists: !!processorNode.current,
-                listening: listeningRef.current
-            });
-
-            try {
-                ws.current.send(JSON.stringify({
-                    type: "microphone_started",
-                    sampleRate: audioCtx.current.sampleRate,
-                    channels: 1,
-                    timestamp: new Date().toISOString(),
-                }));
-            } catch (error) {
-                console.log("❌ Failed to send microphone_started message:", error);
-            }
-        } catch (error: any) {
-            console.log("❌ MICROPHONE START FAILED:", {
-                error: error.message,
-                name: error.name,
-                stack: error.stack,
-                timestamp: new Date().toLocaleTimeString()
-            });
-
-            if (error?.name === "NotAllowedError") {
-                setStatus("❌ Microphone access denied - please allow microphone permissions");
-                console.log("🔒 Permission denied - user needs to allow microphone access");
-            } else if (error?.name === "NotFoundError") {
-                setStatus("❌ No microphone found - please connect a microphone");
-                console.log("🎤 No microphone device found");
-            } else if (error?.name === "NotReadableError") {
-                setStatus("❌ Microphone in use by another application");
-                console.log("🔒 Microphone already in use by another application");
-            } else {
-                setStatus(`❌ Microphone error: ${error?.message || "Unknown error"}`);
-                console.log("❓ Unknown microphone error:", error);
-            }
-        }
     };
 
     // ---------- Stop mic ----------
