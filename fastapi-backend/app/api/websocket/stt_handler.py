@@ -47,12 +47,12 @@ def _build_recorder_with_fallbacks(callbacks: dict) -> AudioToTextRecorder:
                 compute_type=compute,
                 gpu_device_index=int(os.getenv("RT_GPU_INDEX", "0")),
                 # ---- Models / language ----
-                model=os.getenv("RT_MODEL", "base"),   # dev on M2; use large-v3 on 5090
+                model=os.getenv("RT_MODEL", "base.en"),   # dev on M2; use large-v3 on 5090
                 language=os.getenv("RT_LANG", ""),     # ""=auto; set "bn"/"en" to lock
                 # ---- Realtime partials ----
                 enable_realtime_transcription=True,
                 use_main_model_for_realtime=True,  # Use main model for better quality
-                realtime_model_type=os.getenv("RT_REALTIME_MODEL", "base"),
+                realtime_model_type=os.getenv("RT_REALTIME_MODEL", "base.en"),
                 realtime_processing_pause=float(os.getenv("RT_REALTIME_PAUSE", "0.1")),
                 on_realtime_transcription_update=callbacks["on_partial"],
                 on_realtime_transcription_stabilized=callbacks["on_stabilized"],
