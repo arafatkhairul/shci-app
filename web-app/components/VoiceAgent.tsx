@@ -1832,6 +1832,17 @@ export default function VoiceAgent() {
                         confidence: 1.0,
                         isFinal: true
                     }]);
+                    
+                    // Send final transcript to chat handler for LLM processing
+                    if (ws.current?.readyState === WebSocket.OPEN) {
+                        console.log("🎤 Sending final transcript to chat handler:", text);
+                        ws.current.send(JSON.stringify({
+                            type: "final_transcript",
+                            text: text,
+                            confidence: 1.0,
+                            isFinal: true
+                        }));
+                    }
                 },
                 onError: (error) => {
                     setSttStatus(`error: ${error}`);
