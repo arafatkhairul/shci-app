@@ -13,14 +13,17 @@ export default function PushToTalk() {
     try {
       setStatus("connecting");
       const url = process.env.NEXT_PUBLIC_STT_WS ?? "ws://localhost:8000/ws/stt";
-      const cli = new RSStream(url, {
+      const cli = new RSStream({
         onStatus: setStatus,
         onPartial: setPartial,
         onStabilized: setStab,
         onFinal: (t) => setFinals(f => [...f, t]),
+        onError: (e) => setStatus(`error: ${e}`)
       });
       ref.current = cli;
-      await cli.start();
+      await cli.connect(url);
+      // NOTE: RSStream.startAudio() এখন server 'ready' পাওয়া পর্যন্ত ওয়েট করবে
+      await cli.startAudio();
     } catch (error) {
       console.error("Failed to start STT:", error);
       setStatus(`error: ${error.message}`);
