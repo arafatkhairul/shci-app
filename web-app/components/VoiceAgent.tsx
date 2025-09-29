@@ -34,32 +34,55 @@ export default function VoiceAgent() {
     // ---------- CSS Styles ----------
     const typingAnimationStyle = `
         .typing-animation {
-            animation: typing 0.05s steps(1, end), glow 2s ease-in-out infinite alternate;
-            text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+            animation: voiceTyping 0.1s steps(1, end), voiceGlow 1.5s ease-in-out infinite alternate;
+            text-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+            position: relative;
+            overflow: hidden;
         }
         
-        @keyframes typing {
+        .typing-animation::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.3), transparent);
+            animation: voiceSweep 2s ease-in-out infinite;
+        }
+        
+        @keyframes voiceTyping {
             from { 
                 opacity: 0; 
-                transform: translateY(15px) scale(0.95); 
-                filter: blur(2px);
+                transform: translateY(20px) scale(0.9); 
+                filter: blur(3px);
+                letter-spacing: 2px;
             }
             to { 
                 opacity: 1; 
                 transform: translateY(0) scale(1); 
                 filter: blur(0);
+                letter-spacing: normal;
             }
         }
         
-        @keyframes glow {
+        @keyframes voiceGlow {
             0% { 
-                text-shadow: 0 0 10px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3);
+                text-shadow: 0 0 15px rgba(59, 130, 246, 0.6), 0 0 25px rgba(59, 130, 246, 0.4);
                 transform: scale(1);
+                filter: brightness(1);
             }
             100% { 
-                text-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 30px rgba(59, 130, 246, 0.5), 0 0 40px rgba(59, 130, 246, 0.3);
-                transform: scale(1.02);
+                text-shadow: 0 0 25px rgba(59, 130, 246, 0.9), 0 0 35px rgba(59, 130, 246, 0.6), 0 0 45px rgba(59, 130, 246, 0.3);
+                transform: scale(1.01);
+                filter: brightness(1.1);
             }
+        }
+        
+        @keyframes voiceSweep {
+            0% { left: -100%; }
+            50% { left: 100%; }
+            100% { left: 100%; }
         }
         
         .gradient-text {
@@ -3089,10 +3112,10 @@ export default function VoiceAgent() {
                                                 <div className="space-y-2">
                                                     {/* Show live partial transcript while speaking, or final text when complete */}
                                                     {(partialTranscript || finalTranscripts.length > 0) ? (
-                                                        <div className={`rounded-lg p-3 border transition-all duration-500 ${
+                                                        <div className={`rounded-lg p-3 transition-all duration-500 ${
                                                             partialTranscript 
-                                                                ? "bg-blue-500/[0.1] border-blue-500/20 shadow-lg shadow-blue-500/10" 
-                                                                : "bg-gradient-to-r from-emerald-500/[0.1] via-blue-500/[0.1] to-purple-500/[0.1] border-gradient-to-r from-emerald-500/30 via-blue-500/30 to-purple-500/30 shadow-lg shadow-gradient-to-r shadow-emerald-500/10"
+                                                                ? "bg-blue-500/[0.1] shadow-lg shadow-blue-500/10" 
+                                                                : "bg-gradient-to-r from-emerald-500/[0.1] via-blue-500/[0.1] to-purple-500/[0.1] shadow-lg shadow-emerald-500/10"
                                                         }`}>
                                                             <p className={`text-xs mb-1 font-medium ${
                                                                 partialTranscript 
@@ -3108,7 +3131,18 @@ export default function VoiceAgent() {
                                                             }`}>
                                                                 {partialTranscript ? (
                                                                     <span className="typing-animation">
-                                                                        {partialTranscript}
+                                                                        {partialTranscript.split('').map((char, index) => (
+                                                                            <span 
+                                                                                key={index}
+                                                                                className="inline-block"
+                                                                                style={{
+                                                                                    animationDelay: `${index * 0.05}s`,
+                                                                                    animation: 'voiceTyping 0.1s steps(1, end) forwards'
+                                                                                }}
+                                                                            >
+                                                                                {char === ' ' ? '\u00A0' : char}
+                                                                            </span>
+                                                                        ))}
                                                                         <span className="animate-pulse text-blue-400 ml-1">|</span>
                                                                     </span>
                                                                 ) : (
