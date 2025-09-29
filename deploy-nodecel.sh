@@ -660,11 +660,14 @@ setup_backend() {
     
     # Install PyTorch with CUDA support for RTX 5090
     log_step "Installing PyTorch with CUDA 12.1 support for RTX 5090..."
-    pip install torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 --index-url https://download.pytorch.org/whl/cu121
+    # Use PyTorch 2.4.0+ for better RTX 5090 support
+    pip install torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu121
     log_success "PyTorch with CUDA 12.1 installed"
     
     # Install ONNX Runtime with CUDA support
     log_step "Installing ONNX Runtime with CUDA support..."
+    # First install CPU version, then GPU version
+    pip install onnxruntime==1.18.0
     pip install onnxruntime-gpu==1.18.0
     log_success "ONNX Runtime with CUDA installed"
     
@@ -741,6 +744,9 @@ CUDA_VISIBLE_DEVICES=0
 TORCH_DEVICE=cuda
 CUDA_ARCHITECTURES=89
 TORCH_CUDA_ARCH_LIST=8.9
+# RTX 5090 specific compatibility
+TORCH_CUDA_ARCH_LIST=8.9,9.0
+CUDA_ARCHITECTURES=89,90
 
 # RTX 5090 Memory Optimization (24GB VRAM)
 TORCH_CUDA_ALLOC_CONF=max_split_size_mb:2048,roundup_power2_divisions:16
@@ -775,6 +781,10 @@ RT_VAD_SENS=2
 RT_POST_SILENCE=0.2
 RT_MIN_UTT=0.15
 RT_REALTIME_PAUSE=0.02
+
+# ONNX Runtime GPU Configuration
+ORT_DEVICE=cuda
+ORT_PROVIDERS=CUDAExecutionProvider,CPUExecutionProvider
 
 # Performance Optimization for RTX 5090
 OMP_NUM_THREADS=16
