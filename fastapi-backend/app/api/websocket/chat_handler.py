@@ -414,11 +414,11 @@ class ChatHandler:
             })
             
             # Send immediate acknowledgment for instant user feedback
-            await self.send_json(websocket, {
-                "type": "ai_text",
-                "text": "I'm thinking...",
-                "is_final": False
-            })
+            # await self.send_json(websocket, {
+            #     "type": "ai_text",
+            #     "text": "I'm thinking...",
+            #     "is_final": False
+            # })
             
             # Pre-warm TTS for faster first response
             try:
@@ -481,7 +481,7 @@ If the input is grammatically correct, respond normally without any grammar corr
             async for text_chunk in self.llm_service.generate_streaming_response(
                 messages=messages,
                 temperature=0.7,
-                max_tokens=25  # Much smaller for instant response
+                max_tokens=100  # Restored for proper responses
             ):
                 if text_chunk:
                     full_response += text_chunk
@@ -497,21 +497,18 @@ If the input is grammatically correct, respond normally without any grammar corr
                     
                     # Send text chunk to frontend for real-time display
                     await self.send_json(websocket, {
-                        "type": "ai_text_chunk", 
-                        "text": text_chunk,
-                        "is_final": False,
-                        "is_first_chunk": is_first_chunk
+                        "type": "ai_text", 
+                        "text": full_response,  # Send full response so far
+                        "is_final": False
                     })
-                    is_first_chunk = False
                     
                     # Skip audio generation if we're in grammar correction section
                     if self.in_grammar_correction:
                         log.info(f"[{conn_id}] 🔍 Skipping audio generation - in grammar correction section")
                         continue
                     
-                    # Generate audio for every 2-3 words for instant response
-                    word_count = len(text_buffer.split())
-                    if word_count >= 2:  # Much more aggressive audio generation
+                    # Generate audio for complete sentences
+                    if self.should_generate_audio_chunk(text_buffer):
                         # Clean up text for better speech
                         clean_text = text_buffer.strip()
                         # Remove extra spaces and normalize text
