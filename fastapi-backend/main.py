@@ -32,6 +32,10 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['CUDA_VISIBLE_DEVICES'] = '0' if os.environ.get('CUDA_VISIBLE_DEVICES') is None else os.environ.get('CUDA_VISIBLE_DEVICES')
 
+# Disable RealtimeSTT debug logs
+os.environ['RT_SAFEPIPE_DEBUG'] = '0'
+os.environ['RT_DEBUG'] = '0'
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

@@ -31,6 +31,12 @@ def _pick_fallback_chain():
         return [("cuda", "float16"), ("cuda", "float32"), ("cpu", "int8"), ("cpu", "float32")]
 
 def _build_recorder_with_fallbacks(callbacks: dict) -> AudioToTextRecorder:
+    # Disable RealtimeSTT internal logging
+    import logging
+    logging.getLogger('RealtimeSTT').setLevel(logging.CRITICAL)
+    logging.getLogger('RealtimeSTT.safepipe').setLevel(logging.CRITICAL)
+    logging.getLogger('faster_whisper').setLevel(logging.WARNING)
+    
     errors = []
     for device, compute in _pick_fallback_chain():
         try:
@@ -60,7 +66,7 @@ def _build_recorder_with_fallbacks(callbacks: dict) -> AudioToTextRecorder:
                 ensure_sentence_starting_uppercase=True,
                 ensure_sentence_ends_with_period=True,
                 spinner=bool(int(os.getenv("RT_SPINNER", "0"))),
-                level=int(os.getenv("RT_LOG_LEVEL", "40")),  # ERROR level logging only
+                level=int(os.getenv("RT_LOG_LEVEL", "50")),  # CRITICAL level logging only
                 no_log_file=bool(int(os.getenv("RT_NO_LOG_FILE", "1"))),
             )
             log.info(f"[RealtimeSTT] Using device={device}, compute_type={compute}")
