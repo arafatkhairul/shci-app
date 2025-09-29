@@ -579,7 +579,7 @@ install_audio_dependencies() {
     log_step "Installing audio dependencies for PyAudio and audio processing..."
     
     # Install Python development headers and audio libraries
-    local audio_packages=("python3.12-dev" "portaudio19-dev" "libasound2-dev" "libsndfile1-dev" "ffmpeg" "libportaudio2" "libasound2" "alsa-utils")
+    local audio_packages=("python3.12-dev" "portaudio19-dev" "libasound2-dev" "libsndfile1-dev" "ffmpeg" "libportaudio2" "libasound2t64" "alsa-utils")
     
     for package in "${audio_packages[@]}"; do
         if check_package_installed "$package"; then
