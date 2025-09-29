@@ -47,34 +47,29 @@ def _build_recorder_with_fallbacks(callbacks: dict) -> AudioToTextRecorder:
     for device, compute in _pick_fallback_chain():
         try:
             log.info(f"[RealtimeSTT] Trying device={device} compute_type={compute}")
+            
+            # Simplified configuration based on RealtimeVoiceChat pattern
             rec = AudioToTextRecorder(
                 use_microphone=False,
                 device=device,
                 compute_type=compute,
-                # GPU index is ignored on metal/cpu; safe to leave
-                gpu_device_index=int(os.getenv("RT_GPU_INDEX", "0")),
-                # ---- Model choices ----
-                # 'medium' balances speed/accuracy on M2; you can switch to 'large-v3' on the 5090 box.
-                model=os.getenv("RT_MODEL", "medium"),
-                language=os.getenv("RT_LANG", ""),  # "" = auto-detect; or set "bn"/"en"
-                # ---- Realtime partials ----
+                # Model configuration
+                model=os.getenv("RT_MODEL", "base"),
+                language=os.getenv("RT_LANG", "en"),
+                # Realtime transcription settings
                 enable_realtime_transcription=True,
-                use_main_model_for_realtime=False,
-                realtime_model_type=os.getenv("RT_REALTIME_MODEL", "small"),
-                realtime_processing_pause=float(os.getenv("RT_REALTIME_PAUSE", "0.5")),
                 on_realtime_transcription_update=callbacks["on_partial"],
                 on_realtime_transcription_stabilized=callbacks["on_stabilized"],
-                # ---- VAD & endpointing ----
+                # VAD settings
                 webrtc_sensitivity=int(os.getenv("RT_VAD_SENS", "2")),
-                silero_deactivity_detection=bool(int(os.getenv("RT_SILERO_DEACT", "1"))),
-                post_speech_silence_duration=float(os.getenv("RT_POST_SILENCE", "0.25")),
-                pre_recording_buffer_duration=float(os.getenv("RT_PRE_ROLL", "0.2")),
-                min_length_of_recording=float(os.getenv("RT_MIN_UTT", "0.8")),
-                # ---- Text polishing ----
+                post_speech_silence_duration=float(os.getenv("RT_POST_SILENCE", "0.5")),
+                min_length_of_recording=float(os.getenv("RT_MIN_UTT", "0.5")),
+                # Text processing
                 ensure_sentence_starting_uppercase=True,
                 ensure_sentence_ends_with_period=True,
+                # Disable spinner and logging
                 spinner=False,
-                no_log_file=True,
+                level=30,  # WARNING level logging
             )
             log.info(f"[RealtimeSTT] Using device={device}, compute_type={compute}")
             return rec
@@ -109,10 +104,14 @@ class RTSession:
             
             # Run the heavy initialization in a thread pool
             def init_recorder():
-                return _build_recorder_with_fallbacks({
-                    "on_partial": self._cb_partial,
-                    "on_stabilized": self._cb_stabilized
-                })
+                try:
+                    return _build_recorder_with_fallbacks({
+                        "on_partial": self._cb_partial,
+                        "on_stabilized": self._cb_stabilized
+                    })
+                except Exception as e:
+                    log.error(f"Recorder initialization error: {e}")
+                    raise
             
             # Run in thread pool to avoid blocking
             self.rec = await asyncio.get_event_loop().run_in_executor(None, init_recorder)
@@ -158,16 +157,23 @@ class RTSession:
 
     # ---------- Finalization loop ----------
     def _final_loop(self):
-        while self.running:
+        while self.running and self.rec:
             try:
                 def on_final(sentence: str):
-                    if sentence:
-                        self._send_json({"type": "final", "text": sentence})
-                # Blocks until a full sentence is available
-                self.rec.text(on_final)
+                    if sentence and sentence.strip():
+                        self._send_json({"type": "final", "text": sentence.strip()})
+                
+                # Use the proper RealtimeSTT method for getting final text
+                if hasattr(self.rec, 'text'):
+                    self.rec.text(on_final)
+                else:
+                    # Fallback: wait a bit and check again
+                    import time
+                    time.sleep(0.1)
             except Exception as e:
-                log.error(f"Final transcription loop error: {e}")
-                self._send_json({"type": "error", "text": f"final_loop: {e}"})
+                if self.running:  # Only log if we're still supposed to be running
+                    log.error(f"Final transcription loop error: {e}")
+                    self._send_json({"type": "error", "text": f"final_loop: {e}"})
                 break
 
     # ---------- Audio feeding ----------
@@ -185,11 +191,20 @@ class RTSession:
             if hasattr(self, 'audio_buffer') and self.audio_buffer:
                 log.info(f"Processing {len(self.audio_buffer)} buffered audio chunks")
                 for buffered_chunk in self.audio_buffer:
-                    self.rec.feed_audio(buffered_chunk)
+                    if hasattr(self.rec, 'feed_audio'):
+                        self.rec.feed_audio(buffered_chunk)
+                    elif hasattr(self.rec, 'feed'):
+                        self.rec.feed(buffered_chunk)
                 self.audio_buffer.clear()
             
-            # Process current audio chunk
-            self.rec.feed_audio(chunk)
+            # Process current audio chunk using proper method
+            if hasattr(self.rec, 'feed_audio'):
+                self.rec.feed_audio(chunk)
+            elif hasattr(self.rec, 'feed'):
+                self.rec.feed(chunk)
+            else:
+                log.warning("RealtimeSTT recorder doesn't have feed_audio or feed method")
+                
         except Exception as e:
             log.error(f"Failed to feed audio data: {e}")
             self._send_json({"type": "error", "text": f"audio_feed: {e}"})
@@ -209,13 +224,25 @@ class RTSession:
         # Shutdown recorder if initialized
         if self.rec:
             try:
-                self.rec.abort()
+                # Try different shutdown methods based on RealtimeSTT version
+                if hasattr(self.rec, 'abort'):
+                    self.rec.abort()
+                elif hasattr(self.rec, 'stop'):
+                    self.rec.stop()
             except Exception as e:
-                log.warning(f"Error aborting recorder: {e}")
+                log.warning(f"Error stopping recorder: {e}")
+            
             try:
-                self.rec.shutdown()
+                if hasattr(self.rec, 'shutdown'):
+                    self.rec.shutdown()
+                elif hasattr(self.rec, 'close'):
+                    self.rec.close()
             except Exception as e:
                 log.warning(f"Error shutting down recorder: {e}")
+            
+            # Wait for final thread to finish
+            if self.final_thread and self.final_thread.is_alive():
+                self.final_thread.join(timeout=2.0)
 
 
 class STTHandler:
