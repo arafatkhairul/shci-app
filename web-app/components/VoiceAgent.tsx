@@ -27,6 +27,7 @@ import {
     FaCheck
 } from "react-icons/fa";
 import RolePlayAnswers from "./RolePlayAnswers";
+import { RSStream } from "../lib/rtsttClient";
 // VAD services removed - using server-side STT only
 
 export default function VoiceAgent() {
@@ -53,6 +54,13 @@ export default function VoiceAgent() {
         isFinal: boolean;
     }>>([]);
     const [showTranscription, setShowTranscription] = useState(false);
+
+    // Real-time STT State (New)
+    const [sttStatus, setSttStatus] = useState("idle");
+    const [partialTranscript, setPartialTranscript] = useState("");
+    const [stabilizedTranscript, setStabilizedTranscript] = useState("");
+    const [finalTranscripts, setFinalTranscripts] = useState<string[]>([]);
+    const sttStreamRef = useRef<RSStream | null>(null);
 
     // Difficulty level state
     const [level, setLevel] = useState<"easy" | "medium" | "fast">("medium");
@@ -1621,51 +1629,13 @@ export default function VoiceAgent() {
         // Force mic level reset
         updateMicLevel(0, 'reset');
 
-        // DISABLED: Auto-activate Webkit VAD - using server-side STT instead
-        // if (vadSupported && vadInitialized && !useWebkitVAD && vadService.current) {
-        //     const success = startVAD();
-        //     if (success) {
-        //         setUseWebkitVAD(true);
-        //         setListening(true);
-        //         setStatus(currentLang.status.listening);
-        //         setShowTranscription(true);
-        //         return;
-        //     }
-        // }
-
-        console.log("🚀 START MIC INITIATED:", {
+        // Use new Real-time STT implementation
+        console.log("🚀 STARTING REAL-TIME STT:", {
             timestamp: new Date().toLocaleTimeString(),
-            audioContextExists: !!audioCtx.current,
-            audioContextState: audioCtx.current?.state
+            sttStatus: sttStatus
         });
 
-        // DISABLED: If VAD is enabled, use appropriate VAD service - using server-side STT instead
-        // if (useWebkitVAD && vadService.current) {
-        //     const success = startVAD();
-        //     if (success) {
-        //         setListening(true);
-        //         setStatus(currentLang.status.listening);
-        //         setShowTranscription(true);
-        //         console.log("✅ Webkit VAD Started Successfully");
-        //         return;
-        //     } else {
-        //         console.log("❌ Webkit VAD Failed to Start");
-        //     }
-        // }
-
-        // DISABLED: If fallback VAD is enabled, use fallback service - using server-side STT instead
-        // if (useFallbackVAD && fallbackVADService.current) {
-        //     const success = startFallbackVAD();
-        //     if (success) {
-        //         setListening(true);
-        //         setStatus(currentLang.status.listening);
-        //         setShowTranscription(true);
-        //         console.log("✅ Fallback VAD Started Successfully");
-        //         return;
-        //     } else {
-        //         console.log("❌ Fallback VAD Failed to Start");
-        //     }
-        // }
+        await startSTT();
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
@@ -1950,18 +1920,84 @@ export default function VoiceAgent() {
     // ---------- Stop mic ----------
     const stopMic = () => {
         console.log("stopMic called, listening:", listening);
-        // VAD stop - REMOVED (using server-side STT only)
-
-        // Stop traditional microphone
+        
+        // Stop new Real-time STT
+        stopSTT();
+        
+        // Stop traditional microphone (fallback cleanup)
         listeningRef.current = false;
         if (sourceNode.current) { try { sourceNode.current.disconnect(); } catch { } sourceNode.current = null; }
         if (workletNode.current) { try { workletNode.current.disconnect(); } catch { } workletNode.current = null; }
         if (processorNode.current) { try { processorNode.current.disconnect(); } catch { } processorNode.current = null; }
         if (muteGain.current) { try { muteGain.current.disconnect(); } catch { } muteGain.current = null; }
         if (streamRef.current) { try { streamRef.current.getTracks().forEach(t => t.stop()); } catch { } streamRef.current = null; }
-        setListening(false);
         updateMicLevel(0, 'stop');
+    };
+
+    // ---------- Real-time STT Functions (New) ----------
+    const startSTT = async () => {
+        try {
+            setSttStatus("connecting");
+            const url = process.env.NEXT_PUBLIC_STT_WS ?? "ws://localhost:8000/ws/stt";
+            const sttStream = new RSStream({
+                onStatus: (status) => {
+                    setSttStatus(status);
+                    if (status === "ready") {
+                        setListening(true);
+                        setStatus(currentLang.status.listening);
+                        setShowTranscription(true);
+                    }
+                },
+                onPartial: (text) => {
+                    setPartialTranscript(text);
+                    setInterimTranscript(text);
+                },
+                onStabilized: (text) => {
+                    setStabilizedTranscript(text);
+                },
+                onFinal: (text) => {
+                    setFinalTranscripts(prev => [...prev, text]);
+                    setFinalTranscript(text);
+                    setInterimTranscript("");
+                    setPartialTranscript("");
+                    setStabilizedTranscript("");
+                    
+                    // Add to transcription history
+                    setTranscriptionHistory(prev => [...prev, {
+                        text: text,
+                        timestamp: Date.now(),
+                        confidence: 1.0,
+                        isFinal: true
+                    }]);
+                },
+                onError: (error) => {
+                    setSttStatus(`error: ${error}`);
+                    setStatus(`STT Error: ${error}`);
+                }
+            });
+            
+            sttStreamRef.current = sttStream;
+            await sttStream.connect(url);
+            await sttStream.startAudio();
+        } catch (error) {
+            console.error("Failed to start STT:", error);
+            setSttStatus(`error: ${error instanceof Error ? error.message : String(error)}`);
+            setStatus(`STT Error: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    };
+
+    const stopSTT = () => {
+        if (sttStreamRef.current) {
+            sttStreamRef.current.stopAudio();
+            sttStreamRef.current.disconnect();
+            sttStreamRef.current = null;
+        }
+        setListening(false);
         setStatus(currentLang.status.connected);
+        setSttStatus("idle");
+        setPartialTranscript("");
+        setStabilizedTranscript("");
+        setInterimTranscript("");
     };
 
     // Handle user type selection
@@ -3234,25 +3270,57 @@ export default function VoiceAgent() {
                                     <div className="relative p-5 min-h-[180px]">
                                         {/* VAD live processing UI - REMOVED (using server-side STT only) */}
 
-                                        {transcript ? (
+                                        {(transcript || partialTranscript || stabilizedTranscript) ? (
                                             <div className="space-y-3">
-                                                {/* Soft AI Status */}
+                                                {/* Real-time STT Status */}
                                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-white/[0.02] rounded-lg border border-white/6 shadow-sm">
-                                                    <div className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse" />
-                                                    <span className="text-xs font-medium text-purple-300">AI Enhanced</span>
+                                                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
+                                                    <span className="text-xs font-medium text-blue-300">Real-time STT</span>
                                                     <div className="ml-auto">
-                                                        <span className="text-xs text-zinc-500">Active</span>
+                                                        <span className="text-xs text-zinc-500">{sttStatus}</span>
                                                     </div>
                                                 </div>
 
-                                                {/* Soft Transcript Cards */}
+                                                {/* Real-time Transcript Display */}
                                                 <div className="space-y-2">
-                                                    {transcript.split(".").map((s, i) =>
-                                                        s.trim() && (
-                                                            <div key={i} className="bg-white/[0.02] rounded-lg p-3 border border-white/6 hover:border-white/8 transition-all duration-300 group shadow-sm hover:shadow-md">
-                                                                <p className="text-sm leading-relaxed text-zinc-300 group-hover:text-zinc-200 transition-colors duration-300">{s.trim()}.</p>
-                                                            </div>
-                                                        )
+                                                    {/* Partial transcript (live) */}
+                                                    {partialTranscript && (
+                                                        <div className="bg-blue-500/[0.1] rounded-lg p-3 border border-blue-500/20">
+                                                            <p className="text-xs text-blue-400 mb-1">Live:</p>
+                                                            <p className="text-sm leading-relaxed text-blue-300">{partialTranscript}</p>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Stabilized transcript */}
+                                                    {stabilizedTranscript && (
+                                                        <div className="bg-green-500/[0.1] rounded-lg p-3 border border-green-500/20">
+                                                            <p className="text-xs text-green-400 mb-1">Stabilized:</p>
+                                                            <p className="text-sm leading-relaxed text-green-300">{stabilizedTranscript}</p>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Final transcripts */}
+                                                    {finalTranscripts.length > 0 && (
+                                                        <div className="space-y-1">
+                                                            {finalTranscripts.map((text, i) => (
+                                                                <div key={i} className="bg-white/[0.02] rounded-lg p-3 border border-white/6 hover:border-white/8 transition-all duration-300 group shadow-sm hover:shadow-md">
+                                                                    <p className="text-sm leading-relaxed text-zinc-300 group-hover:text-zinc-200 transition-colors duration-300">{text}</p>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Legacy transcript display */}
+                                                    {transcript && !partialTranscript && !stabilizedTranscript && finalTranscripts.length === 0 && (
+                                                        <div className="space-y-2">
+                                                            {transcript.split(".").map((s, i) =>
+                                                                s.trim() && (
+                                                                    <div key={i} className="bg-white/[0.02] rounded-lg p-3 border border-white/6 hover:border-white/8 transition-all duration-300 group shadow-sm hover:shadow-md">
+                                                                        <p className="text-sm leading-relaxed text-zinc-300 group-hover:text-zinc-200 transition-colors duration-300">{s.trim()}.</p>
+                                                                    </div>
+                                                                )
+                                                            )}
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
