@@ -1,12 +1,14 @@
 """
 Real-time Speech-to-Text WebSocket Handler using RealtimeSTT
-Patched for Apple Silicon (M2) with safe compute_type/device fallbacks.
+Patched for Apple Silicon (M2) with safe compute_type/device fallbacks,
+and proper readiness gating + bounded buffering.
 """
 import os
 import json
 import platform
 import asyncio
 import threading
+from collections import deque
 from typing import Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from RealtimeSTT import AudioToTextRecorder
@@ -14,62 +16,52 @@ from RealtimeSTT import AudioToTextRecorder
 from app.utils.logger import get_logger, log_exception
 log = get_logger("stt_handler")
 
-
+# ---------------- Platform helpers ----------------
 def _is_apple_silicon() -> bool:
     return platform.system() == "Darwin" and platform.machine().lower() in ("arm64", "aarch64")
 
-
 def _pick_fallback_chain():
-    """
-    Returns a list of (device, compute_type) tuples to try in order.
-    - On Apple Silicon: prefer Metal int8 → Metal float32 → CPU int8 → CPU float32
-    - Elsewhere: respect ENV if provided; otherwise CUDA float16 → CUDA float32 → CPU int8 → CPU float32
-    """
     env_device = os.getenv("RT_DEVICE")
     env_compute = os.getenv("RT_COMPUTE")
-
     if env_device and env_compute:
         return [(env_device, env_compute)]
-
     if _is_apple_silicon():
         return [("metal", "int8"), ("metal", "float32"), ("cpu", "int8"), ("cpu", "float32")]
     else:
-        # If you're on a 5090 server, CUDA float16 is ideal.
         return [("cuda", "float16"), ("cuda", "float32"), ("cpu", "int8"), ("cpu", "float32")]
 
-
 def _build_recorder_with_fallbacks(callbacks: dict) -> AudioToTextRecorder:
-    """
-    Try a small matrix of device/compute combinations until one works.
-    Logs the chosen backend so you can verify.
-    """
     errors = []
     for device, compute in _pick_fallback_chain():
         try:
             log.info(f"[RealtimeSTT] Trying device={device} compute_type={compute}")
-            
-            # Simplified configuration based on RealtimeVoiceChat pattern
             rec = AudioToTextRecorder(
                 use_microphone=False,
                 device=device,
                 compute_type=compute,
-                # Model configuration
-                model=os.getenv("RT_MODEL", "base"),
-                language=os.getenv("RT_LANG", "en"),
-                # Realtime transcription settings
+                gpu_device_index=int(os.getenv("RT_GPU_INDEX", "0")),
+                # ---- Models / language ----
+                model=os.getenv("RT_MODEL", "base"),   # dev on M2; use large-v3 on 5090
+                language=os.getenv("RT_LANG", ""),     # ""=auto; set "bn"/"en" to lock
+                # ---- Realtime partials ----
                 enable_realtime_transcription=True,
+                use_main_model_for_realtime=False,
+                realtime_model_type=os.getenv("RT_REALTIME_MODEL", "small"),
+                realtime_processing_pause=float(os.getenv("RT_REALTIME_PAUSE", "0.5")),
                 on_realtime_transcription_update=callbacks["on_partial"],
                 on_realtime_transcription_stabilized=callbacks["on_stabilized"],
-                # VAD settings
+                # ---- VAD / endpointing ----
                 webrtc_sensitivity=int(os.getenv("RT_VAD_SENS", "2")),
-                post_speech_silence_duration=float(os.getenv("RT_POST_SILENCE", "0.5")),
-                min_length_of_recording=float(os.getenv("RT_MIN_UTT", "0.5")),
-                # Text processing
+                silero_deactivity_detection=bool(int(os.getenv("RT_SILERO_DEACT", "1"))),
+                pre_recording_buffer_duration=float(os.getenv("RT_PRE_ROLL", "0.2")),
+                post_speech_silence_duration=float(os.getenv("RT_POST_SILENCE", "0.25")),
+                min_length_of_recording=float(os.getenv("RT_MIN_UTT", "0.8")),
+                # ---- Text polish ----
                 ensure_sentence_starting_uppercase=True,
                 ensure_sentence_ends_with_period=True,
-                # Disable spinner and logging
-                spinner=False,
-                level=30,  # WARNING level logging
+                spinner=bool(int(os.getenv("RT_SPINNER", "0"))),
+                level=int(os.getenv("RT_LOG_LEVEL", "40")),  # ERROR level logging only
+                no_log_file=bool(int(os.getenv("RT_NO_LOG_FILE", "1"))),
             )
             log.info(f"[RealtimeSTT] Using device={device}, compute_type={compute}")
             return rec
@@ -77,67 +69,67 @@ def _build_recorder_with_fallbacks(callbacks: dict) -> AudioToTextRecorder:
             msg = f"{device}/{compute} failed: {e}"
             errors.append(msg)
             log.warning(msg)
-
-    # If none worked, raise a compact error with the attempts we tried
     raise RuntimeError("RealtimeSTT backend init failed. Attempts: " + " | ".join(errors))
 
-
+# ---------------- Session ----------------
 class RTSession:
     """Real-time STT session handler"""
+
+    # hard cap on pre-init buffered chunks (protect memory & latency)
+    BUFFER_MAX = int(os.getenv("RT_BUFFER_MAX", "400"))  # ~8s if 20ms frames
 
     def __init__(self, ws: WebSocket, loop: asyncio.AbstractEventLoop):
         self.ws = ws
         self.loop = loop
         self.running = True
-        self.rec = None
-        self.initialized = False
-        self.final_thread = None
+        self.rec: Optional[AudioToTextRecorder] = None
 
-        # Initialize RealtimeSTT asynchronously to avoid blocking WebSocket handshake
+        # readiness gate
+        self._ready_event: asyncio.Event = asyncio.Event()
+
+        # bounded buffer for early audio
+        self.audio_buffer: deque[bytes] = deque(maxlen=self.BUFFER_MAX)
+
+        # async init (non-blocking to WS accept)
         self.init_task = asyncio.create_task(self._async_init())
 
+        # final thread handle
+        self.final_thread: Optional[threading.Thread] = None
+
     async def _async_init(self):
-        """Initialize RealtimeSTT asynchronously"""
         try:
-            log.info("🔄 Initializing RealtimeSTT...")
             self._send_json({"type": "status", "text": "initializing"})
-            
-            # Run the heavy initialization in a thread pool
             def init_recorder():
-                try:
-                    return _build_recorder_with_fallbacks({
-                        "on_partial": self._cb_partial,
-                        "on_stabilized": self._cb_stabilized
-                    })
-                except Exception as e:
-                    log.error(f"Recorder initialization error: {e}")
-                    raise
-            
-            # Run in thread pool to avoid blocking
-            self.rec = await asyncio.get_event_loop().run_in_executor(None, init_recorder)
-            
-            # Start final transcription thread
+                return _build_recorder_with_fallbacks({
+                    "on_partial": self._cb_partial,
+                    "on_stabilized": self._cb_stabilized
+                })
+            self.rec = await asyncio.get_running_loop().run_in_executor(None, init_recorder)
+
+            # start finalization thread
             self.final_thread = threading.Thread(target=self._final_loop, daemon=True)
             self.final_thread.start()
-            
-            self.initialized = True
-            log.info("✅ RealtimeSTT initialized successfully")
+
+            # drain buffered audio (preserve order)
+            if self.audio_buffer:
+                log.info(f"[RTSession] Draining {len(self.audio_buffer)} buffered chunks")
+                while self.audio_buffer:
+                    self.rec.feed_audio(self.audio_buffer.popleft())
+
+            self._ready_event.set()
             self._send_json({"type": "status", "text": "ready"})
-            
-            # Process any buffered audio data
-            if hasattr(self, 'audio_buffer') and self.audio_buffer:
-                log.info(f"Processing {len(self.audio_buffer)} buffered audio chunks after initialization")
-                for buffered_chunk in self.audio_buffer:
-                    try:
-                        self.rec.feed_audio(buffered_chunk)
-                    except Exception as e:
-                        log.error(f"Failed to process buffered audio: {e}")
-                self.audio_buffer.clear()
-            
+            log.info("[RTSession] RealtimeSTT ready")
         except Exception as e:
-            log.error(f"❌ RealtimeSTT initialization failed: {e}")
+            log.error(f"RealtimeSTT initialization failed: {e}")
             self._send_json({"type": "error", "text": f"initialization_failed: {e}"})
             self.running = False
+
+    async def wait_ready(self, timeout: float = 5.0) -> bool:
+        try:
+            await asyncio.wait_for(self._ready_event.wait(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
 
     # ---------- WS send helpers ----------
     def _send_json(self, obj: dict):
@@ -160,51 +152,29 @@ class RTSession:
         while self.running and self.rec:
             try:
                 def on_final(sentence: str):
-                    if sentence and sentence.strip():
-                        self._send_json({"type": "final", "text": sentence.strip()})
-                
-                # Use the proper RealtimeSTT method for getting final text
-                if hasattr(self.rec, 'text'):
-                    self.rec.text(on_final)
-                else:
-                    # Fallback: wait a bit and check again
-                    import time
-                    time.sleep(0.1)
+                    s = (sentence or "").strip()
+                    if s:
+                        self._send_json({"type": "final", "text": s})
+                self.rec.text(on_final)  # blocks until next final sentence
             except Exception as e:
-                if self.running:  # Only log if we're still supposed to be running
+                if self.running:
                     log.error(f"Final transcription loop error: {e}")
                     self._send_json({"type": "error", "text": f"final_loop: {e}"})
                 break
 
     # ---------- Audio feeding ----------
     def feed_pcm16(self, chunk: bytes):
-        if not self.initialized or not self.rec:
-            # Store audio data in buffer until initialization is complete
-            if not hasattr(self, 'audio_buffer'):
-                self.audio_buffer = []
+        # If not ready yet, enqueue (bounded) instead of spamming logs
+        if not self._ready_event.is_set() or not self.rec:
+            if len(self.audio_buffer) == self.audio_buffer.maxlen:
+                # drop oldest (deque already drops), but we log once in a while
+                if (getattr(self, "_drop_logged", 0) % 50) == 0:
+                    log.warning("[RTSession] Buffer full, dropping oldest chunks to protect latency")
+                self._drop_logged = getattr(self, "_drop_logged", 0) + 1
             self.audio_buffer.append(chunk)
-            log.debug("RealtimeSTT not initialized yet, buffering audio data")
             return
-            
         try:
-            # Process any buffered audio first
-            if hasattr(self, 'audio_buffer') and self.audio_buffer:
-                log.info(f"Processing {len(self.audio_buffer)} buffered audio chunks")
-                for buffered_chunk in self.audio_buffer:
-                    if hasattr(self.rec, 'feed_audio'):
-                        self.rec.feed_audio(buffered_chunk)
-                    elif hasattr(self.rec, 'feed'):
-                        self.rec.feed(buffered_chunk)
-                self.audio_buffer.clear()
-            
-            # Process current audio chunk using proper method
-            if hasattr(self.rec, 'feed_audio'):
-                self.rec.feed_audio(chunk)
-            elif hasattr(self.rec, 'feed'):
-                self.rec.feed(chunk)
-            else:
-                log.warning("RealtimeSTT recorder doesn't have feed_audio or feed method")
-                
+            self.rec.feed_audio(chunk)
         except Exception as e:
             log.error(f"Failed to feed audio data: {e}")
             self._send_json({"type": "error", "text": f"audio_feed: {e}"})
@@ -212,39 +182,25 @@ class RTSession:
     # ---------- Cleanup ----------
     def stop(self):
         self.running = False
-        
-        # Cancel initialization task if still running
-        if hasattr(self, 'init_task') and not self.init_task.done():
+        # cancel init if still pending
+        if self.init_task and not self.init_task.done():
             self.init_task.cancel()
-        
-        # Clear audio buffer
-        if hasattr(self, 'audio_buffer'):
-            self.audio_buffer.clear()
-        
-        # Shutdown recorder if initialized
+        self.audio_buffer.clear()
         if self.rec:
             try:
-                # Try different shutdown methods based on RealtimeSTT version
-                if hasattr(self.rec, 'abort'):
+                if hasattr(self.rec, "abort"):
                     self.rec.abort()
-                elif hasattr(self.rec, 'stop'):
-                    self.rec.stop()
             except Exception as e:
-                log.warning(f"Error stopping recorder: {e}")
-            
+                log.warning(f"Error aborting recorder: {e}")
             try:
-                if hasattr(self.rec, 'shutdown'):
+                if hasattr(self.rec, "shutdown"):
                     self.rec.shutdown()
-                elif hasattr(self.rec, 'close'):
-                    self.rec.close()
             except Exception as e:
                 log.warning(f"Error shutting down recorder: {e}")
-            
-            # Wait for final thread to finish
-            if self.final_thread and self.final_thread.is_alive():
-                self.final_thread.join(timeout=2.0)
+        if self.final_thread and self.final_thread.is_alive():
+            self.final_thread.join(timeout=2.0)
 
-
+# ---------------- Handler ----------------
 class STTHandler:
     """Handles WebSocket STT connections"""
 
@@ -260,13 +216,18 @@ class STTHandler:
         sess = RTSession(websocket, loop)
 
         try:
-            # Send immediate connection status
-            await websocket.send_text(json.dumps({"type": "status", "text": "connected"}))
+            # Tell client to wait for 'ready' before streaming (best practice)
+            await websocket.send_text(json.dumps({"type": "status", "text": "initializing"}))
 
             while True:
                 msg = await websocket.receive()
 
                 if "bytes" in msg:
+                    # Gate on readiness to avoid endless buffering
+                    if not sess._ready_event.is_set():
+                        # Optional: wait briefly for init to finish (up to 2s)
+                        ready = await sess.wait_ready(timeout=2.0)
+                        # If still not ready, buffer (bounded) and continue
                     sess.feed_pcm16(msg["bytes"])
 
                 elif "text" in msg:
@@ -279,7 +240,6 @@ class STTHandler:
                     except json.JSONDecodeError:
                         log.warning(f"Invalid JSON received: {msg['text']}")
                 else:
-                    # Ignore other message types
                     pass
 
         except WebSocketDisconnect:
