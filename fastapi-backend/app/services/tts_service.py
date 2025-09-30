@@ -29,6 +29,12 @@ class TTSService:
     def update_length_scale(self, length_scale: float):
         """Update the dynamic length scale for speech speed"""
         self.dynamic_length_scale = length_scale
+        
+        # Also update the TTS provider's length_scale directly
+        if hasattr(self.tts_provider, 'length_scale'):
+            self.tts_provider.length_scale = length_scale
+            log.info(f"🎤 TTS provider length_scale updated to: {length_scale}")
+        
         log.info(f"🎤 TTS length_scale updated to: {length_scale}")
 
     async def synthesize_text(
