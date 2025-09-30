@@ -72,6 +72,12 @@ class STTService:
                 self.model_size,
                 device=self.device,
                 compute_type=self.compute_type,
+                # Add missing TranscriptionOptions parameters
+                multilingual=True,
+                max_new_tokens=448,
+                clip_timestamps="",
+                hallucination_silence_threshold=None,
+                hotwords=None
             )
             self.initialized = True
             log.info("✅ STT service initialized successfully.")
@@ -104,6 +110,12 @@ class STTService:
                 self.model_size,
                 device=self.device,
                 # Let whisperx choose the compute type automatically
+                # Add missing TranscriptionOptions parameters
+                multilingual=True,
+                max_new_tokens=448,
+                clip_timestamps="",
+                hallucination_silence_threshold=None,
+                hotwords=None
             )
             self.initialized = True
             log.info("✅ STT service initialized successfully with fallback parameters.")
@@ -129,6 +141,12 @@ class STTService:
                     self.model_size,
                     device=self.device,
                     compute_type=compute_type,
+                    # Add missing TranscriptionOptions parameters
+                    multilingual=True,
+                    max_new_tokens=448,
+                    clip_timestamps="",
+                    hallucination_silence_threshold=None,
+                    hotwords=None
                 )
                 self.compute_type = compute_type
                 self.initialized = True
