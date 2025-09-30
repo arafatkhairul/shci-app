@@ -12,7 +12,7 @@ export default function PushToTalk() {
   const start = async () => {
     try {
       setStatus("connecting");
-      const url = process.env.NEXT_PUBLIC_STT_WS ?? "ws://localhost:8000/ws/stt";
+      const url = process.env.NEXT_PUBLIC_STT_WS ?? process.env.NEXT_PUBLIC_WS_BASE_URL + "/ws/stt";
       const cli = new RSStream({
         onStatus: setStatus,
         onPartial: setPartial,

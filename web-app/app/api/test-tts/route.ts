@@ -5,7 +5,7 @@ export async function POST(request: NextRequest) {
         const { text, language = 'en' } = await request.json();
         
         // Call the backend TTS service
-        const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000';
+        const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api-llm.nodecel.cloud';
         const ttsResponse = await fetch(`${backendUrl}/tts/test`, {
             method: 'POST',
             headers: {

@@ -1812,7 +1812,7 @@ export default function VoiceAgent() {
     const startSTT = async () => {
         try {
             setSttStatus("connecting");
-            const url = process.env.NEXT_PUBLIC_STT_WS ?? "ws://localhost:8000/ws/stt";
+            const url = process.env.NEXT_PUBLIC_STT_WS ?? process.env.NEXT_PUBLIC_WS_BASE_URL + "/ws/stt";
             const sttStream = new RSStream({
                 onStatus: (status) => {
                     setSttStatus(status);
