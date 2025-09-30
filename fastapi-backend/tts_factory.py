@@ -669,6 +669,9 @@ class PiperTTSProvider(TTSInterface):
                 noise_w = kwargs.get('noise_w', self.noise_w)
                 sentence_silence = kwargs.get('sentence_silence', 0.1)  # Small pause for natural speech
                 
+                # Debug logging for Piper TTS synthesis
+                log.info(f"🎤 Piper TTS Debug - length_scale: {length_scale}, noise_scale: {noise_scale}, noise_w: {noise_w}")
+                
                 # Use the fastest synthesis method available
                 try:
                     # Try direct synthesis (fastest method)

@@ -52,6 +52,9 @@ class TTSService:
             # Use dynamic length_scale if set, otherwise use parameter or default
             length_scale_to_use = length_scale or self.dynamic_length_scale or self.length_scale
             
+            # Debug logging for length_scale
+            log.info(f"🎤 TTS Debug - length_scale: {length_scale}, dynamic: {self.dynamic_length_scale}, default: {self.length_scale}, using: {length_scale_to_use}")
+            
             # Optimized synthesis parameters for natural human-like speech
             synthesis_params = {
                 'text': text,
