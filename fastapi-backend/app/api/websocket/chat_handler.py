@@ -285,6 +285,26 @@ class ChatHandler:
                     changed = True
                     log.info(f"[{conn_id}] Level={new_level} (was {old_level})")
 
+            # Handle speech speed and length_scale
+            if "speech_speed" in data or "length_scale" in data:
+                speech_speed = data.get("speech_speed", mem.level)
+                length_scale = data.get("length_scale")
+                
+                # Convert speech speed to length_scale if not provided
+                if length_scale is None:
+                    speed_to_length_scale = {
+                        "easy": 1.5,    # Slow audio (higher length_scale = slower)
+                        "medium": 1.0,  # Normal audio (default)
+                        "fast": 0.6     # Fast audio (lower length_scale = faster)
+                    }
+                    length_scale = speed_to_length_scale.get(speech_speed, 1.0)
+                
+                # Update TTS service length_scale
+                if hasattr(self.tts_service, 'update_length_scale'):
+                    self.tts_service.update_length_scale(length_scale)
+                    log.info(f"[{conn_id}] Speech speed updated: {speech_speed} -> length_scale={length_scale}")
+                    changed = True
+
         except Exception as e:
             log_exception(log, f"[{conn_id}] client_prefs", e)
 

@@ -15,6 +15,7 @@ class TTSService:
         self.tts_system = settings.TTS_SYSTEM
         self.piper_model = settings.PIPER_MODEL_NAME
         self.length_scale = settings.PIPER_LENGTH_SCALE
+        self.dynamic_length_scale = None  # For runtime speech speed changes
         self.noise_scale = settings.PIPER_NOISE_SCALE
         self.noise_w = settings.PIPER_NOISE_W
         
@@ -24,6 +25,11 @@ class TTSService:
         
         log.info(f"🎤 TTS Service initialized with {self.tts_system} system")
         log.info(f"🎤 Default voice: {self.piper_model}")
+
+    def update_length_scale(self, length_scale: float):
+        """Update the dynamic length scale for speech speed"""
+        self.dynamic_length_scale = length_scale
+        log.info(f"🎤 TTS length_scale updated to: {length_scale}")
 
     async def synthesize_text(
         self, 
@@ -43,7 +49,8 @@ class TTSService:
             voice_to_use = voice or self.piper_model
             
             # Use provided length scale or default
-            length_scale_to_use = length_scale or self.length_scale
+            # Use dynamic length_scale if set, otherwise use parameter or default
+            length_scale_to_use = length_scale or self.dynamic_length_scale or self.length_scale
             
             # Optimized synthesis parameters for natural human-like speech
             synthesis_params = {
