@@ -1016,11 +1016,12 @@ export default function VoiceAgent() {
         // Send combined level and speech speed update to prevent conflicts
         if (ws.current?.readyState === WebSocket.OPEN) {
             const speedToLengthScale = {
-                easy: 1.5,    // Slow audio (higher length_scale = slower)
+                easy: 2.0,    // Slow audio (higher length_scale = slower)
                 medium: 1.0,  // Normal audio (default)
-                fast: 0.6     // Fast audio (lower length_scale = faster)
+                fast: 0.60    // Fast audio (lower length_scale = faster)
             };
             const lengthScale = speedToLengthScale[newLevel];
+            
 
             // Send both level and speech speed in one message to prevent conflicts
             ws.current.send(JSON.stringify({
@@ -1476,9 +1477,9 @@ export default function VoiceAgent() {
                     // initial prefs (NOW including level + stable client_id + speech speed)
                     try {
                         const speedToLengthScale = {
-                            easy: 2.5,    // Slow audio 
+                            easy: 2.0,    // Slow audio 
                             medium: 1.0,  // Normal audio (default)
-                            fast: 0.30     // Fast audio 
+                            fast: 0.30    // Fast audio 
                         };
                         const lengthScale = speedToLengthScale[level];
 

@@ -560,75 +560,18 @@ class PiperTTSProvider(TTSInterface):
                 # Debug log for noise_scale
                 log.info(f"🎵 NOISE_SCALE DEBUG: kwargs={kwargs}, noise_scale={noise_scale}, self.noise_scale={self.noise_scale}")
                 
-                # Detect API signature
-                sig = inspect.signature(PiperVoice.synthesize)
-                params = sig.parameters
-                use_kwargs = all(k in params for k in ("length_scale", "noise_scale", "noise_w"))
-                has_syn_config = ("syn_config" in params) or ("synthesis_config" in params)
+                # Use the correct Piper TTS API with SynthesisConfig
+                from piper.voice import SynthesisConfig
                 
-                log.debug(f"Piper API signature: {sig}")
-                log.debug(f"use_kwargs: {use_kwargs}, has_syn_config: {has_syn_config}")
+                # Create synthesis config with correct parameter names
+                syn_config = SynthesisConfig(
+                    length_scale=length_scale,
+                    noise_scale=noise_scale,
+                    noise_w_scale=noise_w  # Use noise_w_scale instead of noise_w
+                )
                 
-                # Synthesize based on API version (following working code pattern)
-                if use_kwargs:
-                    # New API: direct kwargs
-                    self.voice.synthesize(
-                        text,
-                        wf,
-                        length_scale=length_scale,
-                        noise_scale=noise_scale,
-                        noise_w=noise_w,
-                        sentence_silence=0.0,
-                    )
-                elif has_syn_config:
-                    # Old API: SynthesisConfig object (this is what works)
-                    from piper.voice import SynthesisConfig
-                    
-                    # NOTE: কিছু রিলিজে 'noise_w' না হয়ে 'noise_w_scale' ছিল—সেই কেস কভার:
-                    try:
-                        cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w=noise_w)
-                    except TypeError:
-                        cfg = SynthesisConfig(length_scale=length_scale, noise_scale=noise_scale, noise_w_scale=noise_w)
-                    
-                    kw = {}
-                    if "syn_config" in params:
-                        kw["syn_config"] = cfg
-                    else:
-                        kw["synthesis_config"] = cfg
-                    
-                    # কিছু রিলিজে নাম 'synthesize_wav'—ফলব্যাক ট্রাই:
-                    try:
-                        self.voice.synthesize(text, wf, **kw)
-                    except TypeError:
-                        self.voice.synthesize_wav(text, wf, **kw)
-                else:
-                    # Optimized streaming for real-time response
-                    log.info("🎤 Using optimized streaming synthesis for real-time response")
-                    
-                    # Try the new streaming API first
-                    try:
-                        # Use synthesize_stream for better performance
-                        for chunk in self.voice.synthesize_stream(
-                            text, 
-                            length_scale=length_scale, 
-                            noise_scale=noise_scale, 
-                            noise_w=noise_w
-                        ):
-                            # Set audio format from chunk
-                            wf.setnchannels(chunk.sample_channels)
-                            wf.setsampwidth(chunk.sample_width)
-                            wf.setframerate(chunk.sample_rate)
-                            
-                            # Write chunk data directly
-                            wf.writeframes(chunk.audio_int16_bytes)
-                            
-                    except AttributeError:
-                        # Fallback to raw streaming if new API not available
-                        log.info("🔄 Falling back to raw streaming API")
-                        for audio in self.voice.synthesize_stream_raw(
-                            text, length_scale=length_scale, noise_scale=noise_scale, noise_w=noise_w
-                        ):
-                            wf.writeframes(audio)
+                # Use synthesize_wav method (correct API)
+                self.voice.synthesize_wav(text, wf, syn_config=syn_config)
                 
                 # Read the generated audio file
                 with open(temp_path, 'rb') as f:
@@ -648,7 +591,7 @@ class PiperTTSProvider(TTSInterface):
         
         # Preprocess text to fix punctuation issues
         text = preprocess_text_for_tts(text)
-        
+        print("Hello from synthesize_stream_optimized")
         # Use memory buffer for fastest processing
         import io
         
@@ -669,33 +612,18 @@ class PiperTTSProvider(TTSInterface):
                 noise_w = kwargs.get('noise_w', self.noise_w)
                 sentence_silence = kwargs.get('sentence_silence', 0.1)  # Small pause for natural speech
                 
-                # Debug logging for Piper TTS synthesis
-                log.info(f"🎤 Piper TTS Debug - length_scale: {length_scale}, noise_scale: {noise_scale}, noise_w: {noise_w}")
+                # Use the correct Piper TTS API with SynthesisConfig
+                from piper.voice import SynthesisConfig
                 
-                # Use the fastest synthesis method available
-                try:
-                    # Try direct synthesis (fastest method)
-                    self.voice.synthesize(
-                        text,
-                        wf,
-                        length_scale=length_scale,
-                        noise_scale=noise_scale,
-                        noise_w=noise_w,
-                        sentence_silence=0.0,
-                    )
-                except Exception as e:
-                    # Fallback to SynthesisConfig if direct method fails
-                    try:
-                        from piper.voice import SynthesisConfig
-                        cfg = SynthesisConfig(
-                            length_scale=length_scale, 
-                            noise_scale=noise_scale, 
-                            noise_w=noise_w
-                        )
-                        self.voice.synthesize(text, wf, syn_config=cfg)
-                    except Exception:
-                        # Final fallback
-                        self.voice.synthesize_wav(text, wf)
+                # Create synthesis config with correct parameter names
+                syn_config = SynthesisConfig(
+                    length_scale=length_scale,
+                    noise_scale=noise_scale,
+                    noise_w_scale=noise_w  # Use noise_w_scale instead of noise_w
+                )
+                
+                # Use synthesize_wav method (correct API)
+                self.voice.synthesize_wav(text, wf, syn_config=syn_config)
             
             # Get audio data from buffer
             audio_data = wav_buffer.getvalue()

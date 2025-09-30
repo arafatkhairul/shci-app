@@ -145,6 +145,8 @@ class ChatHandler:
                             await self.handle_final_transcript(websocket, data, mem, mem_store, conn_id)
                         elif typ == "client_prefs":
                             await self.handle_client_prefs(websocket, data, mem, mem_store, conn_id)
+                        elif typ == "set_speech_speed":
+                            await self.handle_speech_speed(websocket, data, mem, conn_id)
                             
                     except Exception as e:
                         log_exception(log, f"[{conn_id}] control_message", e)
@@ -290,7 +292,12 @@ class ChatHandler:
                 speech_speed = data.get("speech_speed", mem.level)
                 length_scale = data.get("length_scale")
                 
-                # Convert speech speed to length_scale if not provided
+                # Debug logging to see exact values received
+                log.info(f"[{conn_id}] DEBUG - Raw data received: {data}")
+                log.info(f"[{conn_id}] DEBUG - length_scale type: {type(length_scale)}, value: {length_scale}")
+                
+                # Use the exact length_scale value from frontend if provided
+                # Only fallback to conversion if length_scale is not provided
                 if length_scale is None:
                     speed_to_length_scale = {
                         "easy": 1.5,    # Slow audio (higher length_scale = slower)
@@ -298,15 +305,44 @@ class ChatHandler:
                         "fast": 0.6     # Fast audio (lower length_scale = faster)
                     }
                     length_scale = speed_to_length_scale.get(speech_speed, 1.0)
+                    log.info(f"[{conn_id}] DEBUG - Using fallback length_scale: {length_scale}")
                 
-                # Update TTS service length_scale
+                # Update TTS service length_scale with exact value from frontend
                 if hasattr(self.tts_service, 'update_length_scale'):
                     self.tts_service.update_length_scale(length_scale)
-                    log.info(f"[{conn_id}] Speech speed updated: {speech_speed} -> length_scale={length_scale}")
+                    log.info(f"[{conn_id}] Speech speed updated: {speech_speed} -> length_scale={length_scale} (from frontend)")
                     changed = True
 
         except Exception as e:
             log_exception(log, f"[{conn_id}] client_prefs", e)
+
+    async def handle_speech_speed(self, websocket: WebSocket, data: dict, mem: SessionMemory, conn_id: str):
+        """Handle speech speed changes from frontend"""
+        try:
+            # Handle both parameter names from frontend
+            speech_speed = data.get("speed_level") or data.get("speech_speed", "medium")
+            
+            length_scale = data.get("length_scale")
+            
+            # Use the exact length_scale value from frontend if provided
+            # Only fallback to conversion if length_scale is not provided
+            if length_scale is None:
+                speed_to_length_scale = {
+                    "easy": 2.0,    # Slow audio (higher length_scale = slower)
+                    "medium": 1.0,  # Normal audio (default)
+                    "fast": 0.30     # Fast audio (lower length_scale = faster)
+                }
+                length_scale = speed_to_length_scale.get(speech_speed, 1.0)
+            
+            # Update TTS service length_scale with exact value from frontend
+            if hasattr(self.tts_service, 'update_length_scale'):
+                self.tts_service.update_length_scale(length_scale)
+                log.info(f"[{conn_id}] Speech speed updated: {speech_speed} -> length_scale={length_scale} (from frontend)")
+            else:
+                log.warning(f"[{conn_id}] TTS service does not have update_length_scale method")
+                
+        except Exception as e:
+            log_exception(log, f"[{conn_id}] speech_speed", e)
 
     async def handle_audio_data(self, websocket: WebSocket, msg: dict, mem: SessionMemory, 
                               conn_id: str, pre_buffer: deque, triggered: bool, 
@@ -954,7 +990,7 @@ If the input is grammatically correct, respond normally without any grammar corr
                 text=tts_text,
                 language=mem.language,
                 voice=mem.voice,
-                length_scale=self.tts_service.length_scale * self.tts_service.adjust_speed_for_level(mem.level)
+                length_scale=self.tts_service.length_scale  # Use the updated length_scale directly
             )
             
             if audio_data:

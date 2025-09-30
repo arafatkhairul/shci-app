@@ -15,7 +15,6 @@ class TTSService:
         self.tts_system = settings.TTS_SYSTEM
         self.piper_model = settings.PIPER_MODEL_NAME
         self.length_scale = settings.PIPER_LENGTH_SCALE
-        self.dynamic_length_scale = None  # For runtime speech speed changes
         self.noise_scale = settings.PIPER_NOISE_SCALE
         self.noise_w = settings.PIPER_NOISE_W
         
@@ -26,17 +25,6 @@ class TTSService:
         log.info(f"🎤 TTS Service initialized with {self.tts_system} system")
         log.info(f"🎤 Default voice: {self.piper_model}")
 
-    def update_length_scale(self, length_scale: float):
-        """Update the dynamic length scale for speech speed"""
-        self.dynamic_length_scale = length_scale
-        
-        # Also update the TTS provider's length_scale directly
-        if hasattr(self.tts_provider, 'length_scale'):
-            self.tts_provider.length_scale = length_scale
-            log.info(f"🎤 TTS provider length_scale updated to: {length_scale}")
-        
-        log.info(f"🎤 TTS length_scale updated to: {length_scale}")
-
     async def synthesize_text(
         self, 
         text: str, 
@@ -45,7 +33,7 @@ class TTSService:
         length_scale: Optional[float] = None
     ) -> Optional[bytes]:
         """Ultra-fast synthesize text to audio using cached models"""
-        
+        print("Audio Streaming running")
         try:
             # Preprocess text to fix punctuation issues
             from tts_factory import preprocess_text_for_tts
@@ -55,11 +43,7 @@ class TTSService:
             voice_to_use = voice or self.piper_model
             
             # Use provided length scale or default
-            # Use dynamic length_scale if set, otherwise use parameter or default
-            length_scale_to_use = length_scale or self.dynamic_length_scale or self.length_scale
-            
-            # Debug logging for length_scale
-            log.info(f"🎤 TTS Debug - length_scale: {length_scale}, dynamic: {self.dynamic_length_scale}, default: {self.length_scale}, using: {length_scale_to_use}")
+            length_scale_to_use = length_scale or self.length_scale
             
             # Optimized synthesis parameters for natural human-like speech
             synthesis_params = {
@@ -84,6 +68,11 @@ class TTSService:
     def get_tts_info(self) -> dict:
         """Get TTS system information"""
         return get_tts_info()
+    
+    def update_length_scale(self, length_scale: float):
+        """Update length_scale for TTS synthesis"""
+        self.length_scale = float(length_scale)
+        log.info(f"🎵 TTS Service length_scale updated to: {self.length_scale}")
 
     def adjust_speed_for_level(self, level: str) -> float:
         """Adjust TTS speed based on difficulty level"""
